@@ -192,7 +192,6 @@ version_toml = ["pyproject.toml:project.version"]
 branch = "master"
 upload_to_pypi = false
 upload_to_release = true
-build_command = "uv build"
 hvcs = "github"
 commit_message = "chore(release): bump version to {version}"
 
