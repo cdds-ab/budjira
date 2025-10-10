@@ -1,0 +1,77 @@
+# CHANGELOG
+
+
+## v0.1.0 (2025-10-10)
+
+### Bug Fixes
+
+- Correct GitHub Actions configuration
+  ([`7ea5702`](https://github.com/cdds-ab/budjira/commit/7ea5702d3c08b8d16c33d75ee495fb9d019e0beb))
+
+- Fix codecov action parameter: file -> files - Add build step before semantic release to ensure uv
+  is available
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+- Disable semantic-release build step
+  ([`7de313f`](https://github.com/cdds-ab/budjira/commit/7de313ff83a5d675db10d1c6f35acb420147ea7b))
+
+Build is now handled externally in GitHub Actions workflow with uv. Semantic-release will only
+  handle versioning, tagging, and changelog.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+### Features
+
+- Add curl-based installation script
+  ([`b0783ad`](https://github.com/cdds-ab/budjira/commit/b0783ad0a5c0d04244a0155802a0d4b7c7f346bb))
+
+- Add install.sh for one-command installation via curl - Script installs uv if needed, clones repo,
+  and sets up symlink - Update README with curl installation instructions - Remove references to
+  PyPI/pipx (not published yet) - Add update instructions for existing installations
+
+Installation is now: curl -LsSf <url>/install.sh | sh
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+- Initial budjira CLI setup with header banner
+  ([`c876528`](https://github.com/cdds-ab/budjira/commit/c876528da5dafcd176a592342f9910597407547c))
+
+- Add complete project structure with modular architecture - Implement simple 2-line header with
+  dino emoji and version - Add --quiet/-q flag to suppress header output - Configure pyproject.toml
+  with all dependencies (uv, typer, rich, etc.) - Setup pre-commit hooks (ruff, mypy, bandit,
+  commitizen) - Add GitHub Actions workflows for CI and semantic release - Include MIT license and
+  comprehensive documentation - Add budjira logo and integrate into README - Implement custom
+  exception hierarchy - Setup testing with pytest (20 tests, 86% coverage) - All quality checks
+  passing (ruff, mypy, bandit)
+
+The header is displayed by default on all commands and can be suppressed with -q/--quiet for
+  scripting use cases.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+- Initial budjira CLI setup with header banner
+  ([`d302934`](https://github.com/cdds-ab/budjira/commit/d302934e5e8864dfc910e0e8ba6f364c3be9581f))
+
+- Add complete project structure with modular architecture - Implement simple 2-line header with
+  dino emoji and version - Add --quiet/-q flag to suppress header output - Configure pyproject.toml
+  with all dependencies (uv, typer, rich, etc.) - Setup pre-commit hooks (ruff, mypy, bandit,
+  commitizen) - Add GitHub Actions workflows for CI and semantic release - Include MIT license and
+  comprehensive documentation - Add budjira logo and integrate into README - Implement custom
+  exception hierarchy - Setup testing with pytest (20 tests, 86% coverage) - All quality checks
+  passing (ruff, mypy, bandit)
+
+The header is displayed by default on all commands and can be suppressed with -q/--quiet for
+  scripting use cases.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
