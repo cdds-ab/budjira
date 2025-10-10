@@ -54,10 +54,14 @@ dmypy.json
 # IDEs
 .vscode/
 .idea/
+*.iml
 *.swp
 *.swo
 *~
 .DS_Store
+
+# Claude Code
+.claude/
 
 # Project specific
 *.db
