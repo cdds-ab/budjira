@@ -36,6 +36,9 @@ jobs:
         run: |
           uv sync --all-extras
 
+      - name: Build package (before semantic release)
+        run: uv build
+
       - name: Python Semantic Release
         id: release
         uses: python-semantic-release/python-semantic-release@v9.15.2
