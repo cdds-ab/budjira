@@ -30,31 +30,54 @@
 
 ## 📦 Installation
 
-### Recommended (Isolated Environment)
+### Quick Install (Recommended)
 
-Using `uvx` (fastest):
+Install with a single curl command:
+
 ```bash
-uvx install budjira
+curl -LsSf https://raw.githubusercontent.com/cdds-ab/budjira/master/install.sh | sh
 ```
 
-Using `pipx` (alternative):
+This will:
+- Install `uv` if not already present
+- Clone the budjira repository to `~/.local/share/budjira`
+- Install dependencies
+- Create a symlink in `~/.local/bin/budjira`
+
+Make sure `~/.local/bin` is in your PATH:
 ```bash
-pipx install budjira
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-### Traditional Installation
+### Manual Installation
 
 ```bash
-pip install budjira
-```
-
-### From Source
-
-```bash
+# Clone the repository
 git clone https://github.com/cdds-ab/budjira.git
 cd budjira
+
+# Install dependencies
 uv sync
+
+# Run budjira
 uv run budjira --help
+
+# Or create a symlink
+ln -s "$(pwd)/.venv/bin/budjira" ~/.local/bin/budjira
+```
+
+### Update
+
+To update to the latest version:
+```bash
+curl -LsSf https://raw.githubusercontent.com/cdds-ab/budjira/master/install.sh | sh
+```
+
+Or manually:
+```bash
+cd ~/.local/share/budjira
+git pull
+uv sync
 ```
 
 ## 🚀 Quick Start
