@@ -1,5 +1,6 @@
 """Test banner functionality."""
 
+from budjira import __version__
 from budjira.utils.banner import get_compact_header, get_header, print_header
 from rich.console import Console
 from rich.text import Text
@@ -19,7 +20,7 @@ def test_get_compact_header() -> None:
     assert isinstance(header, str)
     assert "budjira" in header
     assert "🦖" in header
-    assert "0.4.1" in header
+    assert __version__ in header
 
 
 def test_print_header(capsys: object) -> None:
@@ -39,5 +40,5 @@ def test_print_header_quiet_mode() -> None:
 def test_header_contains_version() -> None:
     """Test that header contains version info."""
     header = str(get_header())
-    assert "v0.4.1" in header
+    assert f"v{__version__}" in header
     assert "Your CLI Pal for Jira" in header
