@@ -1,0 +1,244 @@
+"""Tests for settings management."""
+
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from budjira.config.settings import Settings
+from budjira.models.config import GlobalConfig, LogLevel
+from budjira.models.connection import Connection
+
+
+@pytest.fixture
+def temp_settings(tmp_path: Path) -> Settings:
+    """Create settings with temporary directories."""
+    config_dir = tmp_path / "config"
+    data_dir = tmp_path / "data"
+
+    with (
+        patch("budjira.config.settings.xdg_config_home", return_value=config_dir),
+        patch("budjira.config.settings.xdg_data_home", return_value=data_dir),
+    ):
+        settings = Settings()
+        # Reset singleton state
+        import budjira.config.settings
+
+        budjira.config.settings._settings = None
+        return settings
+
+
+@pytest.fixture
+def test_connection(tmp_path: Path) -> Connection:
+    """Create a test connection."""
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+
+    return Connection(
+        name="Test Connection",
+        url="https://test.atlassian.net",
+        email="test@example.com",
+        project_key="TEST",
+        project_root=project_root,
+    )
+
+
+class TestSettings:
+    """Test Settings class."""
+
+    def test_initialization_creates_directories(self, temp_settings: Settings) -> None:
+        """Test that initialization creates all required directories."""
+        assert temp_settings.config_dir.exists()
+        assert temp_settings.data_dir.exists()
+        assert temp_settings.credentials_dir.exists()
+        assert temp_settings.cache_dir.exists()
+        assert temp_settings.logs_dir.exists()
+
+    def test_credentials_dir_has_restricted_permissions(
+        self, temp_settings: Settings
+    ) -> None:
+        """Test that credentials directory has owner-only permissions."""
+        # Check that directory exists and has 700 permissions
+        assert temp_settings.credentials_dir.exists()
+        mode = oct(temp_settings.credentials_dir.stat().st_mode)[-3:]
+        assert mode == "700"
+
+    def test_load_default_global_config(self, temp_settings: Settings) -> None:
+        """Test loading global config creates default if not exists."""
+        config = temp_settings.global_config
+
+        assert isinstance(config, GlobalConfig)
+        assert config.log_level == LogLevel.INFO
+        assert temp_settings.config_file.exists()
+
+    def test_save_and_load_global_config(self, temp_settings: Settings) -> None:
+        """Test saving and loading global config."""
+        custom_config = GlobalConfig(
+            log_level=LogLevel.DEBUG,
+            check_updates=False,
+            max_search_results=100,
+        )
+
+        temp_settings.save_global_config(custom_config)
+
+        # Load again
+        loaded = temp_settings.load_global_config()
+
+        assert loaded.log_level == LogLevel.DEBUG
+        assert loaded.check_updates is False
+        assert loaded.max_search_results == 100
+
+    def test_load_empty_connections(self, temp_settings: Settings) -> None:
+        """Test loading connections when file doesn't exist."""
+        connections = temp_settings.connections
+
+        assert len(connections.connections) == 0
+
+    def test_save_and_load_connections(
+        self, temp_settings: Settings, test_connection: Connection
+    ) -> None:
+        """Test saving and loading connections."""
+        temp_settings.add_connection(test_connection)
+
+        # Load again
+        loaded = temp_settings.load_connections()
+
+        assert len(loaded.connections) == 1
+        conn = loaded.connections[0]
+        assert conn.name == test_connection.name
+        assert str(conn.url) == str(test_connection.url)
+        assert conn.email == test_connection.email
+        assert conn.project_key == test_connection.project_key
+        assert conn.project_root == test_connection.project_root
+
+    def test_add_connection(
+        self, temp_settings: Settings, test_connection: Connection
+    ) -> None:
+        """Test adding a connection."""
+        temp_settings.add_connection(test_connection)
+
+        connections = temp_settings.connections
+        assert len(connections.connections) == 1
+        assert connections.connections[0].name == test_connection.name
+
+    def test_add_duplicate_connection_raises_error(
+        self, temp_settings: Settings, test_connection: Connection
+    ) -> None:
+        """Test that adding duplicate connection raises error."""
+        temp_settings.add_connection(test_connection)
+
+        duplicate = Connection(
+            name="Different Name",
+            url="https://different.atlassian.net",
+            email="different@example.com",
+            project_key="DIFF",
+            project_root=test_connection.project_root,  # Same root!
+        )
+
+        with pytest.raises(ValueError, match="already exists"):
+            temp_settings.add_connection(duplicate)
+
+    def test_remove_connection(
+        self, temp_settings: Settings, test_connection: Connection
+    ) -> None:
+        """Test removing a connection."""
+        temp_settings.add_connection(test_connection)
+        assert len(temp_settings.connections.connections) == 1
+
+        removed = temp_settings.remove_connection(test_connection.project_root)
+        assert removed is True
+
+        connections = temp_settings.load_connections()
+        assert len(connections.connections) == 0
+
+    def test_update_connection(
+        self, temp_settings: Settings, test_connection: Connection
+    ) -> None:
+        """Test updating a connection."""
+        temp_settings.add_connection(test_connection)
+
+        # Update connection
+        test_connection.name = "Updated Name"
+        test_connection.cache_enabled = True
+
+        updated = temp_settings.update_connection(test_connection)
+        assert updated is True
+
+        connections = temp_settings.load_connections()
+        conn = connections.connections[0]
+        assert conn.name == "Updated Name"
+        assert conn.cache_enabled is True
+
+    def test_get_connection_for_current_dir(
+        self, temp_settings: Settings, tmp_path: Path
+    ) -> None:
+        """Test getting connection for current directory."""
+        # Create project structure
+        project_root = tmp_path / "my_project"
+        project_root.mkdir()
+        subdir = project_root / "src" / "components"
+        subdir.mkdir(parents=True)
+
+        conn = Connection(
+            name="Test",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+            project_root=project_root,
+        )
+        temp_settings.add_connection(conn)
+
+        # Change to subdirectory and find connection
+        import os
+
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(subdir)
+            found = temp_settings.get_connection_for_current_dir()
+
+            assert found is not None
+            assert found.name == "Test"
+            assert found.project_root == project_root
+        finally:
+            os.chdir(original_cwd)
+
+    def test_get_log_file(
+        self, temp_settings: Settings, test_connection: Connection
+    ) -> None:
+        """Test getting log file path for connection."""
+        log_file = temp_settings.get_log_file(test_connection)
+
+        assert log_file.parent == temp_settings.logs_dir
+        assert log_file.suffix == ".log"
+        assert "Test_Connection" in log_file.name
+
+    def test_get_cache_file(
+        self, temp_settings: Settings, test_connection: Connection
+    ) -> None:
+        """Test getting cache file path for connection."""
+        cache_file = temp_settings.get_cache_file(test_connection)
+
+        assert cache_file.parent == temp_settings.cache_dir
+        assert cache_file.suffix == ".db"
+        assert "Test_Connection" in cache_file.name
+
+    def test_singleton_pattern(self, tmp_path: Path) -> None:
+        """Test that get_settings returns same instance."""
+        from budjira.config.settings import get_settings
+
+        config_dir = tmp_path / "config"
+        data_dir = tmp_path / "data"
+
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=config_dir),
+            patch("budjira.config.settings.xdg_data_home", return_value=data_dir),
+        ):
+            # Reset singleton
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+
+            settings1 = get_settings()
+            settings2 = get_settings()
+
+            assert settings1 is settings2

@@ -31,6 +31,8 @@ dependencies = [
     "pydantic-settings>=2.3.0",
     "xdg-base-dirs>=6.0.0",
     "shellingham>=1.5.0",  # For typer shell completion
+    "tomli-w>=1.0.0",  # For writing TOML files
+    "tomli>=2.0.0;python_version<'3.11'",  # For reading TOML on Python <3.11
 ]
 
 [project.optional-dependencies]
