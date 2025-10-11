@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.4.6 (2025-10-11)
+
+### Bug Fixes
+
+- Correct semantic-release version_variable config
+  ([`ad09bae`](https://github.com/cdds-ab/budjira/commit/ad09bae50d964761136b9ee60cda520fb4ecd5d4))
+
+Remove pyproject.toml from version_variable as it should only contain Python files. TOML files are
+  handled by version_toml.
+
+
 ## v0.4.5 (2025-10-11)
 
 ### Bug Fixes
