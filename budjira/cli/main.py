@@ -6,6 +6,7 @@ import typer
 from rich.console import Console
 
 from budjira import __version__
+from budjira.cli import connect
 from budjira.utils.banner import print_header
 
 # Show header early for --help (which bypasses callback)
@@ -22,6 +23,9 @@ app = typer.Typer(
 )
 
 console = Console()
+
+# Register subcommands
+app.add_typer(connect.app, name="connect")
 
 
 def is_quiet_mode() -> bool:
