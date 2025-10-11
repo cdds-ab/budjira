@@ -1,6 +1,29 @@
 # CHANGELOG
 
 
+## v0.3.0 (2025-10-11)
+
+### Features
+
+- **cli**: Implement connection management commands
+  ([`796225d`](https://github.com/cdds-ab/budjira/commit/796225d16789cb4ddc495e86c81b6bc4448b248a))
+
+Add comprehensive connection management via `budjira connect` subcommands:
+
+Commands: - add: Create new Jira connections with interactive prompts - list: Display all configured
+  connections in table format - show: Show detailed connection information - remove: Delete
+  connections and their credentials - test: Verify Jira connectivity and display server info
+
+Features: - Interactive prompts with defaults for easy setup - Secure API token storage (separate
+  from connection config) - Project-root based connection identification - Update existing
+  connections - Connection testing with helpful error messages - Rich CLI output with tables and
+  colored status indicators
+
+Tests: 9 new tests, 84% overall coverage.
+
+All code passes ruff and mypy checks.
+
+
 ## v0.2.0 (2025-10-11)
 
 ### Documentation
