@@ -37,12 +37,13 @@ wheels = [
 
 [[package]]
 name = "budjira"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "jira" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "requests" },
     { name = "rich" },
     { name = "shellingham" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
@@ -77,6 +78,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0.0" },
     { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.14.0" },
     { name = "python-semantic-release", marker = "extra == 'dev'", specifier = ">=10.4.1" },
+    { name = "requests", specifier = ">=2.31.0" },
     { name = "rich", specifier = ">=13.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.4" },
     { name = "shellingham", specifier = ">=1.5.0" },

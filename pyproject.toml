@@ -33,6 +33,7 @@ dependencies = [
     "shellingham>=1.5.0",  # For typer shell completion
     "tomli-w>=1.0.0",  # For writing TOML files
     "tomli>=2.0.0;python_version<'3.11'",  # For reading TOML on Python <3.11
+    "requests>=2.31.0",  # For GitHub API and HTTP requests
 ]
 
 [project.optional-dependencies]

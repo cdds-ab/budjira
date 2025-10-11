@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 
 from budjira import __version__
-from budjira.cli import connect
+from budjira.cli import connect, update
 from budjira.utils.banner import print_header
 
 # Show header early for --help (which bypasses callback)
@@ -26,11 +26,41 @@ console = Console()
 
 # Register subcommands
 app.add_typer(connect.app, name="connect")
+app.add_typer(update.app, name="update")
 
 
 def is_quiet_mode() -> bool:
     """Check if quiet mode is enabled by parsing sys.argv."""
     return "-q" in sys.argv or "--quiet" in sys.argv
+
+
+def _check_for_updates_on_startup() -> None:
+    """Check for updates on startup (non-blocking, cached)."""
+    try:
+        from budjira.config import get_settings
+        from budjira.utils.version import get_version_checker
+
+        settings = get_settings()
+
+        # Skip if disabled in config
+        if not settings.global_config.check_updates:
+            return
+
+        checker = get_version_checker()
+        update_available, latest_version, release_url, _ = checker.check_for_updates(force=False)
+
+        if update_available and latest_version:
+            console.print(
+                f"[yellow]⚠[/yellow] Update available: [cyan]{latest_version}[/cyan] "
+                f"(current: {__version__})",
+                style="yellow",
+            )
+            if release_url:
+                console.print(f"[dim]Run [cyan]budjira update[/cyan] to install.[/dim]\n")
+
+    except Exception:
+        # Silently ignore errors in update check - shouldn't block normal operation
+        pass
 
 
 def version_callback(value: bool) -> None:
@@ -76,6 +106,10 @@ def main(
 
     if debug:
         console.print("[dim]Debug mode enabled[/dim]")
+
+    # Check for updates if enabled (skip for update command itself)
+    if not quiet and "update" not in sys.argv:
+        _check_for_updates_on_startup()
 
 
 if __name__ == "__main__":
