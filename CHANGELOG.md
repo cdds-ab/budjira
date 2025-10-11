@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.4.2 (2025-10-11)
+
+### Bug Fixes
+
+- Sync __init__.py version with pyproject.toml
+  ([`9bebe51`](https://github.com/cdds-ab/budjira/commit/9bebe51e1301aaa32f9f5c237df7ffbac9ab5dc2))
+
+Update __init__.py to version 0.4.0 to match pyproject.toml. Semantic-release automatically bumps
+  both files, so they should always be in sync.
+
+- Sync __init__.py version with pyproject.toml (0.4.1)
+  ([`d98a4f1`](https://github.com/cdds-ab/budjira/commit/d98a4f10e50c6148594072f73310be3383192ece))
+
+Update __init__.py to version 0.4.1 to match pyproject.toml after semantic-release bump.
+
+
 ## v0.4.1 (2025-10-11)
 
 ### Bug Fixes
