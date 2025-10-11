@@ -1,6 +1,40 @@
 # CHANGELOG
 
 
+## v0.4.3 (2025-10-11)
+
+### Bug Fixes
+
+- Resolve linting errors and update documentation
+  ([`bfce3d2`](https://github.com/cdds-ab/budjira/commit/bfce3d216a812e8bd053cf9ec3a56e43e0adf736))
+
+Linting fixes: - Use ternary operators where appropriate (SIM108) - Add 'from None' to raise
+  statements in except clauses (B904) - Remove unnecessary f-string prefixes (F541) - Move type-only
+  imports to TYPE_CHECKING blocks (TC003/TC001) - Organize and sort import statements (I001) -
+  Prefix unused unpacked variables with underscore (RUF059)
+
+Type checking fixes: - Remove all unused type ignores - Add mypy pragmas for Pydantic model
+  validation in tests - Allow untyped decorators in CLI modules (Typer) and test fixtures - Add type
+  ignore for JSON cache return (no-any-return) - Add type ignore for Pydantic URL validation in
+  connect.py - Update test assertions to use current version (0.4.1)
+
+Security annotations: - Add nosec comments for intentional security patterns - Document trusted
+  subprocess execution for update script - Mark expected except-pass patterns
+
+Documentation updates: - Remove PyPI badges (project uses GitHub Releases only) - Reorganize
+  features list (implemented vs. coming soon) - Add auto-update feature documentation - Update Quick
+  Start to show only implemented features - Add "Coming Soon" section for planned features
+
+Infrastructure: - Install pre-commit hooks to catch issues before commit - Configure mypy overrides
+  for CLI and test modules
+
+- Use dynamic version in banner tests and update dependencies
+  ([`9bf69eb`](https://github.com/cdds-ab/budjira/commit/9bf69eb73dcb72a5e3bc532ff4cecf6d50b1e48c))
+
+- Replace hardcoded version strings in tests with __version__ import - This ensures tests remain
+  valid after automated version bumps - Update virtualenv from 20.35.1 (yanked) to 20.35.3
+
+
 ## v0.4.2 (2025-10-11)
 
 ### Bug Fixes
