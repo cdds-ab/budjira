@@ -19,7 +19,7 @@ def test_get_compact_header() -> None:
     assert isinstance(header, str)
     assert "budjira" in header
     assert "🦖" in header
-    assert "0.1.0" in header
+    assert "0.4.1" in header
 
 
 def test_print_header(capsys: object) -> None:
@@ -39,5 +39,5 @@ def test_print_header_quiet_mode() -> None:
 def test_header_contains_version() -> None:
     """Test that header contains version info."""
     header = str(get_header())
-    assert "v0.1.0" in header
+    assert "v0.4.1" in header
     assert "Your CLI Pal for Jira" in header

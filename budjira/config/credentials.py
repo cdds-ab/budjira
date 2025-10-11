@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from budjira.config.settings import get_settings
-from budjira.models.connection import Connection
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from budjira.models.connection import Connection
 
 
 class CredentialStore:

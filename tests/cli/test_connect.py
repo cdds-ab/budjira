@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+# mypy: disable-error-code="arg-type"
+# Pydantic models accept strings for HttpUrl and Path fields during validation
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
-from typer.testing import CliRunner
-
 from budjira.cli.main import app
 from budjira.models.connection import Connection
+from typer.testing import CliRunner
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 runner = CliRunner()
 

@@ -1,10 +1,12 @@
 """Tests for settings management."""
 
+# mypy: disable-error-code="arg-type"
+# Pydantic models accept strings for HttpUrl and Path fields during validation
+
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from budjira.config.settings import Settings
 from budjira.models.config import GlobalConfig, LogLevel
 from budjira.models.connection import Connection
@@ -54,9 +56,7 @@ class TestSettings:
         assert temp_settings.cache_dir.exists()
         assert temp_settings.logs_dir.exists()
 
-    def test_credentials_dir_has_restricted_permissions(
-        self, temp_settings: Settings
-    ) -> None:
+    def test_credentials_dir_has_restricted_permissions(self, temp_settings: Settings) -> None:
         """Test that credentials directory has owner-only permissions."""
         # Check that directory exists and has 700 permissions
         assert temp_settings.credentials_dir.exists()
@@ -94,9 +94,7 @@ class TestSettings:
 
         assert len(connections.connections) == 0
 
-    def test_save_and_load_connections(
-        self, temp_settings: Settings, test_connection: Connection
-    ) -> None:
+    def test_save_and_load_connections(self, temp_settings: Settings, test_connection: Connection) -> None:
         """Test saving and loading connections."""
         temp_settings.add_connection(test_connection)
 
@@ -111,9 +109,7 @@ class TestSettings:
         assert conn.project_key == test_connection.project_key
         assert conn.project_root == test_connection.project_root
 
-    def test_add_connection(
-        self, temp_settings: Settings, test_connection: Connection
-    ) -> None:
+    def test_add_connection(self, temp_settings: Settings, test_connection: Connection) -> None:
         """Test adding a connection."""
         temp_settings.add_connection(test_connection)
 
@@ -121,9 +117,7 @@ class TestSettings:
         assert len(connections.connections) == 1
         assert connections.connections[0].name == test_connection.name
 
-    def test_add_duplicate_connection_raises_error(
-        self, temp_settings: Settings, test_connection: Connection
-    ) -> None:
+    def test_add_duplicate_connection_raises_error(self, temp_settings: Settings, test_connection: Connection) -> None:
         """Test that adding duplicate connection raises error."""
         temp_settings.add_connection(test_connection)
 
@@ -138,9 +132,7 @@ class TestSettings:
         with pytest.raises(ValueError, match="already exists"):
             temp_settings.add_connection(duplicate)
 
-    def test_remove_connection(
-        self, temp_settings: Settings, test_connection: Connection
-    ) -> None:
+    def test_remove_connection(self, temp_settings: Settings, test_connection: Connection) -> None:
         """Test removing a connection."""
         temp_settings.add_connection(test_connection)
         assert len(temp_settings.connections.connections) == 1
@@ -151,9 +143,7 @@ class TestSettings:
         connections = temp_settings.load_connections()
         assert len(connections.connections) == 0
 
-    def test_update_connection(
-        self, temp_settings: Settings, test_connection: Connection
-    ) -> None:
+    def test_update_connection(self, temp_settings: Settings, test_connection: Connection) -> None:
         """Test updating a connection."""
         temp_settings.add_connection(test_connection)
 
@@ -169,9 +159,7 @@ class TestSettings:
         assert conn.name == "Updated Name"
         assert conn.cache_enabled is True
 
-    def test_get_connection_for_current_dir(
-        self, temp_settings: Settings, tmp_path: Path
-    ) -> None:
+    def test_get_connection_for_current_dir(self, temp_settings: Settings, tmp_path: Path) -> None:
         """Test getting connection for current directory."""
         # Create project structure
         project_root = tmp_path / "my_project"
@@ -202,9 +190,7 @@ class TestSettings:
         finally:
             os.chdir(original_cwd)
 
-    def test_get_log_file(
-        self, temp_settings: Settings, test_connection: Connection
-    ) -> None:
+    def test_get_log_file(self, temp_settings: Settings, test_connection: Connection) -> None:
         """Test getting log file path for connection."""
         log_file = temp_settings.get_log_file(test_connection)
 
@@ -212,9 +198,7 @@ class TestSettings:
         assert log_file.suffix == ".log"
         assert "Test_Connection" in log_file.name
 
-    def test_get_cache_file(
-        self, temp_settings: Settings, test_connection: Connection
-    ) -> None:
+    def test_get_cache_file(self, temp_settings: Settings, test_connection: Connection) -> None:
         """Test getting cache file path for connection."""
         cache_file = temp_settings.get_cache_file(test_connection)
 

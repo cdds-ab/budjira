@@ -44,10 +44,7 @@ def add_connection(
         credential_store = get_credential_store()
 
         # Use current directory if no root specified
-        if project_root is None:
-            project_root = Path.cwd()
-        else:
-            project_root = project_root.expanduser().resolve()
+        project_root = Path.cwd() if project_root is None else project_root.expanduser().resolve()
 
         # Check if connection already exists for this root
         existing = settings.connections.find_by_root(project_root)
@@ -94,9 +91,10 @@ def add_connection(
         )
 
         # Create connection
+        # Pydantic will validate and convert url string to HttpUrl
         connection = Connection(
             name=name,
-            url=url,
+            url=url,  # type: ignore[arg-type]
             email=email,
             project_key=project_key,
             project_root=project_root,
@@ -111,7 +109,7 @@ def add_connection(
             console.print(f"[green]✓[/green] Added connection: [cyan]{name}[/cyan]")
 
         # Save credentials (unless user kept existing)
-        if api_token and api_token != "<keep existing>":
+        if api_token and api_token != "<keep existing>":  # nosec B105
             credential_store.store(connection, api_token)
             console.print("[green]✓[/green] Saved API token securely")
 
@@ -125,10 +123,10 @@ def add_connection(
 
     except ValueError as e:
         console.print(f"[red]✗[/red] Validation error: {e}", style="red")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except BudjiraError as e:
         console.print(f"[red]✗[/red] {e}", style="red")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command("list")
@@ -207,7 +205,7 @@ def show_connection(
     console.print(f"[bold]API Token:[/bold]    {cred_status}")
 
     # Show file paths
-    console.print(f"\n[bold]Files:[/bold]")
+    console.print("\n[bold]Files:[/bold]")
     console.print(f"  Log:   {settings.get_log_file(connection)}")
     console.print(f"  Cache: {settings.get_cache_file(connection)}")
 
@@ -298,7 +296,7 @@ def test_connection(
         server_info = jira.server_info()
 
         console.print("[green]✓[/green] Connection successful!")
-        console.print(f"\n[bold]Server Info:[/bold]")
+        console.print("\n[bold]Server Info:[/bold]")
         console.print(f"  Version:     {server_info.get('version', 'Unknown')}")
         console.print(f"  Build:       {server_info.get('buildNumber', 'Unknown')}")
         console.print(f"  Server Title: {server_info.get('serverTitle', 'Unknown')}")
@@ -307,7 +305,7 @@ def test_connection(
         try:
             current_user = jira.current_user()
             console.print(f"  Logged in as: {current_user}")
-        except Exception:
+        except Exception:  # nosec B110
             pass  # Some Jira instances don't support this
 
     except Exception as e:
@@ -316,4 +314,4 @@ def test_connection(
         console.print("  • Invalid URL or API token")
         console.print("  • Network connectivity problems")
         console.print("  • Jira instance is down or unreachable")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None

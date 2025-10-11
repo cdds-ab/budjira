@@ -1,11 +1,13 @@
 """Tests for connection models."""
 
+# mypy: disable-error-code="arg-type"
+# Pydantic models accept strings for HttpUrl and Path fields during validation
+
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
-
 from budjira.models.connection import Connection, ConnectionList
+from pydantic import ValidationError
 
 
 class TestConnection:

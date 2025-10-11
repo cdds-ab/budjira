@@ -12,7 +12,7 @@ from xdg_base_dirs import xdg_config_home, xdg_data_home
 if sys.version_info >= (3, 11):
     import tomllib
 else:
-    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
+    import tomli as tomllib
 
 from budjira.models.config import GlobalConfig
 from budjira.models.connection import Connection, ConnectionList

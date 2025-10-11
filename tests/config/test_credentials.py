@@ -1,11 +1,13 @@
 """Tests for credential storage."""
 
+# mypy: disable-error-code="arg-type"
+# Pydantic models accept strings for HttpUrl and Path fields during validation
+
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from budjira.config.credentials import CredentialStore
 from budjira.models.connection import Connection
 
@@ -44,9 +46,7 @@ def test_connection(tmp_path: Path) -> Connection:
 class TestCredentialStore:
     """Test CredentialStore."""
 
-    def test_store_credentials(
-        self, credential_store: CredentialStore, test_connection: Connection
-    ) -> None:
+    def test_store_credentials(self, credential_store: CredentialStore, test_connection: Connection) -> None:
         """Test storing API token."""
         api_token = "test-api-token-12345"
 
@@ -75,9 +75,7 @@ class TestCredentialStore:
         with pytest.raises(ValueError, match="cannot be empty"):
             credential_store.store(test_connection, "   ")
 
-    def test_retrieve_credentials(
-        self, credential_store: CredentialStore, test_connection: Connection
-    ) -> None:
+    def test_retrieve_credentials(self, credential_store: CredentialStore, test_connection: Connection) -> None:
         """Test retrieving stored API token."""
         api_token = "test-api-token-12345"
 
@@ -103,9 +101,7 @@ class TestCredentialStore:
         retrieved = credential_store.retrieve(test_connection)
         assert retrieved is None
 
-    def test_delete_credentials(
-        self, credential_store: CredentialStore, test_connection: Connection
-    ) -> None:
+    def test_delete_credentials(self, credential_store: CredentialStore, test_connection: Connection) -> None:
         """Test deleting stored credentials."""
         api_token = "test-api-token-12345"
 
@@ -120,18 +116,14 @@ class TestCredentialStore:
         deleted = credential_store.delete(test_connection)
         assert deleted is False
 
-    def test_has_credentials(
-        self, credential_store: CredentialStore, test_connection: Connection
-    ) -> None:
+    def test_has_credentials(self, credential_store: CredentialStore, test_connection: Connection) -> None:
         """Test checking if credentials exist."""
         assert not credential_store.has_credentials(test_connection)
 
         credential_store.store(test_connection, "test-token")
         assert credential_store.has_credentials(test_connection)
 
-    def test_credential_file_unique_per_connection(
-        self, credential_store: CredentialStore, tmp_path: Path
-    ) -> None:
+    def test_credential_file_unique_per_connection(self, credential_store: CredentialStore, tmp_path: Path) -> None:
         """Test that each connection gets unique credential file."""
         root1 = tmp_path / "project1"
         root1.mkdir()

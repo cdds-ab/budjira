@@ -6,8 +6,6 @@
   **Your CLI Pal for Jira**
 
 [![CI](https://github.com/cdds-ab/budjira/actions/workflows/ci.yml/badge.svg)](https://github.com/cdds-ab/budjira/actions/workflows/ci.yml)
-[![PyPI version](https://badge.fury.io/py/budjira.svg)](https://badge.fury.io/py/budjira)
-[![Python versions](https://img.shields.io/pypi/pyversions/budjira.svg)](https://pypi.org/project/budjira/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
@@ -19,14 +17,15 @@
 
 ## ✨ Features
 
-- 🔍 **Search & Filter**: Powerful JQL-based ticket search
-- ✏️ **Create Issues**: Quick ticket creation with templates
-- ⏱️ **Time Tracking**: Log work time directly from the command line
 - 🔗 **Multi-Connection**: Manage multiple Jira instances and projects
 - 🎯 **Context-Aware**: Project-root based connection management
-- 📦 **Smart Caching**: Optional offline-capable caching (coming soon)
+- 🔄 **Auto-Update**: Automatic update checks with GitHub Releases integration
 - 🤖 **AI-Friendly**: Designed for seamless AI-assisted workflows
 - 🎨 **Rich Output**: Beautiful, colorful terminal output with tables and formatting
+- 🔍 **Search & Filter**: Powerful JQL-based ticket search *(coming soon)*
+- ✏️ **Create Issues**: Quick ticket creation with templates *(coming soon)*
+- ⏱️ **Time Tracking**: Log work time directly from the command line *(coming soon)*
+- 📦 **Smart Caching**: Optional offline-capable caching *(coming soon)*
 
 ## 📦 Installation
 
@@ -95,55 +94,35 @@ budjira connect
 # - Default project key
 ```
 
-### 2. Search for Issues
+### 2. Manage Connections
 
 ```bash
-# Search in default project
-budjira search "status = Open"
+# List all connections
+budjira connect list
 
-# Advanced JQL query
-budjira search "project = MYPROJ AND assignee = currentUser() AND status != Done"
+# Show connection details
+budjira connect show
 
-# List all issues in a sprint
-budjira search "sprint = 'Sprint 42'"
+# Test connection
+budjira connect test
+
+# Remove a connection
+budjira connect remove
 ```
 
-### 3. Create an Issue
+### 3. Check for Updates
+
+budjira automatically checks for updates every 24 hours and notifies you when a new version is available.
 
 ```bash
-# Interactive issue creation
-budjira create
+# Check for updates manually
+budjira update --check
 
-# Quick creation with flags
-budjira create --summary "Fix login bug" --type Bug --priority High
-```
-
-### 4. Log Work Time
-
-```bash
-# Log time on an issue
-budjira log-time PROJ-123 --time 2h --comment "Fixed authentication bug"
-
-# Log time with start date
-budjira log-time PROJ-123 --time 1h30m --started "2025-10-10 14:00"
-```
-
-### 5. View Logs
-
-```bash
-# Show recent logs
-budjira logs
-
-# Pipe to standard Unix tools
-budjira logs | tail -50
-budjira logs | grep ERROR
-```
-
-### 6. Check for Updates
-
-```bash
-# Update to latest version
+# Update to latest version (interactive)
 budjira update
+
+# Force update check (bypass cache)
+budjira update --check --force
 ```
 
 ## 🔧 Configuration
@@ -157,6 +136,54 @@ budjira follows the XDG Base Directory specification and stores configuration in
 ├── cache/               # Optional issue cache
 ├── logs/                # Per-context log files
 └── config.toml          # Global settings
+```
+
+## 🚧 Coming Soon
+
+The following features are currently in development:
+
+### Search for Issues
+
+```bash
+# Search in default project
+budjira search "status = Open"
+
+# Advanced JQL query
+budjira search "project = MYPROJ AND assignee = currentUser() AND status != Done"
+
+# List all issues in a sprint
+budjira search "sprint = 'Sprint 42'"
+```
+
+### Create Issues
+
+```bash
+# Interactive issue creation
+budjira create
+
+# Quick creation with flags
+budjira create --summary "Fix login bug" --type Bug --priority High
+```
+
+### Log Work Time
+
+```bash
+# Log time on an issue
+budjira log-time PROJ-123 --time 2h --comment "Fixed authentication bug"
+
+# Log time with start date
+budjira log-time PROJ-123 --time 1h30m --started "2025-10-10 14:00"
+```
+
+### View Logs
+
+```bash
+# Show recent logs
+budjira logs
+
+# Pipe to standard Unix tools
+budjira logs | tail -50
+budjira logs | grep ERROR
 ```
 
 ## 🎯 Use Cases

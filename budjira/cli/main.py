@@ -51,14 +51,13 @@ def _check_for_updates_on_startup() -> None:
 
         if update_available and latest_version:
             console.print(
-                f"[yellow]⚠[/yellow] Update available: [cyan]{latest_version}[/cyan] "
-                f"(current: {__version__})",
+                f"[yellow]⚠[/yellow] Update available: [cyan]{latest_version}[/cyan] " f"(current: {__version__})",
                 style="yellow",
             )
             if release_url:
-                console.print(f"[dim]Run [cyan]budjira update[/cyan] to install.[/dim]\n")
+                console.print("[dim]Run [cyan]budjira update[/cyan] to install.[/dim]\n")
 
-    except Exception:
+    except Exception:  # nosec B110
         # Silently ignore errors in update check - shouldn't block normal operation
         pass
 

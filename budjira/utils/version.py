@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-import subprocess
+import subprocess  # nosec B404
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 import requests
@@ -43,7 +42,7 @@ class VersionChecker:
             cache_ttl = timedelta(hours=self.settings.global_config.update_check_interval_hours)
 
             if datetime.now() - checked_at < cache_ttl:
-                return data
+                return data  # type: ignore[no-any-return]
 
             return None
         except (json.JSONDecodeError, KeyError, ValueError):
@@ -145,8 +144,8 @@ class VersionChecker:
         install_script_url = "https://raw.githubusercontent.com/cdds-ab/budjira/master/install.sh"
 
         try:
-            # Download and execute install script
-            result = subprocess.run(
+            # Download and execute install script from official repository
+            result = subprocess.run(  # nosec B603 B607
                 ["sh", "-c", f"curl -LsSf {install_script_url} | sh"],
                 capture_output=True,
                 text=True,

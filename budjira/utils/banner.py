@@ -27,7 +27,7 @@ def get_header() -> Text:
 
     # Bottom line - match the visual width (emoji is 2 wide)
     header.append("╰", style="bright_cyan")
-    header.append("─" * 44, style="bright_cyan")
+    header.append("─" * 45, style="bright_cyan")
     header.append("╯", style="bright_cyan")
 
     return header

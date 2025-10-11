@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from budjira.utils.version import VersionChecker
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.fixture
@@ -184,7 +186,7 @@ class TestVersionChecker:
         }
 
         with patch("requests.get", return_value=mock_response):
-            update_available, latest, url, notes = version_checker.check_for_updates(force=True)
+            update_available, latest, _url, _notes = version_checker.check_for_updates(force=True)
 
             assert update_available is False
             assert latest == "1.0.0"
