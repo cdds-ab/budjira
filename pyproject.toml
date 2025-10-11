@@ -198,10 +198,7 @@ major_version_zero = true
 
 # Semantic Release configuration
 [tool.semantic_release]
-version_variable = [
-    "pyproject.toml:version",
-    "budjira/__init__.py:__version__",
-]
+version_variable = "budjira/__init__.py:__version__"
 version_toml = ["pyproject.toml:project.version"]
 branch = "master"
 upload_to_pypi = false
