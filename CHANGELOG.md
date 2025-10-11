@@ -1,6 +1,30 @@
 # CHANGELOG
 
 
+## v0.4.0 (2025-10-11)
+
+### Features
+
+- **update**: Implement automatic update checker
+  ([`5c03814`](https://github.com/cdds-ab/budjira/commit/5c03814534e280634bba984668fe63d2e3a965ae))
+
+Add self-update functionality via GitHub Releases API:
+
+Features: - Automatic update check on startup (24h cache, configurable) - GitHub Releases API
+  integration (not PyPI) - Update notification with release notes - `budjira update` command for
+  self-update - `budjira update check` for check-only mode - Force check with --force flag -
+  One-command update via install script - Respects check_updates config setting - Silent failure on
+  network errors (non-blocking)
+
+Implementation: - VersionChecker class with caching and version comparison - JSON-based cache with
+  TTL - Semantic version comparison - Release notes display with Markdown formatting -
+  Subprocess-based update execution
+
+Tests: 12 new tests, 79% overall coverage (92% for VersionChecker).
+
+All code passes ruff and mypy checks.
+
+
 ## v0.3.0 (2025-10-11)
 
 ### Features
