@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.4.1 (2025-10-11)
+
+### Bug Fixes
+
+- Improve update handling and version sync
+  ([`83c3fec`](https://github.com/cdds-ab/budjira/commit/83c3fec67ceb0528dd1a719641b114982c081dd5))
+
+- Update __init__.py version to 0.3.0 (sync with pyproject.toml) - Add update_check.json to
+  .gitignore (runtime data) - Improve install.sh to handle dirty working copies: - Reset local
+  changes with git reset --hard - Clean untracked files with git clean -fd - Ensures clean updates
+  without conflicts
+
+This fixes issues where uv.lock or update_check.json changes prevent git pull during updates.
+
+
 ## v0.4.0 (2025-10-11)
 
 ### Features

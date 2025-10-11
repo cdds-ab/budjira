@@ -1,6 +1,6 @@
 [project]
 name = "budjira"
-version = "0.4.0"
+version = "0.4.1"
 description = "A CLI buddy for Jira - efficient command-line interaction with Jira Cloud"
 authors = [
     {name = "cdds-ab", email = "info@cdds.de"}
