@@ -3,7 +3,7 @@
 Efficient command-line interaction with Jira Cloud for developers and AI-assisted project management.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 __author__ = "cdds-ab"
 __email__ = "info@cdds.de"
 

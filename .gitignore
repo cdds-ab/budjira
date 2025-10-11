@@ -81,6 +81,9 @@ tmp/
 temp/
 *.tmp
 
+# Runtime data
+update_check.json
+
 # Distribution
 *.whl
 
