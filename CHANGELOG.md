@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## v0.4.4 (2025-10-11)
+
+### Bug Fixes
+
+- Add style commits to patch version bump tags
+  ([`5d8d074`](https://github.com/cdds-ab/budjira/commit/5d8d074793b24a2a413fd6e743ac8c17538e1b51))
+
+Style commits should trigger patch version bumps to ensure __init__.py and pyproject.toml stay in
+  sync.
+
+### Code Style
+
+- Fix ruff formatting in main.py
+  ([`bc4da30`](https://github.com/cdds-ab/budjira/commit/bc4da30cde531653d7cc5a383f764f4b5e4663c5))
+
+Merge concatenated f-strings into single f-string.
+
+
 ## v0.4.3 (2025-10-11)
 
 ### Bug Fixes
