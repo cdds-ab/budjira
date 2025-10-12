@@ -1,6 +1,47 @@
 # CHANGELOG
 
 
+## v1.4.0 (2025-10-12)
+
+### Features
+
+- Add Definition of Ready (DoR) templates for issue types
+  ([`7ebc7e8`](https://github.com/cdds-ab/budjira/commit/7ebc7e829e80a8bf84c3b8fef9d1fc1dbda6157f))
+
+DoR Template System: - Add configurable DoR templates per issue type (Story, Bug, Task) - Default
+  templates with required sections for consistent quality - Store templates in
+  ~/.config/budjira/dor-templates.toml - Pydantic models for template configuration and validation
+
+CLI Commands: - Add 'budjira dor' command group for template management - Subcommands: list, show,
+  edit, validate - View and customize templates via CLI - Edit templates in $EDITOR with markdown
+  support
+
+Interactive Issue Creation with DoR: - Integrate DoR templates into 'budjira create issue' workflow
+  - Open $EDITOR with pre-filled template sections for Story/Bug/Task - Validate required sections
+  before issue creation - Add --skip-dor flag to bypass DoR validation
+
+DoR Validation: - Three validation levels: strict (block), warn (allow), off (disabled) - Markdown
+  section extraction (## Section Name) - Check for missing required sections - Warn on empty section
+  content
+
+Configuration: - Add enforce_dor and dor_validation_level to global config - Default validation
+  level: warn - Templates customizable per project
+
+Editor Integration: - New editor utility for multi-line markdown input - Opens $EDITOR (or vim
+  fallback) with template - Temp file with .md extension for syntax highlighting - Optional
+  validation loop support
+
+Testing: - Add 36 comprehensive tests for DoR models and validation - Tests for template config,
+  validation, section extraction - Basic CLI tests for dor commands - Mock get_settings in create
+  tests to prevent DoR interference - 72% total coverage (exceeds 70% minimum)
+
+Documentation: - Add DoR section to README with examples - Document template structure and
+  validation - Update features list and roadmap - Configuration file documentation
+
+This ensures consistent issue quality and helps teams maintain clear requirements for User Stories,
+  Bugs, and other issue types. The system is fully customizable and can be disabled if not needed.
+
+
 ## v1.3.0 (2025-10-12)
 
 ### Features
