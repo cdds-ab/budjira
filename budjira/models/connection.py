@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 
 class Connection(BaseModel):
     """Represents a Jira connection configuration.
 
-    Each connection is identified by a project root path, allowing multiple
+    Each connection is identified by its unique name, allowing multiple
     Jira instances/projects to be managed simultaneously.
     """
 
     name: str = Field(
         ...,
-        description="Human-readable name for this connection",
+        description="Unique name for this connection",
         min_length=1,
     )
     url: HttpUrl = Field(
@@ -34,10 +32,6 @@ class Connection(BaseModel):
         min_length=1,
         max_length=10,
     )
-    project_root: Path = Field(
-        ...,
-        description="Local project root path that identifies this connection",
-    )
     is_active: bool = Field(
         default=True,
         description="Whether this connection is currently active",
@@ -53,17 +47,6 @@ class Connection(BaseModel):
         le=168,  # Max 1 week
     )
 
-    @field_validator("project_root", mode="before")
-    @classmethod
-    def resolve_project_root(cls, v: str | Path) -> Path:
-        """Resolve project root to absolute path."""
-        path = Path(v).expanduser().resolve()
-        if not path.exists():
-            raise ValueError(f"Project root does not exist: {path}")
-        if not path.is_dir():
-            raise ValueError(f"Project root must be a directory: {path}")
-        return path
-
     @field_validator("project_key")
     @classmethod
     def validate_project_key(cls, v: str) -> str:
@@ -78,10 +61,10 @@ class Connection(BaseModel):
         """Generate unique key for credential storage.
 
         Returns:
-            String key based on project root path
+            String key based on connection name
         """
-        # Use resolved absolute path to ensure uniqueness
-        return f"budjira_{self.project_root.as_posix().replace('/', '_')}"
+        # Use name with prefix for credential storage
+        return f"budjira_{self.name.lower().replace(' ', '_')}"
 
     model_config = {"frozen": False, "validate_assignment": True}
 
@@ -93,21 +76,6 @@ class ConnectionList(BaseModel):
         default_factory=list,
         description="List of configured Jira connections",
     )
-
-    def find_by_root(self, root: Path) -> Connection | None:
-        """Find connection by project root path.
-
-        Args:
-            root: Project root path to search for
-
-        Returns:
-            Connection if found, None otherwise
-        """
-        resolved_root = root.expanduser().resolve()
-        for conn in self.connections:
-            if conn.project_root == resolved_root:
-                return conn
-        return None
 
     def find_by_name(self, name: str) -> Connection | None:
         """Find connection by name.
@@ -130,25 +98,25 @@ class ConnectionList(BaseModel):
             connection: Connection to add
 
         Raises:
-            ValueError: If connection with same root already exists
+            ValueError: If connection with same name already exists
         """
-        if self.find_by_root(connection.project_root):
+        if self.find_by_name(connection.name):
             raise ValueError(
-                f"Connection for project root '{connection.project_root}' already exists. "
-                f"Use a different project root or update the existing connection."
+                f"Connection '{connection.name}' already exists. "
+                f"Use a different name or update the existing connection."
             )
         self.connections.append(connection)
 
-    def remove(self, root: Path) -> bool:
-        """Remove connection by project root.
+    def remove(self, name: str) -> bool:
+        """Remove connection by name.
 
         Args:
-            root: Project root of connection to remove
+            name: Name of connection to remove
 
         Returns:
             True if connection was removed, False if not found
         """
-        conn = self.find_by_root(root)
+        conn = self.find_by_name(name)
         if conn:
             self.connections.remove(conn)
             return True
@@ -164,7 +132,7 @@ class ConnectionList(BaseModel):
             True if connection was updated, False if not found
         """
         for i, conn in enumerate(self.connections):
-            if conn.project_root == connection.project_root:
+            if conn.name == connection.name:
                 self.connections[i] = connection
                 return True
         return False

@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 
 from budjira import __version__
-from budjira.cli import connect, update
+from budjira.cli import connect, create, search, update
 from budjira.utils.banner import print_header
 
 # Show header early for --help (which bypasses callback)
@@ -27,6 +27,8 @@ console = Console()
 # Register subcommands
 app.add_typer(connect.app, name="connect")
 app.add_typer(update.app, name="update")
+app.add_typer(search.app, name="search")
+app.add_typer(create.app, name="create")
 
 
 def is_quiet_mode() -> bool:

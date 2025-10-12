@@ -104,7 +104,7 @@ class Settings:
             config: Global configuration to save
         """
         with self.config_file.open("wb") as f:
-            tomli_w.dump(config.model_dump(), f)
+            tomli_w.dump(config.model_dump(exclude_none=True), f)
 
         self._global_config = config
 
@@ -138,7 +138,6 @@ class Settings:
                     "url": str(conn.url),
                     "email": conn.email,
                     "project_key": conn.project_key,
-                    "project_root": str(conn.project_root),
                     "is_active": conn.is_active,
                     "cache_enabled": conn.cache_enabled,
                     "cache_ttl_hours": conn.cache_ttl_hours,
@@ -165,17 +164,17 @@ class Settings:
         connections.add(connection)
         self.save_connections(connections)
 
-    def remove_connection(self, root: Path) -> bool:
-        """Remove connection by project root.
+    def remove_connection(self, name: str) -> bool:
+        """Remove connection by name.
 
         Args:
-            root: Project root of connection to remove
+            name: Name of connection to remove
 
         Returns:
             True if connection was removed, False if not found
         """
         connections = self.connections
-        if connections.remove(root):
+        if connections.remove(name):
             self.save_connections(connections)
             return True
         return False
@@ -194,25 +193,6 @@ class Settings:
             self.save_connections(connections)
             return True
         return False
-
-    def get_connection_for_current_dir(self) -> Connection | None:
-        """Get connection for current working directory or its parents.
-
-        Searches up the directory tree to find a matching project root.
-
-        Returns:
-            Connection if found, None otherwise
-        """
-        current = Path.cwd()
-        connections = self.connections
-
-        # Try current directory and all parents
-        for path in [current, *current.parents]:
-            conn = connections.find_by_root(path)
-            if conn:
-                return conn
-
-        return None
 
     def get_log_file(self, connection: Connection) -> Path:
         """Get log file path for a connection.

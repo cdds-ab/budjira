@@ -31,17 +31,13 @@ def temp_settings(tmp_path: Path) -> Settings:
 
 
 @pytest.fixture
-def test_connection(tmp_path: Path) -> Connection:
+def test_connection() -> Connection:
     """Create a test connection."""
-    project_root = tmp_path / "project"
-    project_root.mkdir()
-
     return Connection(
         name="Test Connection",
         url="https://test.atlassian.net",
         email="test@example.com",
         project_key="TEST",
-        project_root=project_root,
     )
 
 
@@ -107,7 +103,6 @@ class TestSettings:
         assert str(conn.url) == str(test_connection.url)
         assert conn.email == test_connection.email
         assert conn.project_key == test_connection.project_key
-        assert conn.project_root == test_connection.project_root
 
     def test_add_connection(self, temp_settings: Settings, test_connection: Connection) -> None:
         """Test adding a connection."""
@@ -117,38 +112,49 @@ class TestSettings:
         assert len(connections.connections) == 1
         assert connections.connections[0].name == test_connection.name
 
-    def test_add_duplicate_connection_raises_error(self, temp_settings: Settings, test_connection: Connection) -> None:
+    def test_add_duplicate_connection_raises_error(self, temp_settings: Settings) -> None:
         """Test that adding duplicate connection raises error."""
-        temp_settings.add_connection(test_connection)
+        conn1 = Connection(
+            name="Test",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+        )
+        temp_settings.add_connection(conn1)
 
-        duplicate = Connection(
-            name="Different Name",
+        # Try to add another with same name
+        conn2 = Connection(
+            name="Test",  # Same name!
             url="https://different.atlassian.net",
             email="different@example.com",
             project_key="DIFF",
-            project_root=test_connection.project_root,  # Same root!
         )
 
         with pytest.raises(ValueError, match="already exists"):
-            temp_settings.add_connection(duplicate)
+            temp_settings.add_connection(conn2)
 
     def test_remove_connection(self, temp_settings: Settings, test_connection: Connection) -> None:
         """Test removing a connection."""
         temp_settings.add_connection(test_connection)
         assert len(temp_settings.connections.connections) == 1
 
-        removed = temp_settings.remove_connection(test_connection.project_root)
+        removed = temp_settings.remove_connection(test_connection.name)
         assert removed is True
 
         connections = temp_settings.load_connections()
         assert len(connections.connections) == 0
+
+    def test_remove_nonexistent_connection(self, temp_settings: Settings) -> None:
+        """Test removing a connection that doesn't exist."""
+        removed = temp_settings.remove_connection("NonExistent")
+        assert removed is False
 
     def test_update_connection(self, temp_settings: Settings, test_connection: Connection) -> None:
         """Test updating a connection."""
         temp_settings.add_connection(test_connection)
 
         # Update connection
-        test_connection.name = "Updated Name"
+        test_connection.name = "Test Connection"  # Keep same name
         test_connection.cache_enabled = True
 
         updated = temp_settings.update_connection(test_connection)
@@ -156,39 +162,7 @@ class TestSettings:
 
         connections = temp_settings.load_connections()
         conn = connections.connections[0]
-        assert conn.name == "Updated Name"
         assert conn.cache_enabled is True
-
-    def test_get_connection_for_current_dir(self, temp_settings: Settings, tmp_path: Path) -> None:
-        """Test getting connection for current directory."""
-        # Create project structure
-        project_root = tmp_path / "my_project"
-        project_root.mkdir()
-        subdir = project_root / "src" / "components"
-        subdir.mkdir(parents=True)
-
-        conn = Connection(
-            name="Test",
-            url="https://test.atlassian.net",
-            email="test@example.com",
-            project_key="TEST",
-            project_root=project_root,
-        )
-        temp_settings.add_connection(conn)
-
-        # Change to subdirectory and find connection
-        import os
-
-        original_cwd = Path.cwd()
-        try:
-            os.chdir(subdir)
-            found = temp_settings.get_connection_for_current_dir()
-
-            assert found is not None
-            assert found.name == "Test"
-            assert found.project_root == project_root
-        finally:
-            os.chdir(original_cwd)
 
     def test_get_log_file(self, temp_settings: Settings, test_connection: Connection) -> None:
         """Test getting log file path for connection."""

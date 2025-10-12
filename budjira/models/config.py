@@ -65,5 +65,9 @@ class GlobalConfig(BaseModel):
         default="UTC",
         description="Default timezone for time logging",
     )
+    active_connection: str | None = Field(
+        default=None,
+        description="Name of the currently active connection",
+    )
 
     model_config = {"use_enum_values": True, "validate_assignment": True}

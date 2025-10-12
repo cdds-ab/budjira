@@ -59,7 +59,6 @@ class CredentialStore:
             "api_token": api_token.strip(),
             "email": connection.email,
             "url": str(connection.url),
-            "project_root": str(connection.project_root),
         }
 
         # Write with restricted permissions

@@ -29,17 +29,13 @@ def credential_store(mock_settings: MagicMock) -> CredentialStore:
 
 
 @pytest.fixture
-def test_connection(tmp_path: Path) -> Connection:
+def test_connection() -> Connection:
     """Create a test connection."""
-    project_root = tmp_path / "project"
-    project_root.mkdir()
-
     return Connection(
         name="Test Connection",
         url="https://test.atlassian.net",
         email="test@example.com",
         project_key="TEST",
-        project_root=project_root,
     )
 
 
@@ -123,26 +119,19 @@ class TestCredentialStore:
         credential_store.store(test_connection, "test-token")
         assert credential_store.has_credentials(test_connection)
 
-    def test_credential_file_unique_per_connection(self, credential_store: CredentialStore, tmp_path: Path) -> None:
+    def test_credential_file_unique_per_connection(self, credential_store: CredentialStore) -> None:
         """Test that each connection gets unique credential file."""
-        root1 = tmp_path / "project1"
-        root1.mkdir()
-        root2 = tmp_path / "project2"
-        root2.mkdir()
-
         conn1 = Connection(
             name="Conn1",
             url="https://test1.atlassian.net",
             email="test1@example.com",
             project_key="TEST1",
-            project_root=root1,
         )
         conn2 = Connection(
             name="Conn2",
             url="https://test2.atlassian.net",
             email="test2@example.com",
             project_key="TEST2",
-            project_root=root2,
         )
 
         file1 = credential_store._get_credential_file(conn1)

@@ -52,8 +52,6 @@ class TestConnectList:
 
     def test_list_with_connections(self, tmp_path: Path) -> None:
         """Test listing existing connections."""
-        project_root = tmp_path / "project"
-        project_root.mkdir()
 
         with (
             patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
@@ -78,7 +76,6 @@ class TestConnectList:
                 url="https://test.atlassian.net",
                 email="test@example.com",
                 project_key="TEST",
-                project_root=project_root,
             )
             settings.add_connection(conn)
 
@@ -97,8 +94,6 @@ class TestConnectShow:
 
     def test_show_by_name(self, tmp_path: Path) -> None:
         """Test showing connection by name."""
-        project_root = tmp_path / "project"
-        project_root.mkdir()
 
         with (
             patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
@@ -121,7 +116,6 @@ class TestConnectShow:
                 url="https://test.atlassian.net",
                 email="test@example.com",
                 project_key="TEST",
-                project_root=project_root,
             )
             settings.add_connection(conn)
 
@@ -155,8 +149,6 @@ class TestConnectRemove:
 
     def test_remove_with_force(self, tmp_path: Path) -> None:
         """Test removing connection with --force."""
-        project_root = tmp_path / "project"
-        project_root.mkdir()
 
         with (
             patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
@@ -179,7 +171,6 @@ class TestConnectRemove:
                 url="https://test.atlassian.net",
                 email="test@example.com",
                 project_key="TEST",
-                project_root=project_root,
             )
             settings.add_connection(conn)
 
@@ -213,8 +204,6 @@ class TestConnectTest:
 
     def test_test_connection_success(self, tmp_path: Path, mock_jira: MagicMock) -> None:
         """Test successful connection test."""
-        project_root = tmp_path / "project"
-        project_root.mkdir()
 
         with (
             patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
@@ -241,7 +230,6 @@ class TestConnectTest:
                 url="https://test.atlassian.net",
                 email="test@example.com",
                 project_key="TEST",
-                project_root=project_root,
             )
             settings.add_connection(conn)
             credential_store.store(conn, "test-token")
@@ -254,8 +242,6 @@ class TestConnectTest:
 
     def test_test_connection_missing_credentials(self, tmp_path: Path) -> None:
         """Test connection test with missing credentials."""
-        project_root = tmp_path / "project"
-        project_root.mkdir()
 
         with (
             patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
@@ -278,7 +264,6 @@ class TestConnectTest:
                 url="https://test.atlassian.net",
                 email="test@example.com",
                 project_key="TEST",
-                project_root=project_root,
             )
             settings.add_connection(conn)
 
@@ -289,8 +274,6 @@ class TestConnectTest:
 
     def test_test_connection_failure(self, tmp_path: Path) -> None:
         """Test connection test with connection failure."""
-        project_root = tmp_path / "project"
-        project_root.mkdir()
 
         with (
             patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
@@ -317,7 +300,6 @@ class TestConnectTest:
                 url="https://test.atlassian.net",
                 email="test@example.com",
                 project_key="TEST",
-                project_root=project_root,
             )
             settings.add_connection(conn)
             credential_store.store(conn, "test-token")
