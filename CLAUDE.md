@@ -415,6 +415,56 @@ uv run pytest tests/test_search.py -vv -s
 uv run pytest tests/core/ --cov=budjira.core
 ```
 
+## Context Management
+
+**Session Continuity with `.claude/` Directory:**
+
+To maintain context across session boundaries (compact/restart), use the `.claude/` directory:
+
+```
+.claude/
+└── context.md    # Current project status, decisions, next steps
+```
+
+**When user says "sichere context" or "save context":**
+1. Create/update `.claude/context.md` with current project status
+2. Include:
+   - Current version and uncommitted changes
+   - Recent session summary (major changes made)
+   - Pending decisions/tasks
+   - Important design choices made
+   - Next steps
+3. Commit with message: `docs: update project context`
+
+**Context File Template:**
+```markdown
+# Budjira Project Context
+
+## Current State
+- Version: [version]
+- Branch: [branch]
+- Uncommitted: [yes/no + description]
+
+## Recent Changes
+- [List of significant changes from this session]
+
+## Pending Decisions
+- [ ] [Decision 1]
+- [ ] [Decision 2]
+
+## Design Decisions Made
+- [Important architectural or workflow decisions]
+
+## Next Steps
+- [ ] [Immediate task]
+- [ ] [Short-term task]
+```
+
+**Auto-loading:**
+- `.claude/context.md` is automatically loaded when Claude Code starts
+- After compact, new session begins with full context from this file
+- Best practice: Update at ~85-90% token budget (170k/200k tokens)
+
 ## Notes for AI Assistants
 
 **When implementing new features:**
