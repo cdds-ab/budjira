@@ -20,7 +20,7 @@
 - 🔗 **Multi-Connection**: Manage multiple Jira instances and projects
 - 🎯 **Context-Aware**: Name-based connection management with environment variable and CLI override support
 - 🔄 **Auto-Update**: Automatic update checks with GitHub Releases integration
-- 🤖 **AI-Friendly**: Designed for seamless AI-assisted workflows
+- 🤖 **AI-Friendly**: Designed for seamless AI-assisted workflows with built-in usage prompt generation
 - 🎨 **Rich Output**: Beautiful, colorful terminal output with tables and formatting
 - 🔍 **Search & Filter**: Powerful JQL-based ticket search with filter options
 - ✏️ **Create Issues**: Interactive and non-interactive issue creation
@@ -192,6 +192,28 @@ budjira update
 budjira update --check --force
 ```
 
+### 6. AI Integration
+
+Generate comprehensive usage guides for AI assistants.
+
+```bash
+# Generate AI usage prompt
+budjira ai usage-prompt
+
+# Copy to clipboard (Linux with xclip)
+budjira ai usage-prompt | xclip -selection clipboard
+
+# Save to file
+budjira ai usage-prompt > budjira-guide.md
+```
+
+The generated prompt includes:
+- Complete command reference with examples
+- Connection management workflows
+- Search and create patterns
+- Error handling guidance
+- Common use cases for AI assistants
+
 ## 🔧 Configuration
 
 budjira follows the XDG Base Directory specification and stores configuration in:
@@ -320,6 +342,7 @@ Found a bug? Have a feature request?
 - [x] Issue creation (interactive and non-interactive)
 - [x] Self-update mechanism
 - [x] Automatic update checks
+- [x] AI usage prompt generation
 
 ### In Progress 🚧
 - [ ] Worklog CLI command (backend complete, CLI pending)

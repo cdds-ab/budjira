@@ -757,6 +757,24 @@ python-semantic-release = ">=10.4.1"  # Automated versioning
 5. **Error Handling** via custom Exceptions
 6. **Pre-commit hooks** vor jedem Commit (automatisch via git hook)
 
+### AI Prompt Maintenance
+**WICHTIG**: Bei Änderungen an CLI-Commands oder Models:
+
+1. **Automatischer Check**: Pre-commit hook warnt bei CLI-Änderungen
+2. **Review Required**: Prüfe `.claude/ai-prompt-supplements.md`
+3. **Update bei Bedarf**:
+   - Common Workflows noch aktuell?
+   - Beispiele spiegeln neue Syntax?
+   - Tips behandeln neue Features?
+   - Edge Cases dokumentiert?
+4. **Test Preview**: `budjira ai usage-prompt | less`
+5. **Version Tracking**: Update "Last Updated" in supplements.md
+
+**Dateien**:
+- `.claude/ai-prompt-supplements.md` - Manuelle AI-Guide-Sections
+- `budjira/cli/ai.py` - Auto-generierter Command-Output
+- `scripts/check_ai_prompt.py` - Pre-commit check script
+
 ### Testing-Richtlinien
 1. **Mock alle Jira API Calls** (keine Live-Verbindungen)
 2. **Fixtures** in conftest.py sharen
