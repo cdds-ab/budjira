@@ -593,7 +593,7 @@ class TestJiraClientTransitions:
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(JiraAPIError, match="Invalid transition.*Available transitions"):
+        with pytest.raises(JiraAPIError, match=r"Invalid transition.*Available transitions"):
             client.transition_issue("TEST-123", "Invalid Status")
 
 
