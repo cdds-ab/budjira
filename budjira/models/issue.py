@@ -61,6 +61,30 @@ class Issue(BaseModel):
     components: list[str] = Field(default_factory=list, description="Issue components")
     project_key: str = Field(..., description="Project key")
 
+    @staticmethod
+    def _parse_jira_datetime(datetime_str: str) -> datetime:
+        """Parse Jira datetime string to datetime object.
+
+        Handles multiple Jira datetime formats:
+        - 2025-01-10T10:00:00.000Z
+        - 2025-01-10T10:00:00.000+0000 (without colon)
+        - 2025-01-10T10:00:00.000+00:00 (with colon)
+
+        Args:
+            datetime_str: Datetime string from Jira API
+
+        Returns:
+            Parsed datetime object
+        """
+        # Replace Z with +00:00 for ISO format
+        normalized = datetime_str.replace("Z", "+00:00")
+
+        # Fix timezone format: +0000 -> +00:00
+        if normalized.endswith("+0000") or normalized.endswith("-0000"):
+            normalized = normalized[:-5] + normalized[-5:-2] + ":" + normalized[-2:]
+
+        return datetime.fromisoformat(normalized)
+
     @classmethod
     def from_jira_issue(cls, jira_issue: Any) -> Issue:
         """Create Issue from jira library Issue object.
@@ -86,11 +110,11 @@ class Issue(BaseModel):
         # Parse timestamps
         created = None
         if hasattr(fields, "created") and fields.created:
-            created = datetime.fromisoformat(fields.created.replace("Z", "+00:00"))
+            created = cls._parse_jira_datetime(fields.created)
 
         updated = None
         if hasattr(fields, "updated") and fields.updated:
-            updated = datetime.fromisoformat(fields.updated.replace("Z", "+00:00"))
+            updated = cls._parse_jira_datetime(fields.updated)
 
         # Parse labels
         labels = []
