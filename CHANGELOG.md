@@ -1,6 +1,34 @@
 # CHANGELOG
 
 
+## v1.0.1 (2025-10-12)
+
+### Bug Fixes
+
+- Handle multiple Jira datetime formats in ISO parsing
+  ([`22ad81f`](https://github.com/cdds-ab/budjira/commit/22ad81f44b2176673b25f52e3df3ad3bc0acf6b8))
+
+Jira API returns datetime strings in multiple formats: - 2025-01-10T10:00:00.000Z (with Z suffix) -
+  2025-01-10T10:00:00.000+0000 (timezone without colon) - 2025-01-10T10:00:00.000+00:00 (timezone
+  with colon)
+
+Python's datetime.fromisoformat() only accepts the colon format.
+
+Solution: - Add _parse_jira_datetime() helper method - Normalize Z suffix to +00:00 - Fix timezone
+  format: +0000 -> +00:00 - Handle both positive and negative timezones
+
+This fixes CI failures on Python 3.10-3.13 where tests were failing with "ValueError: Invalid
+  isoformat string: '..+0000'".
+
+Fixes: - tests/models/test_issue.py::test_from_jira_issue - tests/core/test_jira_client.py (7 tests)
+
+All 158 tests now passing.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+
 ## v1.0.0 (2025-10-12)
 
 ### Documentation
