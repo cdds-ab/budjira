@@ -1,6 +1,44 @@
 # CHANGELOG
 
 
+## v1.4.1 (2025-10-12)
+
+### Code Style
+
+- Apply ruff auto-fixes to test_editor.py
+  ([`f586de0`](https://github.com/cdds-ab/budjira/commit/f586de04e3a7ba8b9b1dd2127401cd04251701da))
+
+- Combine nested with statements where possible - Apply SIM117 ruff rule fixes
+
+### Documentation
+
+- Add DoR templates to AI usage prompt
+  ([`d359cad`](https://github.com/cdds-ab/budjira/commit/d359cad8173ecd4c564bc511b255c49edf6e72b9))
+
+- Add comprehensive DoR Templates section with management commands - Document default templates
+  (Story, Bug, Task) - Add interactive creation workflow with DoR - Include configuration and
+  validation details - Add DoR workflow to Common Workflows section - Update workflow numbering (now
+  10 workflows)
+
+This ensures AI assistants (like ClaudePM) can discover and use the DoR template feature for better
+  issue quality.
+
+### Testing
+
+- Add comprehensive tests for DoR feature
+  ([`107d1e1`](https://github.com/cdds-ab/budjira/commit/107d1e15994a7c7e1786ef929e944b0ae12e27ec))
+
+- Add 17 tests for DoR CLI commands (list, show, edit, validate) - Add 14 tests for editor utility
+  (open_editor, validation loop) - Add 7 tests for DoR integration in create command - Fix test
+  isolation issues in validate test - Improve DoR CLI coverage from 15% to 92% - Improve editor
+  utility coverage from 24% to 97% - Improve create command coverage from 81% to 92% - Total
+  coverage increased from 72% to 79% (279 tests passing)
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+
 ## v1.4.0 (2025-10-12)
 
 ### Features
