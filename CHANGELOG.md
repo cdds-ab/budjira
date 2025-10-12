@@ -1,6 +1,106 @@
 # CHANGELOG
 
 
+## v1.0.0 (2025-10-12)
+
+### Documentation
+
+- Add context management system for session continuity
+  ([`1804b25`](https://github.com/cdds-ab/budjira/commit/1804b25e2be62a2385347853e978a0fc470bf2a5))
+
+- Add Context Management section to CLAUDE.md - Create .claude/context.md with comprehensive project
+  status - Remove .claude/ from .gitignore to track context file - Establish "sichere context"
+  command pattern for updating context
+
+Context files will be auto-loaded by Claude Code on session start and after compacts, maintaining
+  development state across boundaries.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+- Comprehensive project context documentation
+  ([`4d75dfc`](https://github.com/cdds-ab/budjira/commit/4d75dfcfd902e2ce0e2a8697cf7eaac606437ad6))
+
+Complete rewrite of .claude/context.md with exhaustive project documentation:
+
+- Project overview and philosophy - Full architecture documentation (modules, patterns, tech stack)
+  - Detailed feature status for all 6 implemented features - Test coverage analysis (158 tests, 80%
+  coverage) - CI/CD pipeline documentation (GitHub Actions) - Semantic release configuration and
+  rules - Open decisions (release workflow, pre-release support) - Development workflow and user
+  preferences - Technical debt tracking - Roadmap and next steps - Session hints for Claude Code
+  continuity
+
+This provides a complete "tabula rasa" state for future work.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+- Update README to reflect implemented features
+  ([`205db9a`](https://github.com/cdds-ab/budjira/commit/205db9a1cffc012c0882408d296f8396930203a0))
+
+Update README.md to accurately reflect current implementation status:
+
+Features Section: - Change "Project-root based" → "Name-based connection management" - Update Search
+  & Filter: "coming soon" → "implemented" - Update Create Issues: "coming soon" → "implemented" -
+  Update Time Tracking: Note backend ready, CLI pending
+
+Quick Start: - Add search command examples (JQL + filters) - Add create command examples
+  (interactive + non-interactive) - Add new connection commands: use, current - Restructure sections
+  (1-5 instead of 1-3)
+
+Coming Soon Section: - Remove Search for Issues (now implemented) - Remove Create Issues (now
+  implemented) - Keep Log Work Time with note about backend being ready - Add "Additional Planned
+  Features" subsection
+
+Roadmap: - Add "Implemented ✅" section with completed features - Add "In Progress 🚧" section for
+  worklog CLI - Reorganize "Planned 📋" section - Clear separation of status categories
+
+This brings README in sync with actual codebase state (search, create, enhanced connection
+  management all implemented).
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+### Features
+
+- Implement Jira core functionality and refactor connection model
+  ([`b31a6e4`](https://github.com/cdds-ab/budjira/commit/b31a6e44892290afa7895b7b7b9ddb3210318719))
+
+Implement core Jira functionality with JiraClient wrapper, search and create commands. Refactor
+  connection model from directory-based to name-based with environment variable support.
+
+New Features: - JiraClient wrapper for Jira API with comprehensive error handling - Search command
+  with JQL and filter support - Create command with interactive and non-interactive modes - Time
+  parser utility for worklog entries - Connection resolution with priority: --connection > ENV >
+  config default
+
+Refactoring: - Remove project_root from Connection model - Change from directory-based to name-based
+  connection lookup - Add active_connection field to GlobalConfig - Implement BUDJIRA_CONNECTION
+  environment variable support - Add 'connect use' command to set global default connection - Add
+  'connect current' command to show active connection - Replace --root parameter with --connection
+  in all commands
+
+Tests: - Add comprehensive test coverage for all new features - Update all existing tests for new
+  connection model - 158 tests passing with 80% coverage
+
+BREAKING CHANGE: Connections are now identified by name instead of project_root. The --root
+  parameter has been removed from all commands. Use --connection flag or BUDJIRA_CONNECTION
+  environment variable instead.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+### BREAKING CHANGES
+
+- Connections are now identified by name instead of project_root. The --root parameter has been
+  removed from all commands. Use --connection flag or BUDJIRA_CONNECTION environment variable
+  instead.
+
+
 ## v0.4.6 (2025-10-11)
 
 ### Bug Fixes
