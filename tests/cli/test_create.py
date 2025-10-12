@@ -80,17 +80,22 @@ class TestCreateCommand:
             labels=[],
         )
 
+    @patch("budjira.cli.create.get_settings")
     @patch("budjira.cli.create.JiraClient")
     @patch("budjira.cli.create.get_active_connection")
     def test_create_non_interactive_full(
         self,
         mock_get_active_connection: Mock,
         mock_jira_client_class: Mock,
+        mock_get_settings: Mock,
         mock_connection: Connection,
         mock_created_issue: Issue,
     ) -> None:
         """Test create with all fields in non-interactive mode."""
         # Setup mocks
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
         mock_get_active_connection.return_value = mock_connection
 
         mock_client = MagicMock()
@@ -115,6 +120,7 @@ class TestCreateCommand:
                 "--label",
                 "urgent",
                 "--no-interactive",
+                "--skip-dor",
             ],
         )
 
@@ -203,6 +209,7 @@ class TestCreateCommand:
         assert call_args["summary"] == "New bug"
         assert call_args["issue_type"] == "Task"
 
+    @patch("budjira.cli.create.get_settings")
     @patch("budjira.cli.create.Prompt")
     @patch("budjira.cli.create.Confirm")
     @patch("budjira.cli.create.JiraClient")
@@ -213,11 +220,15 @@ class TestCreateCommand:
         mock_jira_client_class: Mock,
         mock_confirm: Mock,
         mock_prompt: Mock,
+        mock_get_settings: Mock,
         mock_connection: Connection,
         mock_created_issue: Issue,
     ) -> None:
         """Test create in interactive mode with all optional fields."""
         # Setup mocks
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
         mock_get_active_connection.return_value = mock_connection
 
         mock_client = MagicMock()

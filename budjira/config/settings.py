@@ -16,6 +16,7 @@ else:
 
 from budjira.models.config import GlobalConfig
 from budjira.models.connection import Connection, ConnectionList
+from budjira.models.dor import DorTemplateConfig, get_default_templates
 
 
 class Settings:
@@ -37,6 +38,7 @@ class Settings:
         # Configuration files
         self.config_file = self.config_dir / "config.toml"
         self.connections_file = self.config_dir / "connections.toml"
+        self.dor_templates_file = self.config_dir / "dor-templates.toml"
 
         # Data directories
         self.credentials_dir = self.config_dir / "credentials"
@@ -49,6 +51,7 @@ class Settings:
         # Load configuration
         self._global_config: GlobalConfig | None = None
         self._connections: ConnectionList | None = None
+        self._dor_templates: DorTemplateConfig | None = None
 
     def _ensure_directories(self) -> None:
         """Create all required directories if they don't exist."""
@@ -79,6 +82,17 @@ class Settings:
         if self._connections is None:
             self._connections = self.load_connections()
         return self._connections
+
+    @property
+    def dor_templates(self) -> DorTemplateConfig:
+        """Get DoR templates, loading from file if needed.
+
+        Returns:
+            DoR template configuration object
+        """
+        if self._dor_templates is None:
+            self._dor_templates = self.load_dor_templates()
+        return self._dor_templates
 
     def load_global_config(self) -> GlobalConfig:
         """Load global configuration from config.toml.
@@ -219,6 +233,34 @@ class Settings:
         # Use connection name as cache filename (sanitized)
         safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in connection.name)
         return self.cache_dir / f"{safe_name}.db"
+
+    def load_dor_templates(self) -> DorTemplateConfig:
+        """Load DoR templates from dor-templates.toml.
+
+        Returns:
+            DoR template configuration (defaults if file doesn't exist)
+        """
+        if not self.dor_templates_file.exists():
+            # Create default templates
+            config = get_default_templates()
+            self.save_dor_templates(config)
+            return config
+
+        with self.dor_templates_file.open("rb") as f:
+            data = tomllib.load(f)
+
+        return DorTemplateConfig(**data)
+
+    def save_dor_templates(self, config: DorTemplateConfig) -> None:
+        """Save DoR templates to dor-templates.toml.
+
+        Args:
+            config: DoR template configuration to save
+        """
+        with self.dor_templates_file.open("wb") as f:
+            tomli_w.dump(config.model_dump(exclude_none=True), f)
+
+        self._dor_templates = config
 
 
 # Global settings instance

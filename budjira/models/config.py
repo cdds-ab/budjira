@@ -1,6 +1,9 @@
 """Global configuration model."""
 
+from __future__ import annotations
+
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -68,6 +71,14 @@ class GlobalConfig(BaseModel):
     active_connection: str | None = Field(
         default=None,
         description="Name of the currently active connection",
+    )
+    enforce_dor: bool = Field(
+        default=True,
+        description="Enforce Definition of Ready templates for issue creation",
+    )
+    dor_validation_level: Literal["strict", "warn", "off"] = Field(
+        default="warn",
+        description="DoR validation level: strict (block), warn (allow), off (disabled)",
     )
 
     model_config = {"use_enum_values": True, "validate_assignment": True}

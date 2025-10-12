@@ -7,9 +7,12 @@ from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from budjira.config.settings import get_settings
 from budjira.core.jira_client import JiraClient
 from budjira.models.issue import IssueType, Priority
 from budjira.utils.connection import get_active_connection
+from budjira.utils.dor_validator import format_validation_result, validate_description
+from budjira.utils.editor import open_editor
 from budjira.utils.errors import BudjiraError
 
 app = typer.Typer(
@@ -70,6 +73,11 @@ def issue(
         "-c",
         help="Connection name to use (overrides BUDJIRA_CONNECTION env var)",
     ),
+    skip_dor: bool = typer.Option(
+        False,
+        "--skip-dor",
+        help="Skip Definition of Ready template and validation",
+    ),
 ) -> None:
     """Create a new Jira issue.
 
@@ -88,6 +96,9 @@ def issue(
         budjira create issue "Add feature" --type Story --description "Detailed desc" --label feature --label frontend
     """
     try:
+        # Get settings for DoR templates
+        settings = get_settings()
+
         # Get active connection (from --connection, env var, or config)
         active_connection = get_active_connection(connection)
 
@@ -106,8 +117,29 @@ def issue(
                     default="Task",
                 )
 
-            if description is None and Confirm.ask("Add description?", default=False):
-                description = Prompt.ask("Description")
+            # Handle description with DoR template if applicable
+            if description is None:
+                # Check if DoR is enabled and template exists for this type
+                use_dor = (
+                    not skip_dor
+                    and settings.global_config.enforce_dor
+                    and issue_type is not None
+                    and settings.dor_templates.get_template(issue_type) is not None
+                )
+
+                if use_dor:
+                    template = settings.dor_templates.get_template(issue_type)
+                    if Confirm.ask(f"Use DoR template for {issue_type}?", default=True):
+                        console.print(f"\n[dim]Opening editor with DoR template for {issue_type}...[/dim]")
+                        description = open_editor(
+                            initial_content=template.template_text,
+                            file_extension=".md",
+                            editor=settings.global_config.editor,
+                        )
+                    elif Confirm.ask("Add description?", default=False):
+                        description = Prompt.ask("Description")
+                elif Confirm.ask("Add description?", default=False):
+                    description = Prompt.ask("Description")
 
             if priority is None and Confirm.ask("Set priority?", default=False):
                 priorities_str = ", ".join([p.value for p in Priority])
@@ -128,6 +160,28 @@ def issue(
         if not issue_type:
             console.print("[red]✗[/red] Issue type is required", style="red")
             raise typer.Exit(1)
+
+        # Validate DoR if enabled and description provided
+        if not skip_dor and settings.global_config.enforce_dor and description:
+            template = settings.dor_templates.get_template(issue_type)
+            if template:
+                validation_result = validate_description(description, template)
+
+                # Get validation level from config
+                validation_level = settings.global_config.dor_validation_level
+
+                if validation_result.has_errors or validation_result.has_warnings:
+                    console.print()
+                    console.print(format_validation_result(validation_result))
+                    console.print()
+
+                    if validation_level == "strict" and validation_result.has_errors:
+                        console.print("[red]DoR validation failed in strict mode. Issue creation blocked.[/red]")
+                        console.print("[dim]Use --skip-dor to bypass validation[/dim]")
+                        raise typer.Exit(1)
+                    elif validation_level == "warn":
+                        if not Confirm.ask("Continue anyway?", default=True):
+                            raise typer.Exit(0)
 
         # Create client and issue
         client = JiraClient.from_connection(active_connection)

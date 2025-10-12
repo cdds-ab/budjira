@@ -24,6 +24,7 @@
 - 🎨 **Rich Output**: Beautiful, colorful terminal output with tables and formatting
 - 🔍 **Search & Filter**: Powerful JQL-based ticket search with filter options
 - ✏️ **Create Issues**: Interactive and non-interactive issue creation
+- 📋 **Definition of Ready**: Customizable templates for Story, Bug, Task with validation
 - 🔄 **Update Issues**: Transition status, update fields, manage labels
 - 🎯 **Epic Management**: Link stories to epics and view epic progress
 - ⏱️ **Time Tracking**: Work log backend ready *(CLI coming soon)*
@@ -179,7 +180,55 @@ budjira create issue "Add feature" \
   --no-interactive
 ```
 
-### 5. Update Issues
+### 5. Definition of Ready (DoR) Templates
+
+budjira supports customizable templates for different issue types to ensure consistent quality.
+
+```bash
+# List all DoR templates
+budjira dor list
+
+# View template for specific issue type
+budjira dor show Story
+
+# Edit template in your editor
+budjira dor edit Story
+
+# Validate template structure
+budjira dor validate Story
+```
+
+**Default Templates:**
+- **Story**: Context, User Story, Acceptance Criteria (all required)
+- **Bug**: Steps to Reproduce, Expected Behavior, Actual Behavior, Environment
+- **Task**: Description, Acceptance Criteria
+
+**Interactive Creation with DoR:**
+When creating issues interactively, budjira will offer to open your editor with the DoR template:
+
+```bash
+$ budjira create issue "Add user login"
+Issue type: Story
+Use DoR template for Story? [Y/n]: y
+# Opens editor with:
+## Context
+# Why do we need this?
+
+## User Story
+As a [role]
+I want to [action]
+So that [benefit]
+
+## Acceptance Criteria
+- [ ]
+```
+
+**Configuration:**
+- Templates stored in `~/.config/budjira/dor-templates.toml`
+- Validation level: `strict` (block), `warn` (allow), or `off`
+- Skip validation with `--skip-dor` flag
+
+### 6. Update Issues
 
 ```bash
 # Transition status
@@ -201,7 +250,7 @@ budjira issue update PROJ-123 --epic PROJ-100
 budjira issue transitions PROJ-123
 ```
 
-### 6. View Epic Progress
+### 7. View Epic Progress
 
 ```bash
 # Show epic with all child stories
@@ -253,6 +302,7 @@ budjira follows the XDG Base Directory specification and stores configuration in
 ~/.config/budjira/
 ├── connections.toml      # Connection definitions
 ├── credentials/          # Secure credential storage
+├── dor-templates.toml   # Definition of Ready templates
 ├── cache/               # Optional issue cache
 ├── logs/                # Per-context log files
 └── config.toml          # Global settings
@@ -371,6 +421,7 @@ Found a bug? Have a feature request?
 - [x] Secure credential storage
 - [x] Issue search (JQL and filters)
 - [x] Issue creation (interactive and non-interactive)
+- [x] Definition of Ready (DoR) templates with validation
 - [x] Issue updates (status transitions, fields, labels)
 - [x] Epic linking and management
 - [x] Self-update mechanism
@@ -381,7 +432,6 @@ Found a bug? Have a feature request?
 - [ ] Worklog CLI command (backend complete, CLI pending)
 
 ### Planned 📋
-- [ ] Issue transitions (move between states)
 - [ ] Comment management
 - [ ] Attachment upload/download
 - [ ] Smart caching with dirty detection
