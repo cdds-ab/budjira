@@ -220,6 +220,65 @@ budjira create issue "Update documentation" \\
 
 ---
 
+## Definition of Ready (DoR) Templates
+
+### Manage DoR Templates
+
+budjira supports customizable templates for different issue types to ensure consistent quality.
+
+```bash
+# List all DoR templates
+budjira dor list
+
+# View template for specific issue type
+budjira dor show Story
+
+# Edit template in your editor
+budjira dor edit Story
+
+# Validate template structure
+budjira dor validate Story
+```
+
+**Default Templates:**
+- **Story**: Context, User Story, Acceptance Criteria (all required)
+- **Bug**: Steps to Reproduce, Expected Behavior, Actual Behavior, Environment
+- **Task**: Description, Acceptance Criteria
+
+### Interactive Creation with DoR
+
+When creating issues interactively, budjira will offer to open your editor with the DoR template:
+
+```bash
+$ budjira create issue "Add user login"
+Issue type: Story
+Use DoR template for Story? [Y/n]: y
+# Opens editor with pre-filled sections:
+## Context
+
+
+## User Story
+As a [role]
+I want to [action]
+So that [benefit]
+
+## Acceptance Criteria
+- [ ]
+```
+
+**Configuration:**
+- Templates stored in `~/.config/budjira/dor-templates.toml`
+- Validation levels: `strict` (block), `warn` (allow), `off` (disabled)
+- Skip validation with `--skip-dor` flag
+- Configure via `enforce_dor` and `dor_validation_level` in global config
+
+**Validation:**
+- Checks for required sections (## Section Name format)
+- Warns on empty section content
+- Customizable per issue type
+
+---
+
 ## Updating Issues
 
 ### Update Issue Fields and Status
@@ -414,7 +473,18 @@ Available on all commands:
 budjira search --assignee currentUser() --status "In Progress"
 ```
 
-### 2. Create Issue from Context
+### 2. Create Issue with DoR Template
+
+```bash
+# Interactive with DoR template (Story)
+budjira create issue "Add user authentication"
+# Prompts for issue type, then opens editor with template
+
+# Skip DoR validation if needed
+budjira create issue "Quick fix" --type Task --skip-dor --no-interactive
+```
+
+### 3. Create Issue from Context
 
 ```bash
 # Interactive for clarification
@@ -429,7 +499,7 @@ budjira create issue "Implement feature X" \\
   --no-interactive
 ```
 
-### 3. Update Issue Status and Fields
+### 4. Update Issue Status and Fields
 
 ```bash
 # Move issue to In Progress and assign to current user
@@ -443,7 +513,20 @@ budjira issue update PROJ-456 \\
   --add-label completed
 ```
 
-### 4. View Epic Progress
+### 5. Manage DoR Templates
+
+```bash
+# View available templates
+budjira dor list
+
+# Customize Story template
+budjira dor edit Story
+
+# Check template is valid
+budjira dor validate Story
+```
+
+### 6. View Epic Progress
 
 ```bash
 # Check epic status and progress
@@ -453,25 +536,25 @@ budjira epic show PROJ-100
 budjira search "Epic Link = PROJ-100 AND status != Done"
 ```
 
-### 5. Find Recent Issues in Project
+### 7. Find Recent Issues in Project
 
 ```bash
 budjira search "project = PROJ ORDER BY updated DESC" --max 20
 ```
 
-### 6. Search by Keywords
+### 8. Search by Keywords
 
 ```bash
 budjira search "project = PROJ AND text ~ 'authentication'" --max 10
 ```
 
-### 7. Check Bugs Assigned to User
+### 9. Check Bugs Assigned to User
 
 ```bash
 budjira search --type Bug --assignee currentUser() --status Open
 ```
 
-### 8. Complete Issue Workflow
+### 10. Complete Issue Workflow
 
 ```bash
 # 1. Find issue
