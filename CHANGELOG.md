@@ -1,6 +1,30 @@
 # CHANGELOG
 
 
+## v1.3.0 (2025-10-12)
+
+### Features
+
+- Auto-generate AI usage prompt with latest features
+  ([`37c2c2d`](https://github.com/cdds-ab/budjira/commit/37c2c2d7181cec5490889e6ccb11b9af0de7e1f0))
+
+Improve AI Prompt Generation: - Add --plain flag to output raw markdown (no terminal formatting) -
+  Update AI usage prompt with Issue Update and Epic Management sections - Expand Common Workflows
+  with 8 practical examples
+
+Auto-Regeneration System: - Update pre-commit hook to automatically regenerate
+  .claude/ai-usage-prompt.md - Hook triggers when CLI files are modified - Automatically stages
+  updated prompt file - Prevents infinite loop by skipping when only prompt file changed - Exclude
+  AI prompt from end-of-file-fixer to prevent conflicts - Ensures ClaudePM always has current
+  budjira capabilities
+
+New Sections in AI Prompt: - Updating Issues: status transitions, field updates, label management -
+  Epic Management: view epics with progress - Complete Issue Workflow: 4-step workflow example
+
+This ensures ClaudePM can discover and use all budjira features, including the newly added issue
+  updates and epic management.
+
+
 ## v1.2.0 (2025-10-12)
 
 ### Features
