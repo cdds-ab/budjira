@@ -11,28 +11,30 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **pyproject.toml**: 0.4.5 (letzter Release)
-- **budjira/__init__.py**: 0.4.2 (veraltet, wird von semantic-release automatisch aktualisiert)
+- **Current Version**: v1.4.1 (Service Release)
 - **Branch**: master
-- **Letzter Commit**: `79e6ae6` - Context Management System
-- **Uncommitted Changes**: Keine
-- **Ready to Push**: Ja (2 Commits bereit)
+- **Letzter Release**: 2025-10-12T17:34:58Z
+- **Status**: ✅ Alle Commits gepusht, CI/CD erfolgreich, Release live
 
-### Release-Verlauf (letzte 10 Commits)
-```
-79e6ae6 docs: add context management system for session continuity
-7018e57 feat!: implement Jira core functionality and refactor connection model
-ad09bae fix: correct semantic-release version_variable config
-5490f18 chore(release): bump version to 0.4.5
-fed58c2 fix: correct semantic-release version_variable config
-1d287b4 chore(release): bump version to 0.4.4
-5d8d074 fix: add style commits to patch version bump tags
-bc4da30 style: fix ruff formatting in main.py
-259fa76 chore(release): bump version to 0.4.3
-9bf69eb fix: use dynamic version in banner tests and update dependencies
-```
+### Release v1.4.1 (Service Release)
+**Änderungen**:
+- ✅ **31 neue Tests** hinzugefügt (248 → 279 Tests)
+- ✅ **Coverage** von 72% auf 79% erhöht (+7%)
+- ✅ **DoR CLI Coverage**: 15% → 92% (+77%)
+- ✅ **Editor Utility Coverage**: 24% → 97% (+73%)
+- ✅ **Create Command Coverage**: 81% → 92% (+11%)
+- ✅ AI Usage Prompt aktualisiert mit DoR-Dokumentation
+- ✅ Ruff-Konfiguration fixes (SIM117 ignore, RUF043 regex fix)
 
-**Breaking Change noch nicht released**: Commit `7018e57` enthält Breaking Changes (Connection Model Refactoring), ist aber noch nicht gepusht/released.
+**Artifacts**:
+- `budjira-1.4.1-py3-none-any.whl`
+- `budjira-1.4.1.tar.gz`
+
+### Release v1.4.0 (Major Feature Release)
+**Features**:
+- ✅ **Definition of Ready (DoR) Templates**: Vollständige Implementierung
+- ✅ **Issue Updates**: Status transitions, field updates, label management
+- ✅ **Epic Management**: Link to epic, view epic progress
 
 ## Architektur
 
@@ -45,7 +47,7 @@ Output: Rich (tables, colors, formatting)
 Validation: Pydantic v2
 Jira API: jira-python library
 Config Storage: XDG Base Directory Spec (~/.config/budjira/)
-Testing: pytest + pytest-cov (158 tests, 80% coverage)
+Testing: pytest + pytest-cov (279 tests, 79% coverage)
 Linting: ruff (formatting + linting)
 Type Checking: mypy (strict mode)
 Security: bandit
@@ -57,18 +59,23 @@ CI/CD: GitHub Actions
 ### Modul-Struktur
 ```
 budjira/
-├── __init__.py              # Version, Metadaten (__version__ = "0.4.2")
+├── __init__.py              # Version, Metadaten (__version__ = "1.4.1")
 ├── cli/                     # Command-line interface
 │   ├── main.py             # Haupteinstiegspunkt, App-Setup
+│   ├── ai.py               # AI usage prompt generation
 │   ├── connect.py          # Connection management commands
+│   ├── create.py           # Issue creation (interactive + non-interactive + DoR)
+│   ├── dor.py              # DoR template management (list, show, edit, validate)
+│   ├── epic.py             # Epic management commands
+│   ├── issue.py            # Issue update commands
 │   ├── search.py           # Issue search (JQL + Filter)
-│   ├── create.py           # Issue creation (interactive + non-interactive)
 │   └── update.py           # Self-update command
 ├── core/                    # Core business logic
 │   └── jira_client.py      # Jira API wrapper mit Error Handling
 ├── models/                  # Pydantic data models
 │   ├── connection.py       # Connection, ConnectionList
 │   ├── config.py           # GlobalConfig
+│   ├── dor.py              # DoR templates, validation models
 │   └── issue.py            # Issue, WorkLog, User, Status, IssueType, Priority
 ├── config/                  # Configuration management
 │   ├── settings.py         # Settings singleton, TOML persistence
@@ -76,6 +83,8 @@ budjira/
 └── utils/                   # Utilities
     ├── banner.py           # ASCII art banner for CLI
     ├── connection.py       # Connection resolution (3-tier priority)
+    ├── dor_validator.py    # DoR template validation
+    ├── editor.py           # Multi-line markdown editor integration
     ├── errors.py           # Custom exceptions
     ├── time_parser.py      # Time string parsing (1h, 30m, 2h30m)
     └── version.py          # Version checking via GitHub Releases API
@@ -92,18 +101,14 @@ budjira/
 4. Error if none found
 ```
 
-**Breaking Change in 7018e57**:
-- **Alt**: Directory-based (connection.project_root identifizierte Connections)
-- **Neu**: Name-based (connection.name identifiziert Connections)
-- **Rationale**: User wollte unabhängig vom Verzeichnis arbeiten, Connection per Shell-Session wechseln können
-
 #### Configuration Storage (XDG)
 ```
 ~/.config/budjira/
-├── config.toml              # Global config (active_connection, check_updates)
+├── config.toml              # Global config (active_connection, check_updates, enforce_dor)
 ├── connections.toml         # All connection definitions
 ├── credentials/             # API tokens (keyring or encrypted files)
 │   └── budjira_<name>       # One file per connection
+├── dor-templates.toml       # DoR templates for issue types
 ├── cache/                   # Optional issue cache (not yet implemented)
 └── update_check.json        # Update check cache (24h TTL)
 ```
@@ -132,8 +137,8 @@ budjira connect list               # List all connections
 budjira connect show [NAME]        # Show connection details
 budjira connect test [NAME]        # Test connection
 budjira connect remove [NAME]      # Remove connection
-budjira connect use NAME           # Set default connection (NEW in 7018e57)
-budjira connect current            # Show active connection (NEW in 7018e57)
+budjira connect use NAME           # Set default connection
+budjira connect current            # Show active connection
 ```
 
 #### Features:
@@ -143,9 +148,9 @@ budjira connect current            # Show active connection (NEW in 7018e57)
 - Multi-connection support (switch via --connection, ENV, or default)
 
 #### Test Coverage:
-- `tests/cli/test_connect.py`: All commands tested
-- `tests/config/test_credentials.py`: Credential storage tested
-- Mock-based (keine Live-Jira-Calls)
+- `tests/cli/test_connect.py`: 9 tests
+- `tests/config/test_credentials.py`: 8 tests
+- Coverage: 53% (CLI), 100% (credentials)
 
 ### 2. Issue Search (`budjira search`)
 **Status**: ✅ Fully implemented
@@ -171,21 +176,16 @@ budjira search --connection my-connection --status Done
 - Default project from connection
 - Max results limit (1-1000, default 50)
 
-#### Implementation:
-- `budjira/cli/search.py`: CLI command
-- `budjira/core/jira_client.py:search_issues()`: API wrapper
-- Error handling: InvalidJQL, PermissionError, NoResults
-
 #### Test Coverage:
-- `tests/cli/test_search.py`: 13 tests covering all scenarios
-- Mocked JiraClient responses
+- `tests/cli/test_search.py`: 12 tests
+- Coverage: 87%
 
 ### 3. Issue Creation (`budjira create issue`)
-**Status**: ✅ Fully implemented
+**Status**: ✅ Fully implemented with DoR integration
 
 #### Usage:
 ```bash
-# Interactive mode (default)
+# Interactive mode (default) - mit DoR template option
 budjira create issue
 budjira create issue "Fix login bug"
 
@@ -197,27 +197,100 @@ budjira create issue "New feature" \
   --assignee jdoe \
   --label feature --label frontend \
   --project PROJ \
+  --skip-dor \
   --no-interactive
 ```
 
 #### Features:
 - Interactive mode: Prompts für Summary, Type, optional Description/Priority/Assignee/Labels
+- **DoR Template Integration**: Automatisches Angebot von DoR-Templates bei interaktiver Erstellung
 - Non-interactive mode: Alle Felder via CLI flags
 - Rich console output mit Issue URL
 - Label support (multiple --label flags)
 - Project override (falls nicht connection default)
 - Validation: Summary + Type required in non-interactive mode
-
-#### Implementation:
-- `budjira/cli/create.py`: CLI command mit Rich Prompts
-- `budjira/core/jira_client.py:create_issue()`: API wrapper
-- `budjira/models/issue.py`: IssueType, Priority enums
+- `--skip-dor` flag: Skip DoR validation
 
 #### Test Coverage:
-- `tests/cli/test_create.py`: 12 tests (interactive + non-interactive)
-- Mocked Prompts und JiraClient
+- `tests/cli/test_create.py`: 17 tests (inkl. 7 DoR-Tests)
+- Coverage: 92%
 
-### 4. Time Tracking (`budjira/core/jira_client.py:add_worklog()`)
+### 4. Definition of Ready (DoR) Templates (`budjira dor`)
+**Status**: ✅ Fully implemented (v1.4.0)
+
+#### Commands:
+```bash
+budjira dor list               # List all DoR templates
+budjira dor show ISSUE_TYPE    # Display template for issue type
+budjira dor edit ISSUE_TYPE    # Edit template in $EDITOR
+budjira dor validate ISSUE_TYPE # Validate template structure
+```
+
+#### Features:
+- **Default Templates**: Story, Bug, Task mit vordefinierten Sections
+- **Customization**: Templates editable in $EDITOR (vim, nano, etc.)
+- **Validation Levels**:
+  - `strict`: Block issue creation if DoR not met
+  - `warn`: Show warnings but allow creation
+  - `off`: No DoR enforcement
+- **Section-Based**: Templates use `## Section Name` markdown format
+- **Required Sections**: Template-specific (z.B. Story: Context, User Story, Acceptance Criteria)
+- **Interactive Integration**: Automatic DoR prompt during `budjira create issue`
+- **Storage**: `~/.config/budjira/dor-templates.toml`
+
+#### Implementation:
+- `budjira/models/dor.py`: Models (DorTemplate, DorSection, ValidationResult)
+- `budjira/cli/dor.py`: CLI commands
+- `budjira/utils/dor_validator.py`: Validation logic
+- `budjira/utils/editor.py`: Multi-line markdown editor integration
+
+#### Test Coverage:
+- `tests/models/test_dor.py`: 17 tests (100% coverage)
+- `tests/utils/test_dor_validator.py`: 13 tests (100% coverage)
+- `tests/cli/test_dor.py`: 17 tests (92% coverage)
+- `tests/utils/test_editor.py`: 14 tests (97% coverage)
+
+### 5. Issue Updates (`budjira issue update`)
+**Status**: ✅ Fully implemented (v1.4.0)
+
+#### Commands:
+```bash
+budjira issue update ISSUE-KEY [OPTIONS]
+budjira issue transitions ISSUE-KEY    # Show available transitions
+```
+
+#### Features:
+- **Status Transitions**: `--status "In Progress"`
+- **Field Updates**: `--summary`, `--description`, `--priority`, `--assignee`
+- **Label Management**: `--add-label TAG`, `--remove-label TAG`
+- **Epic Linking**: `--epic EPIC-KEY`
+- **Multiple Updates**: Combine multiple changes in one command
+- **Case-Insensitive**: Status transitions (e.g., "in progress" = "In Progress")
+
+#### Test Coverage:
+- `tests/cli/test_issue.py`: 6 tests
+- `tests/core/test_jira_client.py`: Extensive update/transition tests
+- Coverage: 21% (CLI), 94% (JiraClient)
+
+### 6. Epic Management (`budjira epic`)
+**Status**: ✅ Fully implemented (v1.4.0)
+
+#### Commands:
+```bash
+budjira epic show EPIC-KEY    # Show epic with child issues and progress
+```
+
+#### Features:
+- **Progress Tracking**: X/Y issues done (percentage)
+- **Child Issue Table**: All linked stories/tasks with status
+- **Visual Indicators**: ✅ Done, 🔄 In Progress, 📋 To Do
+- **Epic Details**: Key, summary, description, status, priority
+
+#### Test Coverage:
+- `tests/cli/test_epic.py`: 3 tests
+- Coverage: 22%
+
+### 7. Time Tracking
 **Status**: ⚠️ Backend implemented, CLI command missing
 
 #### Backend Implementation:
@@ -241,10 +314,10 @@ parse_time_string("1.5h")    # → 90 minutes
 **TODO**: CLI command `budjira worklog ISSUE-123 --time 2h30m --comment "..."` fehlt noch
 
 #### Test Coverage:
-- `tests/utils/test_time_parser.py`: Full coverage für Parser
+- `tests/utils/test_time_parser.py`: 14 tests (100% coverage)
 - `tests/core/test_jira_client.py`: Mocked add_worklog tests
 
-### 5. Self-Update (`budjira update`)
+### 8. Self-Update (`budjira update`)
 **Status**: ✅ Implemented (via curl install script)
 
 #### Usage:
@@ -264,45 +337,62 @@ budjira update --force      # Force update check (bypass cache)
 - **Nur stable releases**: Verwendet `/releases/latest` API endpoint
 - **Keine Pre-Release-Unterstützung**: User möchte aber Pre-Releases installieren können
 
-**Pending Decision**: `--pre` flag implementieren oder manuelle pip-Installation nutzen?
+### 9. AI Integration (`budjira ai usage-prompt`)
+**Status**: ✅ Fully implemented with auto-generation
 
-### 6. Configuration (`~/.config/budjira/config.toml`)
-**Status**: ✅ Implemented
-
-#### GlobalConfig Model:
-```python
-class GlobalConfig:
-    active_connection: str | None = None  # Default connection (set via `budjira connect use`)
-    check_updates: bool = True            # Auto-check on startup
-    log_level: str = "INFO"
-    cache_enabled: bool = False           # Global cache toggle (not yet used)
+#### Usage:
+```bash
+budjira ai usage-prompt               # Display formatted guide
+budjira ai usage-prompt --plain       # Output raw markdown
+budjira ai usage-prompt --plain > file.md   # Save to file
 ```
 
-#### Persistence:
-- TOML format via `tomli` (read) und `tomli-w` (write)
-- Auto-created on first run
-- Atomic writes (write to temp, then rename)
+#### Features:
+- **Comprehensive Guide**: All commands with examples
+- **Common Workflows**: 10 curated workflows for AI assistants
+- **DoR Documentation**: Complete DoR template usage guide
+- **Auto-Generation**: Hardcoded template in `budjira/cli/ai.py`
+- **Pre-Commit Hook**: Warns when CLI changes but AI prompt not updated
+
+#### Files:
+- `.claude/ai-usage-prompt.md`: Generated markdown (auto-loaded by ClaudePM)
+- `budjira/cli/ai.py`: Template source
+- `scripts/check_ai_prompt.py`: Pre-commit validation
+
+#### Test Coverage:
+- `tests/cli/test_ai.py`: 7 tests (93% coverage)
 
 ## Testing
 
 ### Test-Statistiken
-- **Total Tests**: 158
-- **Coverage**: 79.73% (requirement: 70% minimum)
-- **Test Duration**: ~2 seconds
+- **Total Tests**: 279 (von 248 in v1.3.0)
+- **Coverage**: 79.34% (↑ from 72% in v1.3.0)
+- **Test Duration**: ~4.6 seconds
 - **Framework**: pytest + pytest-cov + pytest-mock
 
-### Coverage by Module
+### Coverage by Module (v1.4.1)
 ```
 budjira/config/credentials.py      100%
 budjira/models/connection.py       100%
+budjira/models/config.py           100%
+budjira/models/dor.py              100%  ✨ NEW
 budjira/models/issue.py            100%
+budjira/utils/dor_validator.py     100%  ✨ NEW
+budjira/utils/editor.py             97%  ✨ NEW
 budjira/utils/errors.py            100%
 budjira/utils/time_parser.py       100%
-budjira/config/settings.py          98%
+budjira/config/settings.py          95%
 budjira/utils/banner.py             96%
+budjira/cli/ai.py                   93%
+budjira/cli/dor.py                  92%  ✨ NEW
+budjira/cli/create.py               92%  ↑ from 81%
 budjira/utils/version.py            91%
-budjira/core/jira_client.py         86%  # Main logic, mocked Jira API
-budjira/utils/connection.py         24%  # Niedrig weil Integration-heavy
+budjira/cli/search.py               87%
+budjira/core/jira_client.py         94%
+budjira/cli/connect.py              53%
+budjira/utils/connection.py         24%
+budjira/cli/epic.py                 22%
+budjira/cli/issue.py                21%
 ```
 
 ### Test-Strategie
@@ -310,28 +400,38 @@ budjira/utils/connection.py         24%  # Niedrig weil Integration-heavy
 - **Fixtures**: Shared fixtures in conftest.py (mock_connection, mock_issue)
 - **CLI Testing**: Typer CliRunner für command testing
 - **No Live API Calls**: Keine echten Jira-Verbindungen in Tests
+- **Editor Mocking**: subprocess.run mocked für editor tests
 
 ### Test-Dateien
 ```
 tests/
 ├── cli/
-│   ├── test_connect.py          # Connection commands
-│   ├── test_search.py           # Search command (13 tests)
-│   ├── test_create.py           # Create command (12 tests)
-│   └── test_update.py           # Update command
+│   ├── test_ai.py              # AI prompt command (7 tests)
+│   ├── test_connect.py         # Connection commands (9 tests)
+│   ├── test_create.py          # Create command (17 tests, inkl. DoR)
+│   ├── test_dor.py             # DoR commands (17 tests) ✨ NEW
+│   ├── test_epic.py            # Epic commands (3 tests)
+│   ├── test_issue.py           # Issue update commands (6 tests)
+│   ├── test_main.py            # Main app (3 tests)
+│   ├── test_search.py          # Search command (12 tests)
+│   └── test_update.py          # Update command
 ├── core/
-│   └── test_jira_client.py      # JiraClient API wrapper
+│   └── test_jira_client.py     # JiraClient API wrapper (extensive)
 ├── models/
-│   ├── test_connection.py       # Connection models
-│   ├── test_config.py           # GlobalConfig
-│   └── test_issue.py            # Issue models
+│   ├── test_config.py          # GlobalConfig (4 tests)
+│   ├── test_connection.py      # Connection models (10 tests)
+│   ├── test_dor.py             # DoR models (17 tests) ✨ NEW
+│   └── test_issue.py           # Issue models (13 tests)
 ├── config/
-│   ├── test_credentials.py      # Credential storage
-│   └── test_settings.py         # Settings singleton
+│   ├── test_credentials.py     # Credential storage (8 tests)
+│   └── test_settings.py        # Settings singleton (14 tests)
 └── utils/
-    ├── test_time_parser.py      # Time parsing
-    ├── test_version.py          # Version checker
-    └── test_banner.py           # Banner display
+    ├── test_banner.py          # Banner display (5 tests)
+    ├── test_dor_validator.py   # DoR validation (13 tests) ✨ NEW
+    ├── test_editor.py          # Editor utility (14 tests) ✨ NEW
+    ├── test_errors.py          # Custom exceptions (10 tests)
+    ├── test_time_parser.py     # Time parsing (14 tests)
+    └── test_version.py         # Version checker (12 tests)
 ```
 
 ### Pre-Commit Hooks
@@ -341,6 +441,7 @@ tests/
 - bandit (security scanning)
 - pytest --cov-fail-under=70
 - commitizen (conventional commit validation)
+- check_ai_prompt.py (AI prompt freshness check)
 - trailing whitespace, EOF, YAML/TOML validation
 ```
 
@@ -380,21 +481,21 @@ tests/
 
 #### Version Bumping Rules:
 ```yaml
-feat:      # → MINOR version bump (0.4.0 → 0.5.0)
-fix:       # → PATCH version bump (0.4.0 → 0.4.1)
+feat:      # → MINOR version bump (1.4.0 → 1.5.0)
+fix:       # → PATCH version bump (1.4.0 → 1.4.1)
 perf:      # → PATCH
-style:     # → PATCH
+style:     # → PATCH (seit v1.4.0)
+test:      # → PATCH (seit v1.4.1)
 refactor:  # IGNORED (no version bump)
 docs:      # IGNORED
-chore:     # IGNORED
+chore:     # IGNORED (außer chore(release):)
 ci:        # IGNORED
 build:     # IGNORED
-test:      # IGNORED
 ```
 
 #### Breaking Changes:
-- `feat!:` oder `fix!:` → MAJOR version bump (0.4.0 → 1.0.0)
-- Aktuell `major_version_zero = true` → 0.x.y bleibt erhalten bis explizit auf 1.0.0 gesetzt
+- `feat!:` oder `fix!:` → MAJOR version bump (1.4.0 → 2.0.0)
+- Aktuell nach 1.0.0, Breaking Changes bumpen major version
 
 #### Version Files:
 ```toml
@@ -404,178 +505,13 @@ version_toml = ["pyproject.toml:project.version"]
 
 Semantic Release aktualisiert beide Dateien automatisch.
 
-## Offene Entscheidungen & Pendenzen
-
-### 1. Release Workflow
-**Problem**: Release workflow triggert automatisch bei jedem Push auf master
-
-**User-Wunsch**: Manuelle Kontrolle über Releases, Pre-Releases für iterative Entwicklung
-
-**Optionen**:
-```yaml
-A) Ändern zu workflow_dispatch:
-   on:
-     workflow_dispatch:
-       inputs:
-         prerelease:
-           description: 'Create pre-release'
-           type: boolean
-           default: false
-
-B) Workflow ganz disablen, lokales semantic-release nutzen
-
-C) Auto-Release behalten, aber branch-based pre-releases konfigurieren
-   (develop → pre-release, master → stable)
-```
-
-**Workflow-Vision des Users**:
-1. User testet Feature in Production
-2. User sagt: "erstelle mir ein pre-release"
-3. Claude erstellt Pre-Release (manual oder via workflow_dispatch)
-4. User installiert via `budjira update --pre --force`
-
-**Current Blocker**: `budjira update` unterstützt keine Pre-Releases
-
-### 2. Pre-Release Support in Update Command
-**Problem**: `VersionChecker` nutzt `/releases/latest` API, findet nur stable releases
-
-**User-Bedarf**: Pre-Releases auf Produktionssystem installieren zum Testen
-
-**Optionen**:
-```bash
-A) --pre flag implementieren:
-   budjira update --pre          # Install latest pre-release
-   budjira update --pre --force  # Force check
-
-B) Manual pip workflow empfehlen:
-   pip install --upgrade --pre budjira
-
-C) Full pre-release support:
-   - VersionChecker.check_for_updates(include_prerelease=True)
-   - Abfrage aller releases via /releases API
-   - Semantic version parsing
-```
-
-**Empfehlung**: Option A (--pre flag) für beste UX
-
-### 3. Version Discrepancy
-**Problem**: pyproject.toml zeigt 0.4.5, aber `budjira/__init__.py` zeigt 0.4.2
-
-**Grund**: Semantic Release aktualisiert nur bei erfolgreichen Releases
-
-**Lösung**: Nach nächstem Push + Release werden beide synchron sein
-
-### 4. Noch nicht implementierte Features
-
-#### 4.1 Worklog CLI Command
-**Backend**: ✅ Fertig (`jira_client.add_worklog`, `time_parser`)
-**CLI**: ❌ Fehlt
-
-**Geplante Signatur**:
-```bash
-budjira worklog ISSUE-123 --time 2h30m [--comment "..."] [--started "2025-10-10 14:00"]
-budjira worklog ISSUE-123 -t 1h -c "Fixed bug"
-```
-
-**Implementation Plan**:
-1. Neue Datei `budjira/cli/worklog.py`
-2. Typer command mit issue_key argument, time/comment/started options
-3. Time parsing via `utils/time_parser.py`
-4. Register in `main.py:app.add_typer(worklog.app, name="worklog")`
-
-#### 4.2 Comment Command
-**Status**: Nicht implementiert
-
-**Geplant**:
-```bash
-budjira comment ISSUE-123 "This is a comment"
-budjira comment ISSUE-123 --file comment.txt
-```
-
-#### 4.3 Issue Caching
-**Status**: Models vorhanden, aber nicht genutzt
-
-- `Connection.cache_enabled` und `Connection.cache_ttl_hours` existieren
-- Cache-Verzeichnis `~/.config/budjira/cache/` geplant
-- Dirty detection, offline mode
-
-#### 4.4 Budget Tracking
-**User-Anforderung**: Budget tracking features
-
-**Noch unklar**: Genaue Spezifikation fehlt
-
-## Roadmap (aus README.md)
-
-### Kurzfristig (Backend fertig, CLI fehlt)
-- [x] Connection management
-- [x] Issue search (JQL + Filters)
-- [x] Issue creation (interactive + non-interactive)
-- [x] Self-update mechanism
-- [ ] **Worklog command** (Backend ✅, CLI ❌)
-
-### Mittelfristig
-- [ ] Comment management
-- [ ] Issue transitions (status changes)
-- [ ] Interactive issue editing
-- [ ] Sprint management
-- [ ] Attachment upload/download
-
-### Langfristig
-- [ ] Smart caching mit dirty detection
-- [ ] Offline mode
-- [ ] Dashboard/reporting commands
-- [ ] Configuration templates
-- [ ] Bulk operations
-- [ ] Shell completion enhancements
-- [ ] Team collaboration features
-
-## Entwicklungs-Workflow
-
-### Etabliertes Muster
-1. User identifiziert Bedarf während Nutzung in echtem Projekt
-2. User beschreibt Feature-Anforderung
-3. Claude implementiert Feature autonom mit Tests
-4. User testet im echten Projekt
-5. Bei Stabilität: User sagt **"sichere context"**
-6. Claude aktualisiert `.claude/context.md`
-7. User entscheidet über Release (manual oder automatisch)
-
-### Context Management
-- `.claude/context.md`: Vollständiger Projektstatus, auto-geladen bei Session-Start
-- **Trigger**: User sagt "sichere context" bei ~85-90% Token-Budget
-- **Update**: Claude aktualisiert Datei mit aktuellem Stand
-- **Post-Compact**: Neue Session startet mit vollem Context
-
-### Branch-Strategie
-- **master**: Production releases (automatisch oder manual)
-- **develop**: Optional für Pre-Releases (noch nicht genutzt)
-- Aktuell: Direktes Arbeiten auf master
-
-### Commit-Konvention
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer]
-```
-
-**Breaking Changes**: `feat!:` oder `fix!:`
-
-**Beispiele**:
-```
-feat: add worklog CLI command
-feat!: remove directory-based connection lookup
-fix: handle missing credentials gracefully
-docs: update installation instructions
-```
-
 ## Dokumentation
 
 ### Existierende Dokumentation
-- ✅ **README.md**: Vollständig, gut strukturiert mit Beispielen
+- ✅ **README.md**: Vollständig, gut strukturiert mit Beispielen, DoR-Dokumentation
 - ✅ **CLAUDE.md**: Entwickler-Guide für Claude Code
 - ✅ **.claude/context.md**: Projekt-Context für Session-Kontinuität
+- ✅ **.claude/ai-usage-prompt.md**: Auto-generierter AI Usage Guide
 - ❌ **CONTRIBUTING.md**: "coming soon"
 - ❌ **API Documentation**: "coming soon"
 - ❌ **Examples**: "coming soon"
@@ -588,7 +524,7 @@ docs: update installation instructions
 ### README-Qualität
 - Klar strukturiert mit Emojis
 - Installation instructions (curl one-liner + manual)
-- Quick Start Guide
+- Quick Start Guide mit DoR examples
 - Feature overview mit Status-Flags
 - Use cases für Entwickler + AI-Assistenten
 - Code quality badges
@@ -620,6 +556,7 @@ bandit = ">=1.8.0"              # Security scanning
 commitizen = ">=4.9.1"          # Commit convention
 pre-commit = ">=4.0.1"          # Git hooks
 python-semantic-release = ">=10.4.1"  # Automated versioning
+types-requests = ">=2.32.4"     # Type stubs for requests
 ```
 
 ### Python Version Support
@@ -636,7 +573,7 @@ python-semantic-release = ">=10.4.1"  # Automated versioning
 
 ### Security Scanning
 - **Bandit**: Pre-commit + CI
-- **Dependabot**: Automatische Dependency-Updates (konfiguriert?)
+- **Dependabot**: Automatische Dependency-Updates
 - **CodeQL**: Nicht konfiguriert
 
 ### Best Practices
@@ -671,65 +608,135 @@ python-semantic-release = ">=10.4.1"  # Automated versioning
 
 ## Nächste Schritte
 
-### Immediate (Ready to Push)
-- [x] Context Management System implementiert
-- [ ] **Push 2 commits to GitHub**: 7018e57 + 79e6ae6
-- [ ] **Release-Entscheidung treffen**: Auto vs. Manual workflow
-
-### Short-term (1-2 Sessions)
+### Immediate (Next Session)
 - [ ] **Worklog CLI command** implementieren (Backend fertig!)
-- [ ] **--pre flag** für `budjira update` (falls entschieden)
-- [ ] **First stable release** erstellen und testen
+- [ ] **Comment command** implementieren
+- [ ] **Budget tracking** features (Spezifikation klären)
 
-### Medium-term (nächste Wochen)
-- [ ] Comment command implementieren
-- [ ] Issue transitions (status changes)
-- [ ] Budget tracking features (Spezifikation klären)
-- [ ] Cache-System aktivieren
+### Short-term (1-2 Wochen)
+- [ ] **--pre flag** für `budjira update` (Pre-Release support)
+- [ ] **Attachment upload/download**
+- [ ] **Cache-System** aktivieren
 
-### Long-term (Roadmap)
+### Medium-term (nächste Monate)
 - [ ] Offline mode mit Sync
 - [ ] Team collaboration features
 - [ ] Dashboard/Reporting
+- [ ] Sprint management
+
+### Long-term (Roadmap)
 - [ ] Integration mit anderen Tools (Git, etc.)
+- [ ] Bulk operations
+- [ ] Interactive issue editing
+- [ ] Configuration templates
+
+## Roadmap (aus README.md)
+
+### Implemented ✅
+- [x] Multi-connection management
+- [x] Secure credential storage
+- [x] Issue search (JQL and filters)
+- [x] Issue creation (interactive and non-interactive)
+- [x] **Definition of Ready (DoR) templates with validation** (v1.4.0)
+- [x] **Issue updates (status transitions, fields, labels)** (v1.4.0)
+- [x] **Epic linking and management** (v1.4.0)
+- [x] Self-update mechanism
+- [x] Automatic update checks
+- [x] AI usage prompt generation
+- [x] Shell completion (bash, zsh, fish)
+
+### In Progress 🚧
+- [ ] Worklog CLI command (backend complete, CLI pending)
+
+### Planned 📋
+- [ ] Comment management
+- [ ] Attachment upload/download
+- [ ] Smart caching with dirty detection
+- [ ] Offline mode
+- [ ] Sprint management
+- [ ] Dashboard/reporting commands
+- [ ] Interactive issue editing
+- [ ] Configuration templates
+- [ ] Bulk operations
+- [ ] Pre-release support in update command
 
 ## Technische Schulden
 
-### 1. Version Discrepancy
-- `budjira/__init__.py` manuell auf 0.4.5 aktualisieren (oder via nächstes Release)
+### 1. Low CLI Coverage für Epic und Issue Commands
+- `budjira/cli/epic.py`: 22% coverage
+- `budjira/cli/issue.py`: 21% coverage
+- **Grund**: Komplexe interaktive Workflows, schwer zu mocken
+- **Lösung**: Mehr CLI-spezifische Tests mit gemockten Prompts
 
 ### 2. Connection Utility Test Coverage
 - `utils/connection.py` nur 24% coverage
-- Grund: Integration-heavy, schwer zu testen
-- Lösung: Mehr integration tests oder mock-based unit tests
+- **Grund**: Integration-heavy, schwer zu testen
+- **Lösung**: Mehr integration tests oder mock-based unit tests
 
-### 3. Error Handling in JiraClient
-- Manche Exception-Branches nicht getestet (86% coverage)
-- Grund: Schwer zu simulieren ohne Live API
-- Lösung: Mehr Mock-Szenarien in Tests
-
-### 4. Update Mechanism Complexity
+### 3. Update Mechanism Complexity
 - Curl-to-bash pattern funktioniert, aber nicht ideal
-- Alternative: Native Python install/upgrade über pip
-- Grund für aktuelles Design: User möchte Kontrolle über Installation
+- **Alternative**: Native Python install/upgrade über pip
+- **Grund für aktuelles Design**: User möchte Kontrolle über Installation
+
+## Entwicklungs-Workflow
+
+### Etabliertes Muster
+1. User identifiziert Bedarf während Nutzung in echtem Projekt
+2. User beschreibt Feature-Anforderung
+3. Claude implementiert Feature autonom mit Tests
+4. User testet im echten Projekt
+5. Bei Stabilität: User sagt **"sichere context"** oder **"aktualisiere den context"**
+6. Claude aktualisiert `.claude/context.md`
+7. Automatischer Release bei Push auf master (via semantic-release)
+
+### Context Management
+- `.claude/context.md`: Vollständiger Projektstatus, auto-geladen bei Session-Start
+- **Trigger**: User sagt "sichere context" oder "aktualisiere den context"
+- **Update**: Claude aktualisiert Datei mit aktuellem Stand
+- **Post-Update**: Neue Session kann mit aktuellem Context starten
+
+### Branch-Strategie
+- **master**: Production releases (automatisch via semantic-release)
+- **develop**: Optional für Pre-Releases (noch nicht genutzt)
+- Aktuell: Direktes Arbeiten auf master
+
+### Commit-Konvention
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer]
+```
+
+**Breaking Changes**: `feat!:` oder `fix!:`
+
+**Beispiele**:
+```
+feat: add worklog CLI command
+feat!: remove directory-based connection lookup
+fix: handle missing credentials gracefully
+test: add comprehensive DoR tests
+docs: update installation instructions
+```
 
 ## User-Präferenzen
 
 ### Workflow
-- **Sprache**: Code/Docs auf Englisch, Ansprache auf Deutsch
-- **Release-Philosophie**: Manuelle Kontrolle, Pre-Releases für Testing
+- **Sprache**: Code/Docs auf Englisch, Ansprache auf Deutsch ("duze mich")
+- **Release-Philosophie**: Automatische Releases via semantic-release, Pre-Releases für Testing geplant
 - **Testing**: Erst in echtem Projekt testen, dann releasen
-- **Context Management**: "sichere context" bei ~85-90% Token-Budget
+- **Context Management**: "sichere context" oder "aktualisiere den context" bei wichtigen Milestones
 
 ### Technische Präferenzen
 - **Package Manager**: uv (nicht pip/poetry)
 - **Installation**: curl install script via GitHub (nicht PyPI)
 - **Linting**: ruff (nicht black + flake8)
 - **Type Checking**: mypy strict mode
-- **Commit Convention**: Conventional Commits mit Emojis
+- **Commit Convention**: Conventional Commits
 
 ### Quality Standards
-- **Test Coverage**: Minimum 70%, aktuell 80%
+- **Test Coverage**: Minimum 70%, aktuell 79%
 - **Type Safety**: Strict mypy, keine `# type: ignore` ohne Grund
 - **Documentation**: Docstrings für alle public APIs
 - **Security**: Bandit + Dependabot
@@ -741,16 +748,17 @@ python-semantic-release = ">=10.4.1"  # Automated versioning
 2. Check ob neue User-Nachrichten Kontext-Updates erfordern
 3. Bei Feature-Requests: Erst Architektur verstehen, dann implementieren
 
-### Bei "sichere context"
+### Bei "sichere context" oder "aktualisiere den context"
 1. Diese Datei aktualisieren mit:
    - Neuen Features/Changes
    - Updated Test-Statistiken
    - Neue offene Entscheidungen
    - Lessons learned
+   - Current Version & Release Status
 2. Commit mit `docs: update project context`
 
 ### Code-Richtlinien
-1. **Immer Tests schreiben** (pytest, mocked)
+1. **Immer Tests schreiben** (pytest, mocked, 70% minimum coverage)
 2. **Type Hints überall** (mypy strict mode)
 3. **Docstrings** für alle public functions
 4. **Rich Console** für alle User-Outputs
@@ -761,19 +769,14 @@ python-semantic-release = ">=10.4.1"  # Automated versioning
 **WICHTIG**: Bei Änderungen an CLI-Commands oder Models:
 
 1. **Automatischer Check**: Pre-commit hook warnt bei CLI-Änderungen
-2. **Review Required**: Prüfe `.claude/ai-prompt-supplements.md`
-3. **Update bei Bedarf**:
-   - Common Workflows noch aktuell?
-   - Beispiele spiegeln neue Syntax?
-   - Tips behandeln neue Features?
-   - Edge Cases dokumentiert?
-4. **Test Preview**: `budjira ai usage-prompt | less`
-5. **Version Tracking**: Update "Last Updated" in supplements.md
+2. **Template aktualisieren**: Hardcoded template in `budjira/cli/ai.py` updaten
+3. **Regenerate**: `uv run budjira -q ai usage-prompt --plain > .claude/ai-usage-prompt.md`
+4. **Commit**: Mit docs: commit (nicht feat: um kein Version bump)
 
-**Dateien**:
-- `.claude/ai-prompt-supplements.md` - Manuelle AI-Guide-Sections
-- `budjira/cli/ai.py` - Auto-generierter Command-Output
-- `scripts/check_ai_prompt.py` - Pre-commit check script
+**Pre-Commit Hook**: `scripts/check_ai_prompt.py` prüft:
+- CLI-Dateien geändert?
+- AI-Prompt veraltet?
+- Gibt Warnung falls Update nötig
 
 ### Testing-Richtlinien
 1. **Mock alle Jira API Calls** (keine Live-Verbindungen)
@@ -781,17 +784,20 @@ python-semantic-release = ">=10.4.1"  # Automated versioning
 3. **Coverage** muss >= 70% bleiben
 4. **Typer CliRunner** für CLI-Tests
 5. **pytest.raises** für Exception-Tests
+6. **subprocess.run mocken** für Editor-Tests
 
 ### Release-Hinweise
 1. **Conventional Commits** verwenden:
-   - `feat:` für neue Features
-   - `fix:` für Bugfixes
-   - `feat!:` oder `fix!:` für Breaking Changes
+   - `feat:` für neue Features (MINOR bump)
+   - `fix:` für Bugfixes (PATCH bump)
+   - `test:` für Test-Ergänzungen (PATCH bump)
+   - `docs:` für Dokumentation (kein bump)
+   - `feat!:` oder `fix!:` für Breaking Changes (MAJOR bump)
 2. **Semantic Release** bumped automatisch Version
-3. **Push auf master** → Auto-Release (aktueller Stand)
-4. **Pre-Releases**: Noch zu entscheiden (siehe Offene Entscheidungen)
+3. **Push auf master** → Auto-Release (via GitHub Actions)
+4. **Release Notes**: Automatisch generiert aus Commit-Messages
 
 ---
 
-**Letzte Aktualisierung**: 2025-10-12 (Session nach Compact)
+**Letzte Aktualisierung**: 2025-10-12 18:00 (nach v1.4.1 Service Release)
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
