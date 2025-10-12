@@ -18,13 +18,13 @@
 ## ✨ Features
 
 - 🔗 **Multi-Connection**: Manage multiple Jira instances and projects
-- 🎯 **Context-Aware**: Project-root based connection management
+- 🎯 **Context-Aware**: Name-based connection management with environment variable and CLI override support
 - 🔄 **Auto-Update**: Automatic update checks with GitHub Releases integration
 - 🤖 **AI-Friendly**: Designed for seamless AI-assisted workflows
 - 🎨 **Rich Output**: Beautiful, colorful terminal output with tables and formatting
-- 🔍 **Search & Filter**: Powerful JQL-based ticket search *(coming soon)*
-- ✏️ **Create Issues**: Quick ticket creation with templates *(coming soon)*
-- ⏱️ **Time Tracking**: Log work time directly from the command line *(coming soon)*
+- 🔍 **Search & Filter**: Powerful JQL-based ticket search with filter options
+- ✏️ **Create Issues**: Interactive and non-interactive issue creation
+- ⏱️ **Time Tracking**: Work log backend ready *(CLI coming soon)*
 - 📦 **Smart Caching**: Optional offline-capable caching *(coming soon)*
 
 ## 📦 Installation
@@ -101,16 +101,54 @@ budjira connect
 budjira connect list
 
 # Show connection details
-budjira connect show
+budjira connect show [NAME]
 
 # Test connection
-budjira connect test
+budjira connect test [NAME]
+
+# Set default connection
+budjira connect use NAME
+
+# Show active connection
+budjira connect current
 
 # Remove a connection
-budjira connect remove
+budjira connect remove [NAME]
 ```
 
-### 3. Check for Updates
+### 3. Search for Issues
+
+```bash
+# Search with JQL query
+budjira search "project = PROJ AND status = 'In Progress'"
+
+# Search with filters
+budjira search --status "In Progress" --assignee currentUser()
+budjira search --project PROJ --type Bug --max 100
+
+# Use specific connection
+budjira search --connection my-connection --status Done
+```
+
+### 4. Create Issues
+
+```bash
+# Interactive mode (default)
+budjira create issue "Fix login bug"
+
+# Non-interactive with all details
+budjira create issue "Fix bug" --type Bug --priority High --no-interactive
+
+# With description and labels
+budjira create issue "Add feature" \
+  --type Story \
+  --description "Detailed description" \
+  --assignee jdoe \
+  --label feature --label frontend \
+  --no-interactive
+```
+
+### 5. Check for Updates
 
 budjira automatically checks for updates every 24 hours and notifies you when a new version is available.
 
@@ -142,49 +180,24 @@ budjira follows the XDG Base Directory specification and stores configuration in
 
 The following features are currently in development:
 
-### Search for Issues
-
-```bash
-# Search in default project
-budjira search "status = Open"
-
-# Advanced JQL query
-budjira search "project = MYPROJ AND assignee = currentUser() AND status != Done"
-
-# List all issues in a sprint
-budjira search "sprint = 'Sprint 42'"
-```
-
-### Create Issues
-
-```bash
-# Interactive issue creation
-budjira create
-
-# Quick creation with flags
-budjira create --summary "Fix login bug" --type Bug --priority High
-```
-
 ### Log Work Time
 
-```bash
-# Log time on an issue
-budjira log-time PROJ-123 --time 2h --comment "Fixed authentication bug"
-
-# Log time with start date
-budjira log-time PROJ-123 --time 1h30m --started "2025-10-10 14:00"
-```
-
-### View Logs
+The backend is fully implemented - CLI command coming soon!
 
 ```bash
-# Show recent logs
-budjira logs
-
-# Pipe to standard Unix tools
-budjira logs | tail -50
-budjira logs | grep ERROR
+# Planned usage:
+budjira worklog PROJ-123 --time 2h30m --comment "Fixed authentication bug"
+budjira worklog PROJ-123 -t 1h -c "Fixed bug" --started "2025-10-10 14:00"
 ```
+
+### Additional Planned Features
+
+- **Issue Transitions**: Move issues between workflow states
+- **Comment Management**: Add and view comments on issues
+- **Attachment Support**: Upload and download attachments
+- **Sprint Management**: View and manage sprints
+- **Dashboard Commands**: View personalized dashboards
+- **View Logs**: Access and filter application logs
 
 ## 🎯 Use Cases
 
@@ -271,13 +284,26 @@ Found a bug? Have a feature request?
 
 ## 🗺️ Roadmap
 
-- [ ] Smart caching with dirty detection
-- [ ] Interactive issue editing
+### Implemented ✅
+- [x] Multi-connection management
+- [x] Secure credential storage
+- [x] Issue search (JQL and filters)
+- [x] Issue creation (interactive and non-interactive)
+- [x] Self-update mechanism
+- [x] Automatic update checks
+
+### In Progress 🚧
+- [ ] Worklog CLI command (backend complete, CLI pending)
+
+### Planned 📋
 - [ ] Issue transitions (move between states)
 - [ ] Comment management
 - [ ] Attachment upload/download
+- [ ] Smart caching with dirty detection
+- [ ] Offline mode
 - [ ] Sprint management
 - [ ] Dashboard/reporting commands
+- [ ] Interactive issue editing
 - [ ] Shell completion enhancements
 - [ ] Configuration templates
 - [ ] Bulk operations
