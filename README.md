@@ -79,6 +79,35 @@ git pull
 uv sync
 ```
 
+### Shell Completion
+
+budjira supports tab completion for bash, zsh, and fish shells.
+
+**Enable completion** (one-time setup):
+```bash
+budjira --install-completion
+```
+
+This automatically configures your shell's completion system. Restart your shell or open a new terminal for changes to take effect.
+
+**Test completion**:
+```bash
+budjira <TAB>          # Shows available commands
+budjira connect <TAB>  # Shows connect subcommands
+```
+
+**Manual completion** (if auto-install doesn't work):
+```bash
+# Bash
+budjira --show-completion bash > ~/.local/share/bash-completion/completions/budjira
+
+# Zsh
+budjira --show-completion zsh > ~/.zsh/completions/_budjira
+
+# Fish
+budjira --show-completion fish > ~/.config/fish/completions/budjira.fish
+```
+
 ## 🚀 Quick Start
 
 ### 1. Connect to Jira
