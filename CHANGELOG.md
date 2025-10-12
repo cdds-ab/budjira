@@ -1,6 +1,43 @@
 # CHANGELOG
 
 
+## v1.1.0 (2025-10-12)
+
+### Documentation
+
+- Add shell completion setup instructions
+  ([`a51e3c4`](https://github.com/cdds-ab/budjira/commit/a51e3c46ec94785559e9f229aaae9359119aaa38))
+
+Installation Script: - Add completion hint at end of installer output - Inform users about
+  --install-completion option - Non-invasive: user decides to enable completion
+
+README: - Add Shell Completion section after Update - Document automatic installation via
+  --install-completion - Provide manual installation instructions for bash/zsh/fish - Include test
+  commands to verify completion works
+
+Shell completion is provided by Typer's built-in support for bash, zsh, and fish shells. This
+  addresses the missing completion setup in the installer while keeping it non-invasive.
+
+### Features
+
+- Add AI usage prompt generation and maintenance system
+  ([`1e56ad0`](https://github.com/cdds-ab/budjira/commit/1e56ad066bffaec6d83a243b3d26bf20933c5664))
+
+New AI Integration Command: - Add 'budjira ai usage-prompt' command - Generate comprehensive AI
+  assistant guide - Markdown-formatted output via Rich - Covers all commands, workflows, and
+  examples
+
+AI Prompt Maintenance System: - Create .claude/ai-prompt-supplements.md for manual content - Add
+  pre-commit hook to detect CLI changes - Non-blocking warning when CLI files modified - Reminds to
+  review AI documentation - Add maintenance instructions to .claude/context.md
+
+Testing: - Add 7 new tests for ai commands (100% coverage) - Total: 165 tests, 80.10% coverage - All
+  quality checks passing (ruff, mypy, bandit)
+
+Documentation: - Update README with AI integration section - Add usage examples (copy to clipboard,
+  save to file) - Update features list and roadmap - Document generated prompt contents
+
+
 ## v1.0.1 (2025-10-12)
 
 ### Bug Fixes
