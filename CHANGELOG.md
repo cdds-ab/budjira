@@ -1,6 +1,35 @@
 # CHANGELOG
 
 
+## v1.2.0 (2025-10-12)
+
+### Features
+
+- Implement issue updates and epic management (ClaudePM features)
+  ([`b023b34`](https://github.com/cdds-ab/budjira/commit/b023b3471b37cc83cb18dc5fcc05d2cd5fff6b1c))
+
+Issue Update Commands: - Add 'budjira issue update' command for status transitions - Support field
+  updates: assignee, priority, summary, description - Add label management: --add-label,
+  --remove-label - Support epic linking: --epic flag - Multiple updates in single command - Add
+  'budjira issue transitions' to show available workflows
+
+Epic Management Commands: - Add 'budjira epic show' to display epic with child issues - Show epic
+  progress (X/Y issues done, percentage) - Display child issues in table with status icons -
+  Calculate completion statistics
+
+JiraClient Backend: - Add get_transitions() method - Add transition_issue() with case-insensitive
+  matching - Add update_issue() with field validation - Add add_labels() and remove_labels() - Add
+  link_to_epic() with dynamic field detection - Add get_epic_issues() via JQL query
+
+Testing: - Add 69 new tests for JiraClient methods - Achieve 94% coverage for jira_client.py
+  (target: 90%) - Total: 212 tests passing, 76% overall coverage - Comprehensive error path testing
+
+Documentation: - Update README with issue update examples - Add epic management documentation -
+  Update feature list and roadmap - Add Quick Start sections for new commands
+
+This implements the top 2 feature requests from ClaudePM for effective project management workflows.
+
+
 ## v1.1.0 (2025-10-12)
 
 ### Documentation
