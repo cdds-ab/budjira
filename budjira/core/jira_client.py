@@ -332,6 +332,258 @@ class JiraClient:
         except Exception as e:
             raise JiraAPIError(f"Failed to fetch priorities: {e}") from e
 
+    def get_transitions(self, issue_key: str) -> list[dict[str, str]]:
+        """Get available transitions for an issue.
+
+        Args:
+            issue_key: Issue key (e.g., PROJ-123)
+
+        Returns:
+            List of dicts with 'id' and 'name' keys
+
+        Raises:
+            InvalidIssueError: If issue not found
+            JiraAPIError: If retrieval fails
+        """
+        try:
+            logger.info(f"Fetching transitions for {issue_key}")
+            transitions = self.client.transitions(issue_key)
+            return [{"id": t["id"], "name": t["name"]} for t in transitions]
+        except JIRAError as e:
+            if e.status_code == 404:
+                raise InvalidIssueError(f"Issue '{issue_key}' not found") from e
+            else:
+                raise JiraAPIError(f"Failed to fetch transitions: {e.text}") from e
+        except Exception as e:
+            raise JiraAPIError(f"Unexpected error fetching transitions: {e}") from e
+
+    def transition_issue(self, issue_key: str, transition_name: str) -> None:
+        """Transition an issue to a new status.
+
+        Args:
+            issue_key: Issue key (e.g., PROJ-123)
+            transition_name: Name of the transition (e.g., "In Progress", "Done")
+
+        Raises:
+            InvalidIssueError: If issue not found
+            JiraAPIError: If transition fails or is invalid
+        """
+        try:
+            logger.info(f"Transitioning {issue_key} to '{transition_name}'")
+
+            # Get available transitions
+            transitions = self.get_transitions(issue_key)
+
+            # Find matching transition (case-insensitive)
+            transition_id = None
+            for t in transitions:
+                if t["name"].lower() == transition_name.lower():
+                    transition_id = t["id"]
+                    break
+
+            if not transition_id:
+                available = ", ".join([t["name"] for t in transitions])
+                raise JiraAPIError(
+                    f"Invalid transition '{transition_name}' for {issue_key}. Available transitions: {available}"
+                )
+
+            self.client.transition_issue(issue_key, transition_id)
+            logger.info(f"Successfully transitioned {issue_key} to '{transition_name}'")
+
+        except JIRAError as e:
+            if e.status_code == 404:
+                raise InvalidIssueError(f"Issue '{issue_key}' not found") from e
+            else:
+                raise JiraAPIError(f"Failed to transition issue: {e.text}") from e
+        except (InvalidIssueError, JiraAPIError):
+            raise
+        except Exception as e:
+            raise JiraAPIError(f"Unexpected error transitioning issue: {e}") from e
+
+    def update_issue(
+        self,
+        issue_key: str,
+        fields: dict[str, Any] | None = None,
+        assignee: str | None = None,
+        priority: str | None = None,
+        summary: str | None = None,
+        description: str | None = None,
+    ) -> None:
+        """Update issue fields.
+
+        Args:
+            issue_key: Issue key (e.g., PROJ-123)
+            fields: Dict of field updates (raw Jira field format)
+            assignee: Assignee username or account ID (or "currentUser()")
+            priority: Priority name
+            summary: New summary
+            description: New description
+
+        Raises:
+            InvalidIssueError: If issue not found
+            JiraAPIError: If update fails
+        """
+        try:
+            logger.info(f"Updating issue {issue_key}")
+
+            update_fields: dict[str, Any] = fields or {}
+
+            # Handle assignee
+            if assignee is not None:
+                if assignee.lower() == "currentuser()":
+                    # Get current user's account ID
+                    myself = self.client.myself()
+                    update_fields["assignee"] = {"accountId": myself["accountId"]}
+                elif assignee == "":
+                    # Unassign
+                    update_fields["assignee"] = None
+                else:
+                    # Assign to specific user
+                    update_fields["assignee"] = {"name": assignee}
+
+            # Handle priority
+            if priority is not None:
+                update_fields["priority"] = {"name": priority}
+
+            # Handle summary
+            if summary is not None:
+                update_fields["summary"] = summary
+
+            # Handle description
+            if description is not None:
+                update_fields["description"] = description
+
+            if update_fields:
+                self.client.issue(issue_key).update(fields=update_fields)
+                logger.info(f"Successfully updated {issue_key}")
+            else:
+                logger.warning(f"No fields to update for {issue_key}")
+
+        except JIRAError as e:
+            if e.status_code == 404:
+                raise InvalidIssueError(f"Issue '{issue_key}' not found") from e
+            elif e.status_code == 400:
+                raise JiraAPIError(f"Invalid field values: {e.text}") from e
+            else:
+                raise JiraAPIError(f"Failed to update issue: {e.text}") from e
+        except Exception as e:
+            raise JiraAPIError(f"Unexpected error updating issue: {e}") from e
+
+    def add_labels(self, issue_key: str, labels: list[str]) -> None:
+        """Add labels to an issue.
+
+        Args:
+            issue_key: Issue key (e.g., PROJ-123)
+            labels: List of labels to add
+
+        Raises:
+            InvalidIssueError: If issue not found
+            JiraAPIError: If update fails
+        """
+        try:
+            logger.info(f"Adding labels to {issue_key}: {labels}")
+            issue = self.client.issue(issue_key)
+            current_labels = issue.fields.labels or []
+            new_labels = list(set(current_labels + labels))
+            issue.update(fields={"labels": new_labels})
+            logger.info(f"Successfully added labels to {issue_key}")
+        except JIRAError as e:
+            if e.status_code == 404:
+                raise InvalidIssueError(f"Issue '{issue_key}' not found") from e
+            else:
+                raise JiraAPIError(f"Failed to add labels: {e.text}") from e
+        except Exception as e:
+            raise JiraAPIError(f"Unexpected error adding labels: {e}") from e
+
+    def remove_labels(self, issue_key: str, labels: list[str]) -> None:
+        """Remove labels from an issue.
+
+        Args:
+            issue_key: Issue key (e.g., PROJ-123)
+            labels: List of labels to remove
+
+        Raises:
+            InvalidIssueError: If issue not found
+            JiraAPIError: If update fails
+        """
+        try:
+            logger.info(f"Removing labels from {issue_key}: {labels}")
+            issue = self.client.issue(issue_key)
+            current_labels = issue.fields.labels or []
+            new_labels = [label for label in current_labels if label not in labels]
+            issue.update(fields={"labels": new_labels})
+            logger.info(f"Successfully removed labels from {issue_key}")
+        except JIRAError as e:
+            if e.status_code == 404:
+                raise InvalidIssueError(f"Issue '{issue_key}' not found") from e
+            else:
+                raise JiraAPIError(f"Failed to remove labels: {e.text}") from e
+        except Exception as e:
+            raise JiraAPIError(f"Unexpected error removing labels: {e}") from e
+
+    def link_to_epic(self, issue_key: str, epic_key: str) -> None:
+        """Link an issue to an epic.
+
+        Args:
+            issue_key: Issue key (e.g., PROJ-123)
+            epic_key: Epic key (e.g., PROJ-100)
+
+        Raises:
+            InvalidIssueError: If issue or epic not found
+            JiraAPIError: If linking fails
+        """
+        try:
+            logger.info(f"Linking {issue_key} to epic {epic_key}")
+
+            # Epic Link is usually customfield_10014, but can vary
+            # Try to find it dynamically
+            epic_link_field = None
+            fields = self.client.fields()
+            for field in fields:
+                if field["name"].lower() == "epic link":
+                    epic_link_field = field["id"]
+                    break
+
+            if not epic_link_field:
+                raise JiraAPIError("Epic Link field not found. Your Jira instance may not have epics enabled.")
+
+            issue = self.client.issue(issue_key)
+            issue.update(fields={epic_link_field: epic_key})
+            logger.info(f"Successfully linked {issue_key} to epic {epic_key}")
+
+        except JIRAError as e:
+            if e.status_code == 404:
+                raise InvalidIssueError("Issue or epic not found") from e
+            else:
+                raise JiraAPIError(f"Failed to link to epic: {e.text}") from e
+        except (InvalidIssueError, JiraAPIError):
+            raise
+        except Exception as e:
+            raise JiraAPIError(f"Unexpected error linking to epic: {e}") from e
+
+    def get_epic_issues(self, epic_key: str) -> list[Issue]:
+        """Get all issues linked to an epic.
+
+        Args:
+            epic_key: Epic key (e.g., PROJ-100)
+
+        Returns:
+            List of Issue objects
+
+        Raises:
+            InvalidIssueError: If epic not found
+            JiraAPIError: If retrieval fails
+        """
+        try:
+            logger.info(f"Fetching issues for epic {epic_key}")
+
+            # Search for issues linked to this epic
+            jql = f'"Epic Link" = {epic_key}'
+            return self.search_issues(jql, max_results=100)
+
+        except Exception as e:
+            raise JiraAPIError(f"Failed to fetch epic issues: {e}") from e
+
     @classmethod
     def from_connection(cls, connection: Connection) -> JiraClient:
         """Create JiraClient from connection configuration.

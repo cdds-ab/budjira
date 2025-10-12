@@ -24,6 +24,8 @@
 - 🎨 **Rich Output**: Beautiful, colorful terminal output with tables and formatting
 - 🔍 **Search & Filter**: Powerful JQL-based ticket search with filter options
 - ✏️ **Create Issues**: Interactive and non-interactive issue creation
+- 🔄 **Update Issues**: Transition status, update fields, manage labels
+- 🎯 **Epic Management**: Link stories to epics and view epic progress
 - ⏱️ **Time Tracking**: Work log backend ready *(CLI coming soon)*
 - 📦 **Smart Caching**: Optional offline-capable caching *(coming soon)*
 
@@ -177,7 +179,36 @@ budjira create issue "Add feature" \
   --no-interactive
 ```
 
-### 5. Check for Updates
+### 5. Update Issues
+
+```bash
+# Transition status
+budjira issue update PROJ-123 --status "In Progress"
+
+# Assign to current user
+budjira issue update PROJ-123 --assignee currentUser()
+
+# Multiple updates at once
+budjira issue update PROJ-123 \
+  --status Done \
+  --priority Low \
+  --add-label completed
+
+# Link to epic
+budjira issue update PROJ-123 --epic PROJ-100
+
+# Show available transitions
+budjira issue transitions PROJ-123
+```
+
+### 6. View Epic Progress
+
+```bash
+# Show epic with all child stories
+budjira epic show PROJ-100
+```
+
+### 7. Check for Updates
 
 budjira automatically checks for updates every 24 hours and notifies you when a new version is available.
 
@@ -192,7 +223,7 @@ budjira update
 budjira update --check --force
 ```
 
-### 6. AI Integration
+### 8. AI Integration
 
 Generate comprehensive usage guides for AI assistants.
 
@@ -340,6 +371,8 @@ Found a bug? Have a feature request?
 - [x] Secure credential storage
 - [x] Issue search (JQL and filters)
 - [x] Issue creation (interactive and non-interactive)
+- [x] Issue updates (status transitions, fields, labels)
+- [x] Epic linking and management
 - [x] Self-update mechanism
 - [x] Automatic update checks
 - [x] AI usage prompt generation

@@ -516,3 +516,572 @@ class TestJiraClientFromConnection:
 
         with pytest.raises(AuthenticationError, match="No credentials found"):
             JiraClient.from_connection(connection)
+
+
+class TestJiraClientTransitions:
+    """Test get_transitions and transition_issue methods."""
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_get_transitions_success(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test getting available transitions."""
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.transitions.return_value = [
+            {"id": "11", "name": "To Do"},
+            {"id": "21", "name": "In Progress"},
+            {"id": "31", "name": "Done"},
+        ]
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        transitions = client.get_transitions("TEST-123")
+
+        assert len(transitions) == 3
+        assert transitions[0] == {"id": "11", "name": "To Do"}
+        assert transitions[1] == {"id": "21", "name": "In Progress"}
+        assert transitions[2] == {"id": "31", "name": "Done"}
+        mock_jira_instance.transitions.assert_called_once_with("TEST-123")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_get_transitions_not_found(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test get transitions for non-existent issue."""
+        mock_jira_instance = MagicMock()
+        jira_error = JIRAError(status_code=404, text="Not Found")
+        mock_jira_instance.transitions.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(InvalidIssueError, match="not found"):
+            client.get_transitions("TEST-999")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_transition_issue_success(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test successful issue transition."""
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.transitions.return_value = [
+            {"id": "21", "name": "In Progress"},
+            {"id": "31", "name": "Done"},
+        ]
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.transition_issue("TEST-123", "In Progress")
+
+        mock_jira_instance.transition_issue.assert_called_once_with("TEST-123", "21")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_transition_issue_case_insensitive(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test transition with case-insensitive matching."""
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.transitions.return_value = [
+            {"id": "21", "name": "In Progress"},
+        ]
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.transition_issue("TEST-123", "in progress")  # lowercase
+
+        mock_jira_instance.transition_issue.assert_called_once_with("TEST-123", "21")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_transition_issue_invalid_transition(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test transition with invalid transition name."""
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.transitions.return_value = [
+            {"id": "21", "name": "In Progress"},
+            {"id": "31", "name": "Done"},
+        ]
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Invalid transition.*Available transitions"):
+            client.transition_issue("TEST-123", "Invalid Status")
+
+
+class TestJiraClientUpdateIssue:
+    """Test update_issue method."""
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_update_issue_assignee_current_user(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test updating assignee to current user."""
+        mock_issue = MagicMock()
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_instance.myself.return_value = {"accountId": "12345"}
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.update_issue("TEST-123", assignee="currentUser()")
+
+        mock_issue.update.assert_called_once()
+        call_args = mock_issue.update.call_args[1]["fields"]
+        assert call_args["assignee"] == {"accountId": "12345"}
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_update_issue_assignee_specific_user(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test updating assignee to specific user."""
+        mock_issue = MagicMock()
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.update_issue("TEST-123", assignee="jdoe")
+
+        mock_issue.update.assert_called_once()
+        call_args = mock_issue.update.call_args[1]["fields"]
+        assert call_args["assignee"] == {"name": "jdoe"}
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_update_issue_unassign(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test unassigning issue."""
+        mock_issue = MagicMock()
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.update_issue("TEST-123", assignee="")
+
+        mock_issue.update.assert_called_once()
+        call_args = mock_issue.update.call_args[1]["fields"]
+        assert call_args["assignee"] is None
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_update_issue_priority(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test updating priority."""
+        mock_issue = MagicMock()
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.update_issue("TEST-123", priority="High")
+
+        mock_issue.update.assert_called_once()
+        call_args = mock_issue.update.call_args[1]["fields"]
+        assert call_args["priority"] == {"name": "High"}
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_update_issue_summary_and_description(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test updating summary and description."""
+        mock_issue = MagicMock()
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.update_issue("TEST-123", summary="New Summary", description="New Description")
+
+        mock_issue.update.assert_called_once()
+        call_args = mock_issue.update.call_args[1]["fields"]
+        assert call_args["summary"] == "New Summary"
+        assert call_args["description"] == "New Description"
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_update_issue_no_fields(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test update with no fields specified."""
+        mock_issue = MagicMock()
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.update_issue("TEST-123")  # No fields
+
+        # Should not call update if no fields
+        mock_issue.update.assert_not_called()
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_update_issue_not_found(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test updating non-existent issue."""
+        mock_jira_instance = MagicMock()
+        jira_error = JIRAError(status_code=404, text="Not Found")
+        mock_jira_instance.issue.return_value.update.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(InvalidIssueError, match="not found"):
+            client.update_issue("TEST-999", priority="High")
+
+
+class TestJiraClientLabels:
+    """Test add_labels and remove_labels methods."""
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_add_labels_to_empty(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test adding labels to issue with no labels."""
+        mock_issue = MagicMock()
+        mock_issue.fields.labels = []
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.add_labels("TEST-123", ["bug", "urgent"])
+
+        mock_issue.update.assert_called_once()
+        call_args = mock_issue.update.call_args[1]["fields"]["labels"]
+        assert set(call_args) == {"bug", "urgent"}
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_add_labels_to_existing(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test adding labels to issue with existing labels."""
+        mock_issue = MagicMock()
+        mock_issue.fields.labels = ["feature"]
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.add_labels("TEST-123", ["bug", "urgent"])
+
+        mock_issue.update.assert_called_once()
+        call_args = mock_issue.update.call_args[1]["fields"]["labels"]
+        assert set(call_args) == {"feature", "bug", "urgent"}
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_add_labels_duplicate(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test adding duplicate labels (should not duplicate)."""
+        mock_issue = MagicMock()
+        mock_issue.fields.labels = ["bug"]
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.add_labels("TEST-123", ["bug", "urgent"])
+
+        mock_issue.update.assert_called_once()
+        call_args = mock_issue.update.call_args[1]["fields"]["labels"]
+        assert set(call_args) == {"bug", "urgent"}
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_remove_labels(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test removing labels."""
+        mock_issue = MagicMock()
+        mock_issue.fields.labels = ["bug", "urgent", "feature"]
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.remove_labels("TEST-123", ["urgent"])
+
+        mock_issue.update.assert_called_once()
+        call_args = mock_issue.update.call_args[1]["fields"]["labels"]
+        assert call_args == ["bug", "feature"]
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_remove_labels_nonexistent(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test removing labels that don't exist (should not error)."""
+        mock_issue = MagicMock()
+        mock_issue.fields.labels = ["bug"]
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.remove_labels("TEST-123", ["nonexistent"])
+
+        mock_issue.update.assert_called_once()
+        call_args = mock_issue.update.call_args[1]["fields"]["labels"]
+        assert call_args == ["bug"]
+
+
+class TestJiraClientEpic:
+    """Test epic-related methods."""
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_link_to_epic_success(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test linking issue to epic."""
+        mock_issue = MagicMock()
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_instance.fields.return_value = [
+            {"id": "customfield_10014", "name": "Epic Link"},
+            {"id": "customfield_10015", "name": "Sprint"},
+        ]
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.link_to_epic("TEST-123", "TEST-100")
+
+        mock_issue.update.assert_called_once()
+        call_args = mock_issue.update.call_args[1]["fields"]
+        assert "customfield_10014" in call_args
+        assert call_args["customfield_10014"] == "TEST-100"
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_link_to_epic_no_epic_field(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test linking when Epic Link field doesn't exist."""
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.fields.return_value = [
+            {"id": "customfield_10015", "name": "Sprint"},
+        ]
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Epic Link field not found"):
+            client.link_to_epic("TEST-123", "TEST-100")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_link_to_epic_not_found(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test linking to non-existent epic."""
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.fields.return_value = [
+            {"id": "customfield_10014", "name": "Epic Link"},
+        ]
+        jira_error = JIRAError(status_code=404, text="Not Found")
+        mock_jira_instance.issue.return_value.update.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(InvalidIssueError, match="Issue or epic not found"):
+            client.link_to_epic("TEST-123", "TEST-999")
+
+    @patch("budjira.core.jira_client.JIRA")
+    @patch.object(JiraClient, "search_issues")
+    def test_get_epic_issues(
+        self, mock_search: Mock, mock_jira_class: Mock, connection: Connection, mock_jira_issue: MagicMock
+    ) -> None:
+        """Test getting issues linked to epic."""
+        mock_issue_obj = Issue.from_jira_issue(mock_jira_issue)
+        mock_search.return_value = [mock_issue_obj]
+
+        mock_jira_instance = MagicMock()
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        issues = client.get_epic_issues("TEST-100")
+
+        assert len(issues) == 1
+        assert issues[0].key == "TEST-123"
+        mock_search.assert_called_once_with('"Epic Link" = TEST-100', max_results=100)
+
+
+class TestJiraClientEdgeCases:
+    """Test edge cases and error paths."""
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_transition_issue_jira_error_404(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test transition with 404 error."""
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.transitions.return_value = [{"id": "21", "name": "Done"}]
+        jira_error = JIRAError(status_code=404, text="Not Found")
+        mock_jira_instance.transition_issue.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(InvalidIssueError, match="not found"):
+            client.transition_issue("TEST-123", "Done")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_transition_issue_jira_error_other(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test transition with non-404 Jira error."""
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.transitions.return_value = [{"id": "21", "name": "Done"}]
+        jira_error = JIRAError(status_code=400, text="Bad Request")
+        mock_jira_instance.transition_issue.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Failed to transition"):
+            client.transition_issue("TEST-123", "Done")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_transition_issue_unexpected_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test transition with unexpected error."""
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.transitions.return_value = [{"id": "21", "name": "Done"}]
+        mock_jira_instance.transition_issue.side_effect = RuntimeError("Unexpected")
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Unexpected error"):
+            client.transition_issue("TEST-123", "Done")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_get_transitions_jira_error_other(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test get transitions with non-404 error."""
+        mock_jira_instance = MagicMock()
+        jira_error = JIRAError(status_code=403, text="Forbidden")
+        mock_jira_instance.transitions.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Failed to fetch transitions"):
+            client.get_transitions("TEST-123")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_get_transitions_unexpected_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test get transitions with unexpected error."""
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.transitions.side_effect = RuntimeError("Unexpected")
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Unexpected error"):
+            client.get_transitions("TEST-123")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_update_issue_bad_request(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test update with 400 bad request error."""
+        mock_issue = MagicMock()
+        jira_error = JIRAError(status_code=400, text="Invalid field")
+        mock_issue.update.side_effect = jira_error
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Invalid field values"):
+            client.update_issue("TEST-123", priority="InvalidPriority")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_update_issue_other_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test update with other Jira error."""
+        mock_issue = MagicMock()
+        jira_error = JIRAError(status_code=403, text="Forbidden")
+        mock_issue.update.side_effect = jira_error
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Failed to update issue"):
+            client.update_issue("TEST-123", priority="High")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_update_issue_unexpected_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test update with unexpected error."""
+        mock_issue = MagicMock()
+        mock_issue.update.side_effect = RuntimeError("Unexpected")
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Unexpected error"):
+            client.update_issue("TEST-123", priority="High")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_add_labels_not_found(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test adding labels to non-existent issue."""
+        mock_jira_instance = MagicMock()
+        jira_error = JIRAError(status_code=404, text="Not Found")
+        mock_jira_instance.issue.return_value.update.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(InvalidIssueError, match="not found"):
+            client.add_labels("TEST-999", ["bug"])
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_add_labels_jira_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test adding labels with Jira error."""
+        mock_issue = MagicMock()
+        mock_issue.fields.labels = []
+        jira_error = JIRAError(status_code=403, text="Forbidden")
+        mock_issue.update.side_effect = jira_error
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Failed to add labels"):
+            client.add_labels("TEST-123", ["bug"])
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_add_labels_unexpected_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test adding labels with unexpected error."""
+        mock_issue = MagicMock()
+        mock_issue.fields.labels = []
+        mock_issue.update.side_effect = RuntimeError("Unexpected")
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Unexpected error"):
+            client.add_labels("TEST-123", ["bug"])
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_remove_labels_not_found(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test removing labels from non-existent issue."""
+        mock_jira_instance = MagicMock()
+        jira_error = JIRAError(status_code=404, text="Not Found")
+        mock_jira_instance.issue.return_value.update.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(InvalidIssueError, match="not found"):
+            client.remove_labels("TEST-999", ["bug"])
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_remove_labels_jira_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test removing labels with Jira error."""
+        mock_issue = MagicMock()
+        mock_issue.fields.labels = ["bug"]
+        jira_error = JIRAError(status_code=403, text="Forbidden")
+        mock_issue.update.side_effect = jira_error
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Failed to remove labels"):
+            client.remove_labels("TEST-123", ["bug"])
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_remove_labels_unexpected_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test removing labels with unexpected error."""
+        mock_issue = MagicMock()
+        mock_issue.fields.labels = ["bug"]
+        mock_issue.update.side_effect = RuntimeError("Unexpected")
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Unexpected error"):
+            client.remove_labels("TEST-123", ["bug"])
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_link_to_epic_jira_error_other(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test epic linking with non-404 Jira error."""
+        mock_issue = MagicMock()
+        jira_error = JIRAError(status_code=400, text="Bad Request")
+        mock_issue.update.side_effect = jira_error
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_instance.fields.return_value = [{"id": "customfield_10014", "name": "Epic Link"}]
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Failed to link to epic"):
+            client.link_to_epic("TEST-123", "TEST-100")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_link_to_epic_unexpected_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test epic linking with unexpected error."""
+        mock_issue = MagicMock()
+        mock_issue.update.side_effect = RuntimeError("Unexpected")
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_instance.fields.return_value = [{"id": "customfield_10014", "name": "Epic Link"}]
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Unexpected error"):
+            client.link_to_epic("TEST-123", "TEST-100")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_get_epic_issues_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test getting epic issues with error."""
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.search_issues.side_effect = RuntimeError("Unexpected")
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Failed to fetch epic issues"):
+            client.get_epic_issues("TEST-100")
