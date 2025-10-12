@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v1.4.2 (2025-10-12)
+
+### Bug Fixes
+
+- Ignore SIM117 and fix RUF043 regex pattern
+  ([`6abca6f`](https://github.com/cdds-ab/budjira/commit/6abca6f67f0315d4279f24bd899eb953d4558a14))
+
+- Add SIM117 to ruff ignore list (nested with statements acceptable in tests) - Fix regex pattern in
+  test to use raw string (RUF043)
+
+
 ## v1.4.1 (2025-10-12)
 
 ### Code Style
