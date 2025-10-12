@@ -141,13 +141,12 @@ class TestOpenEditor:
         mock_subprocess.return_value = mock_result
 
         # Execute and verify exception
-        with patch.object(Path, "exists", return_value=True):
-            with patch.object(Path, "unlink") as mock_unlink:
-                with pytest.raises(BudjiraError, match="Editor exited with code 1"):
-                    open_editor(editor="vim")
+        with patch.object(Path, "exists", return_value=True), patch.object(Path, "unlink") as mock_unlink:
+            with pytest.raises(BudjiraError, match="Editor exited with code 1"):
+                open_editor(editor="vim")
 
-                # Verify temp file was cleaned up
-                mock_unlink.assert_called_once()
+            # Verify temp file was cleaned up
+            mock_unlink.assert_called_once()
 
     @patch("budjira.utils.editor.subprocess.run")
     @patch("budjira.utils.editor.tempfile.NamedTemporaryFile")
@@ -209,11 +208,10 @@ class TestOpenEditor:
 
         # Test failure case
         mock_result.returncode = 1
-        with patch.object(Path, "exists", return_value=True):
-            with patch.object(Path, "unlink") as mock_unlink:
-                with pytest.raises(BudjiraError):
-                    open_editor()
-                mock_unlink.assert_called_once()
+        with patch.object(Path, "exists", return_value=True), patch.object(Path, "unlink") as mock_unlink:
+            with pytest.raises(BudjiraError):
+                open_editor()
+            mock_unlink.assert_called_once()
 
     @patch("budjira.utils.editor.subprocess.run")
     @patch("budjira.utils.editor.tempfile.NamedTemporaryFile")
