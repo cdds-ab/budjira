@@ -129,6 +129,7 @@ ignore_missing_imports = false
 module = [
     "jira.*",
     "xdg_base_dirs.*",
+    "tomli",
 ]
 ignore_missing_imports = true
 
@@ -232,3 +233,8 @@ exclude_commit_patterns = [
 
 [tool.semantic_release.changelog.environment]
 keep_trailing_newline = true
+
+[dependency-groups]
+dev = [
+    "types-requests>=2.32.4.20250913",
+]

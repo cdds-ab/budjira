@@ -52,7 +52,7 @@ def parse_time_string(time_str: str) -> int:
         total_minutes += minutes
 
     if total_minutes == 0:
-        raise ValidationError(f"Invalid time format: '{time_str}'. " f"Use formats like: 1h, 30m, 2h30m, 1.5h")
+        raise ValidationError(f"Invalid time format: '{time_str}'. Use formats like: 1h, 30m, 2h30m, 1.5h")
 
     if total_minutes > 24 * 60:  # More than 24 hours
         raise ValidationError(

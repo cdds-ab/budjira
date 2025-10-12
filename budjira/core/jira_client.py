@@ -60,7 +60,7 @@ class JiraClient:
                 raise PermissionError(f"Access denied. User {connection.email} lacks required permissions.") from e
             else:
                 raise JiraAPIError(
-                    f"Failed to connect to Jira: {e.text}. " f"Check your URL and network connection."
+                    f"Failed to connect to Jira: {e.text}. Check your URL and network connection."
                 ) from e
         except Exception as e:
             raise JiraAPIError(f"Unexpected error connecting to Jira: {e}") from e
@@ -149,8 +149,7 @@ class JiraClient:
         except JIRAError as e:
             if e.status_code == 404:
                 raise InvalidIssueError(
-                    f"Issue '{issue_key}' not found. "
-                    f"Check that the issue exists and you have permission to view it."
+                    f"Issue '{issue_key}' not found. Check that the issue exists and you have permission to view it."
                 ) from e
             elif e.status_code == 403:
                 raise PermissionError(f"Permission denied accessing issue '{issue_key}'.") from e
@@ -220,9 +219,7 @@ class JiraClient:
             if e.status_code == 403:
                 raise PermissionError(f"Permission denied creating issue in project '{project_key}'.") from e
             elif e.status_code == 400:
-                raise JiraAPIError(
-                    f"Invalid issue data: {e.text}. " f"Check issue type, priority, and field names."
-                ) from e
+                raise JiraAPIError(f"Invalid issue data: {e.text}. Check issue type, priority, and field names.") from e
             else:
                 raise JiraAPIError(f"Failed to create issue: {e.text}") from e
         except Exception as e:
@@ -273,12 +270,11 @@ class JiraClient:
         except JIRAError as e:
             if e.status_code == 404:
                 raise InvalidIssueError(
-                    f"Issue '{issue_key}' not found. "
-                    f"Check that the issue exists and you have permission to view it."
+                    f"Issue '{issue_key}' not found. Check that the issue exists and you have permission to view it."
                 ) from e
             elif e.status_code == 403:
                 raise PermissionError(
-                    f"Permission denied logging work to issue '{issue_key}'. " f"You may not have work log permissions."
+                    f"Permission denied logging work to issue '{issue_key}'. You may not have work log permissions."
                 ) from e
             else:
                 raise JiraAPIError(f"Failed to add work log: {e.text}") from e
@@ -354,8 +350,7 @@ class JiraClient:
 
         if not credential_store.has_credentials(connection):
             raise AuthenticationError(
-                f"No credentials found for connection '{connection.name}'. "
-                f"Run 'budjira connect' to set up credentials."
+                f"No credentials found for connection '{connection.name}'. Run 'budjira connect' to set up credentials."
             )
 
         api_token = credential_store.retrieve(connection)

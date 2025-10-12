@@ -37,8 +37,7 @@ def get_active_connection(connection_name: str | None = None) -> Connection:
         connection = settings.connections.find_by_name(connection_name)
         if not connection:
             raise BudjiraError(
-                f"Connection '{connection_name}' not found. "
-                f"Run 'budjira connect list' to see available connections."
+                f"Connection '{connection_name}' not found. Run 'budjira connect list' to see available connections."
             )
         return connection
 
