@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v1.5.5 (2025-10-25)
+
+### Bug Fixes
+
+- Escape regex metacharacters in pytest match pattern
+  ([`1111e40`](https://github.com/cdds-ab/budjira/commit/1111e4021414868be5a093561d03aa2cb956485b))
+
+
 ## v1.5.4 (2025-10-25)
 
 ### Bug Fixes
