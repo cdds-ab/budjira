@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v1.5.1 (2025-10-25)
+
+### Bug Fixes
+
+- Add nosec comment for assert in datetime parser
+  ([`8ccc9de`](https://github.com/cdds-ab/budjira/commit/8ccc9de588800d1770167d588aff6b5dced7d60f))
+
+Bandit was failing in CI due to B101:assert_used. The assert is safe here as it's a type narrowing
+  hint for mypy, not used for control flow.
+
+
 ## v1.5.0 (2025-10-25)
 
 ### Documentation
