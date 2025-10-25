@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## v1.5.4 (2025-10-25)
+
+### Bug Fixes
+
+- Complete AI usage prompt with time tracking documentation
+  ([`f0c6173`](https://github.com/cdds-ab/budjira/commit/f0c617374c4d2f14c437f67bd276773acb5b5a3a))
+
+The AI usage prompt was missing comprehensive documentation for the time tracking feature introduced
+  in v1.5.0. This caused AI assistants to be unaware of worklog commands and time estimate options.
+
+Added complete documentation for: - budjira worklog add command with time/datetime formats - budjira
+  worklog list command - Time estimate options for issue creation/update - --log-work and
+  --work-comment flags - Time tracking workflow example
+
+Also updated overview to include all major features (DoR, epic management, time tracking).
+
+### Documentation
+
+- Update project context to v1.5.3
+  ([`155e14b`](https://github.com/cdds-ab/budjira/commit/155e14b3373a70982023ae36ba1afc7aef71c831))
+
+
 ## v1.5.3 (2025-10-25)
 
 ### Bug Fixes
