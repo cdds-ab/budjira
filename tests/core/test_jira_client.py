@@ -421,6 +421,96 @@ class TestJiraClientAddWorklog:
         with pytest.raises(PermissionError, match="Permission denied logging work"):
             client.add_worklog("TEST-123", 60)
 
+    @patch("budjira.core.jira_client.JIRA")
+    def test_get_worklogs_success(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test get worklogs for issue."""
+        # Mock worklogs
+        mock_worklog1 = MagicMock()
+        mock_worklog1.id = "10001"
+        mock_worklog1.author.displayName = "John Doe"
+        mock_worklog1.timeSpent = "2h 30m"
+        mock_worklog1.timeSpentSeconds = 9000
+        mock_worklog1.started = "2025-10-24T14:00:00.000+0000"
+        mock_worklog1.created = "2025-10-24T16:30:00.000+0000"
+        mock_worklog1.comment = "Implemented feature X"
+
+        mock_worklog2 = MagicMock()
+        mock_worklog2.id = "10002"
+        mock_worklog2.author.displayName = "Jane Smith"
+        mock_worklog2.timeSpent = "1h"
+        mock_worklog2.timeSpentSeconds = 3600
+        mock_worklog2.started = "2025-10-25T09:00:00.000+0000"
+        mock_worklog2.created = "2025-10-25T10:00:00.000+0000"
+        # No comment on this worklog
+        del mock_worklog2.comment
+
+        mock_issue = MagicMock()
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_instance.worklogs.return_value = [mock_worklog1, mock_worklog2]
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        worklogs = client.get_worklogs("TEST-123")
+
+        assert len(worklogs) == 2
+
+        # Check first worklog
+        assert worklogs[0]["id"] == "10001"
+        assert worklogs[0]["author"] == "John Doe"
+        assert worklogs[0]["timeSpent"] == "2h 30m"
+        assert worklogs[0]["timeSpentSeconds"] == 9000
+        assert worklogs[0]["started"] == "2025-10-24T14:00:00.000+0000"
+        assert worklogs[0]["created"] == "2025-10-24T16:30:00.000+0000"
+        assert worklogs[0]["comment"] == "Implemented feature X"
+
+        # Check second worklog (no comment)
+        assert worklogs[1]["id"] == "10002"
+        assert worklogs[1]["author"] == "Jane Smith"
+        assert "comment" not in worklogs[1]
+
+        mock_jira_instance.issue.assert_called_once_with("TEST-123")
+        mock_jira_instance.worklogs.assert_called_once_with(mock_issue)
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_get_worklogs_empty(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test get worklogs for issue with no worklogs."""
+        mock_issue = MagicMock()
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_instance.worklogs.return_value = []
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        worklogs = client.get_worklogs("TEST-123")
+
+        assert len(worklogs) == 0
+        assert worklogs == []
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_get_worklogs_issue_not_found(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test get worklogs for non-existent issue."""
+        mock_jira_instance = MagicMock()
+        jira_error = JIRAError(status_code=404, text="Not Found")
+        mock_jira_instance.issue.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(InvalidIssueError, match="Issue 'TEST-123' not found"):
+            client.get_worklogs("TEST-123")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_get_worklogs_api_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test get worklogs with API error."""
+        mock_jira_instance = MagicMock()
+        jira_error = JIRAError(status_code=500, text="Internal Server Error")
+        mock_jira_instance.issue.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Failed to fetch worklogs"):
+            client.get_worklogs("TEST-123")
+
 
 class TestJiraClientMetadata:
     """Test metadata retrieval methods."""

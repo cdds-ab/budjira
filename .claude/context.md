@@ -11,10 +11,66 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.4.1 (Service Release)
+- **Current Version**: v1.4.2 (Released)
+- **Next Version**: v1.5.0 (Time Tracking Feature - READY FOR COMMIT)
 - **Branch**: master
-- **Letzter Release**: 2025-10-12T17:34:58Z
-- **Status**: ✅ Alle Commits gepusht, CI/CD erfolgreich, Release live
+- **Letzter Release**: v1.4.2 - 2025-10-12T17:37:01Z
+- **Status**: ✅ **Time Tracking Feature complete - ready for commit and release**
+
+### ✅ COMPLETED: v1.5.0 Time Tracking Feature
+
+**Status**: Implementation + Tests + Documentation COMPLETE ✅ | Commit READY ⏳
+
+**GitHub Issue**: #1 - Feature Request: Time Tracking Support for Issues
+
+**Was bereits fertig ist:**
+
+#### Neue Dateien (implementiert + getestet):
+1. **`budjira/utils/datetime_parser.py`** - Flexible datetime parsing
+   - Unterstützt: ISO format, "today", "yesterday", YYYY-MM-DD
+   - 19 comprehensive tests in `tests/utils/test_datetime_parser.py`
+
+2. **`budjira/cli/worklog.py`** - Worklog CLI commands
+   - `budjira worklog add ISSUE TIME [--comment] [--started]`
+   - `budjira worklog list ISSUE`
+   - 17 comprehensive tests in `tests/cli/test_worklog.py`
+
+#### Erweiterte Features:
+3. **Issue Creation mit Time Tracking**
+   - `--original-estimate` flag (e.g., 2h, 30m)
+   - `--remaining-estimate` flag
+   - 4 neue Tests in `tests/cli/test_create.py`
+
+4. **Issue Update mit Time Tracking**
+   - `--original-estimate` flag
+   - `--remaining-estimate` flag
+   - `--log-work TIME` flag
+   - `--work-comment TEXT` flag
+   - 7 neue Tests in `tests/cli/test_issue.py`
+
+5. **Backend Extensions**
+   - `JiraClient.get_worklogs()` - Retrieve worklog entries
+   - 4 neue Tests in `tests/core/test_jira_client.py`
+
+**Abgeschlossene Schritte:**
+1. ✅ Run full test suite: 323 tests pass, 81.26% coverage
+2. ✅ Update README.md mit Time Tracking examples (Section 8)
+3. ✅ Update .claude/context.md mit Feature-Dokumentation (in progress)
+4. ⏳ Regenerate AI usage prompt: `uv run budjira -q ai usage-prompt --plain > .claude/ai-usage-prompt.md`
+5. ⏳ Commit mit `feat:` message (bereit zum Commit)
+6. ⏳ Push und warten auf v1.5.0 release
+7. ⏳ Close GitHub Issue #1 mit Release-Link
+
+**Finale Statistiken:**
+- Neue Code-Files: 2 (`datetime_parser.py`, `worklog.py`)
+- Modifizierte Files: 7 (`jira_client.py`, `create.py`, `issue.py`, `main.py`, `README.md`)
+- Neue Test-Files: 2 (`test_datetime_parser.py`, `test_worklog.py`)
+- Modifizierte Test-Files: 3 (`test_jira_client.py`, `test_create.py`, `test_issue.py`)
+- Neue Tests: 51 (279 → 323 tests)
+- Finale Coverage: 81.26% (+2% von 79%)
+- Test-Änderungen: 4 Testdaten fixes (2025 → 2024 für vergangene Daten)
+
+---
 
 ### Release v1.4.1 (Service Release)
 **Änderungen**:
@@ -59,19 +115,20 @@ CI/CD: GitHub Actions
 ### Modul-Struktur
 ```
 budjira/
-├── __init__.py              # Version, Metadaten (__version__ = "1.4.1")
+├── __init__.py              # Version, Metadaten (__version__ = "1.5.0")
 ├── cli/                     # Command-line interface
 │   ├── main.py             # Haupteinstiegspunkt, App-Setup
 │   ├── ai.py               # AI usage prompt generation
 │   ├── connect.py          # Connection management commands
-│   ├── create.py           # Issue creation (interactive + non-interactive + DoR)
+│   ├── create.py           # Issue creation (interactive + non-interactive + DoR + time estimates)
 │   ├── dor.py              # DoR template management (list, show, edit, validate)
 │   ├── epic.py             # Epic management commands
-│   ├── issue.py            # Issue update commands
+│   ├── issue.py            # Issue update commands (+ time tracking + worklog)
 │   ├── search.py           # Issue search (JQL + Filter)
-│   └── update.py           # Self-update command
+│   ├── update.py           # Self-update command
+│   └── worklog.py          # Worklog commands (add, list) ✨ NEW v1.5.0
 ├── core/                    # Core business logic
-│   └── jira_client.py      # Jira API wrapper mit Error Handling
+│   └── jira_client.py      # Jira API wrapper mit Error Handling (+ get_worklogs)
 ├── models/                  # Pydantic data models
 │   ├── connection.py       # Connection, ConnectionList
 │   ├── config.py           # GlobalConfig
@@ -83,6 +140,7 @@ budjira/
 └── utils/                   # Utilities
     ├── banner.py           # ASCII art banner for CLI
     ├── connection.py       # Connection resolution (3-tier priority)
+    ├── datetime_parser.py  # Datetime string parsing (ISO, today, yesterday) ✨ NEW v1.5.0
     ├── dor_validator.py    # DoR template validation
     ├── editor.py           # Multi-line markdown editor integration
     ├── errors.py           # Custom exceptions
@@ -291,16 +349,26 @@ budjira epic show EPIC-KEY    # Show epic with child issues and progress
 - Coverage: 22%
 
 ### 7. Time Tracking
-**Status**: ⚠️ Backend implemented, CLI command missing
+**Status**: ✅ Fully implemented (v1.5.0)
 
-#### Backend Implementation:
-```python
-client.add_worklog(
-    issue_key="PROJ-123",
-    time_spent_minutes=120,
-    comment="Fixed authentication bug",
-    started=datetime(2025, 10, 10, 14, 0)
-)
+#### CLI Commands:
+```bash
+# Add worklog entry
+budjira worklog add PROJ-123 2h --comment "Fixed bug"
+budjira worklog add PROJ-123 3h --started "2024-10-24 14:00" --comment "Implemented feature"
+budjira worklog add PROJ-123 1h --started "yesterday"
+
+# List worklogs
+budjira worklog list PROJ-123
+
+# Create issue with time estimates
+budjira create issue "Feature" --original-estimate 8h --remaining-estimate 8h
+
+# Update time estimates
+budjira issue update PROJ-123 --original-estimate 10h --remaining-estimate 5h
+
+# Log work via issue update
+budjira issue update PROJ-123 --log-work 2h --work-comment "Completed API"
 ```
 
 #### Time Parser (`budjira/utils/time_parser.py`):
@@ -311,11 +379,22 @@ parse_time_string("2h30m")   # → 150 minutes
 parse_time_string("1.5h")    # → 90 minutes
 ```
 
-**TODO**: CLI command `budjira worklog ISSUE-123 --time 2h30m --comment "..."` fehlt noch
+#### Datetime Parser (`budjira/utils/datetime_parser.py`):
+```python
+parse_datetime_string("2024-10-25T14:30:00")  # ISO format
+parse_datetime_string("2024-10-25 14:30")     # Space-separated
+parse_datetime_string("2024-10-25")           # Date only
+parse_datetime_string("today")                # Relative
+parse_datetime_string("yesterday")            # Relative
+```
 
 #### Test Coverage:
 - `tests/utils/test_time_parser.py`: 14 tests (100% coverage)
-- `tests/core/test_jira_client.py`: Mocked add_worklog tests
+- `tests/utils/test_datetime_parser.py`: 19 tests (100% coverage) ✨ NEW
+- `tests/cli/test_worklog.py`: 17 tests (80% coverage) ✨ NEW
+- `tests/cli/test_create.py`: +4 tests for time tracking (92% total)
+- `tests/cli/test_issue.py`: +7 tests for time tracking (56% total)
+- `tests/core/test_jira_client.py`: +4 tests for get_worklogs() (93% total)
 
 ### 8. Self-Update (`budjira update`)
 **Status**: ✅ Implemented (via curl install script)
@@ -365,10 +444,11 @@ budjira ai usage-prompt --plain > file.md   # Save to file
 ## Testing
 
 ### Test-Statistiken
-- **Total Tests**: 279 (von 248 in v1.3.0)
-- **Coverage**: 79.34% (↑ from 72% in v1.3.0)
-- **Test Duration**: ~4.6 seconds
+- **Total Tests**: 323 (↑ from 279 in v1.4.1)
+- **Coverage**: 81.26% (↑ from 79.34% in v1.4.1)
+- **Test Duration**: ~6.4 seconds
 - **Framework**: pytest + pytest-cov + pytest-mock
+- **v1.5.0 Additions**: +51 tests for time tracking feature
 
 ### Coverage by Module (v1.4.1)
 ```
@@ -408,27 +488,29 @@ tests/
 ├── cli/
 │   ├── test_ai.py              # AI prompt command (7 tests)
 │   ├── test_connect.py         # Connection commands (9 tests)
-│   ├── test_create.py          # Create command (17 tests, inkl. DoR)
-│   ├── test_dor.py             # DoR commands (17 tests) ✨ NEW
+│   ├── test_create.py          # Create command (21 tests, +4 time tracking) ✨ UPDATED
+│   ├── test_dor.py             # DoR commands (17 tests)
 │   ├── test_epic.py            # Epic commands (3 tests)
-│   ├── test_issue.py           # Issue update commands (6 tests)
+│   ├── test_issue.py           # Issue update commands (13 tests, +7 time tracking) ✨ UPDATED
 │   ├── test_main.py            # Main app (3 tests)
 │   ├── test_search.py          # Search command (12 tests)
+│   ├── test_worklog.py         # Worklog commands (17 tests) ✨ NEW v1.5.0
 │   └── test_update.py          # Update command
 ├── core/
-│   └── test_jira_client.py     # JiraClient API wrapper (extensive)
+│   └── test_jira_client.py     # JiraClient API wrapper (extensive, +4 worklog tests) ✨ UPDATED
 ├── models/
 │   ├── test_config.py          # GlobalConfig (4 tests)
 │   ├── test_connection.py      # Connection models (10 tests)
-│   ├── test_dor.py             # DoR models (17 tests) ✨ NEW
+│   ├── test_dor.py             # DoR models (17 tests)
 │   └── test_issue.py           # Issue models (13 tests)
 ├── config/
 │   ├── test_credentials.py     # Credential storage (8 tests)
 │   └── test_settings.py        # Settings singleton (14 tests)
 └── utils/
     ├── test_banner.py          # Banner display (5 tests)
-    ├── test_dor_validator.py   # DoR validation (13 tests) ✨ NEW
-    ├── test_editor.py          # Editor utility (14 tests) ✨ NEW
+    ├── test_datetime_parser.py # Datetime parsing (19 tests) ✨ NEW v1.5.0
+    ├── test_dor_validator.py   # DoR validation (13 tests)
+    ├── test_editor.py          # Editor utility (14 tests)
     ├── test_errors.py          # Custom exceptions (10 tests)
     ├── test_time_parser.py     # Time parsing (14 tests)
     └── test_version.py         # Version checker (12 tests)
@@ -609,7 +691,7 @@ types-requests = ">=2.32.4"     # Type stubs for requests
 ## Nächste Schritte
 
 ### Immediate (Next Session)
-- [ ] **Worklog CLI command** implementieren (Backend fertig!)
+- [ ] **v1.5.0 Release finalisieren** (AI prompt regenerieren, commit, push)
 - [ ] **Comment command** implementieren
 - [ ] **Budget tracking** features (Spezifikation klären)
 
@@ -640,13 +722,14 @@ types-requests = ">=2.32.4"     # Type stubs for requests
 - [x] **Definition of Ready (DoR) templates with validation** (v1.4.0)
 - [x] **Issue updates (status transitions, fields, labels)** (v1.4.0)
 - [x] **Epic linking and management** (v1.4.0)
+- [x] **Time tracking (worklogs, time estimates)** (v1.5.0) ✨ NEW
 - [x] Self-update mechanism
 - [x] Automatic update checks
 - [x] AI usage prompt generation
 - [x] Shell completion (bash, zsh, fish)
 
 ### In Progress 🚧
-- [ ] Worklog CLI command (backend complete, CLI pending)
+- [ ] Smart caching with dirty detection
 
 ### Planned 📋
 - [ ] Comment management

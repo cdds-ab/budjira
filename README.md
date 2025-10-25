@@ -27,7 +27,7 @@
 - 📋 **Definition of Ready**: Customizable templates for Story, Bug, Task with validation
 - 🔄 **Update Issues**: Transition status, update fields, manage labels
 - 🎯 **Epic Management**: Link stories to epics and view epic progress
-- ⏱️ **Time Tracking**: Work log backend ready *(CLI coming soon)*
+- ⏱️ **Time Tracking**: Comprehensive worklog management and time estimates
 - 📦 **Smart Caching**: Optional offline-capable caching *(coming soon)*
 
 ## 📦 Installation
@@ -257,7 +257,7 @@ budjira issue transitions PROJ-123
 budjira epic show PROJ-100
 ```
 
-### 7. Check for Updates
+### 9. Check for Updates
 
 budjira automatically checks for updates every 24 hours and notifies you when a new version is available.
 
@@ -272,7 +272,7 @@ budjira update
 budjira update --check --force
 ```
 
-### 8. AI Integration
+### 10. AI Integration
 
 Generate comprehensive usage guides for AI assistants.
 
@@ -308,19 +308,48 @@ budjira follows the XDG Base Directory specification and stores configuration in
 └── config.toml          # Global settings
 ```
 
+### 8. Time Tracking
+
+budjira provides comprehensive time tracking capabilities including worklog management and time estimates.
+
+```bash
+# Add work log entry
+budjira worklog add PROJ-123 2h --comment "Fixed authentication bug"
+budjira worklog add PROJ-123 1h30m --comment "Code review"
+
+# Log work with specific start time
+budjira worklog add PROJ-123 3h --started "2024-10-24 14:00" --comment "Implemented feature"
+budjira worklog add PROJ-123 2h --started "yesterday" --comment "Bug fixing"
+
+# List all worklogs for an issue
+budjira worklog list PROJ-123
+
+# Set time estimates when creating issues
+budjira create issue "Add login feature" \
+  --type Story \
+  --original-estimate 8h \
+  --remaining-estimate 8h
+
+# Update time estimates
+budjira issue update PROJ-123 --original-estimate 10h --remaining-estimate 5h
+
+# Log work and update remaining estimate in one command
+budjira issue update PROJ-123 --log-work 2h --work-comment "Implemented API endpoint"
+```
+
+**Supported Time Formats:**
+- Hours: `2h`, `8h`
+- Minutes: `30m`, `45m`
+- Combined: `2h30m`, `1h45m`
+
+**Supported Datetime Formats (for --started):**
+- ISO format: `2024-10-25T14:30:00`, `2024-10-25 14:30`
+- Date only: `2024-10-25` (time defaults to 00:00)
+- Relative: `today`, `yesterday`
+
 ## 🚧 Coming Soon
 
 The following features are currently in development:
-
-### Log Work Time
-
-The backend is fully implemented - CLI command coming soon!
-
-```bash
-# Planned usage:
-budjira worklog PROJ-123 --time 2h30m --comment "Fixed authentication bug"
-budjira worklog PROJ-123 -t 1h -c "Fixed bug" --started "2025-10-10 14:00"
-```
 
 ### Additional Planned Features
 
@@ -424,17 +453,17 @@ Found a bug? Have a feature request?
 - [x] Definition of Ready (DoR) templates with validation
 - [x] Issue updates (status transitions, fields, labels)
 - [x] Epic linking and management
+- [x] Time tracking (worklogs, time estimates)
 - [x] Self-update mechanism
 - [x] Automatic update checks
 - [x] AI usage prompt generation
 
 ### In Progress 🚧
-- [ ] Worklog CLI command (backend complete, CLI pending)
+- [ ] Smart caching with dirty detection
 
 ### Planned 📋
 - [ ] Comment management
 - [ ] Attachment upload/download
-- [ ] Smart caching with dirty detection
 - [ ] Offline mode
 - [ ] Sprint management
 - [ ] Dashboard/reporting commands

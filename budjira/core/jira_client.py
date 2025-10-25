@@ -281,6 +281,61 @@ class JiraClient:
         except Exception as e:
             raise JiraAPIError(f"Unexpected error adding work log: {e}") from e
 
+    def get_worklogs(self, issue_key: str) -> list[dict[str, Any]]:
+        """Get work log entries for an issue.
+
+        Args:
+            issue_key: Issue key (e.g., PROJ-123)
+
+        Returns:
+            List of worklog dictionaries with keys:
+            - id: Worklog ID
+            - author: Author display name
+            - timeSpent: Time spent (formatted, e.g., "2h 30m")
+            - timeSpentSeconds: Time spent in seconds
+            - comment: Work log comment (if any)
+            - started: When work started (datetime string)
+            - created: When worklog was created (datetime string)
+
+        Raises:
+            InvalidIssueError: If issue not found
+            JiraAPIError: If retrieval fails
+        """
+        try:
+            logger.info(f"Fetching worklogs for {issue_key}")
+            issue = self.client.issue(issue_key)
+            worklogs = self.client.worklogs(issue)
+
+            results = []
+            for wl in worklogs:
+                worklog_data = {
+                    "id": wl.id,
+                    "author": wl.author.displayName if hasattr(wl, "author") else "Unknown",
+                    "timeSpent": wl.timeSpent if hasattr(wl, "timeSpent") else "0m",
+                    "timeSpentSeconds": wl.timeSpentSeconds if hasattr(wl, "timeSpentSeconds") else 0,
+                    "started": wl.started if hasattr(wl, "started") else None,
+                    "created": wl.created if hasattr(wl, "created") else None,
+                }
+
+                # Add comment if present
+                if hasattr(wl, "comment") and wl.comment:
+                    worklog_data["comment"] = wl.comment
+
+                results.append(worklog_data)
+
+            logger.info(f"Found {len(results)} worklogs for {issue_key}")
+            return results
+
+        except JIRAError as e:
+            if e.status_code == 404:
+                raise InvalidIssueError(
+                    f"Issue '{issue_key}' not found. Check that the issue exists and you have permission to view it."
+                ) from e
+            else:
+                raise JiraAPIError(f"Failed to fetch worklogs: {e.text}") from e
+        except Exception as e:
+            raise JiraAPIError(f"Unexpected error fetching worklogs: {e}") from e
+
     def get_projects(self) -> list[dict[str, str]]:
         """Get list of accessible projects.
 

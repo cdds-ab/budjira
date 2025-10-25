@@ -9,6 +9,7 @@ from rich.table import Table
 from budjira.core.jira_client import JiraClient
 from budjira.utils.connection import get_active_connection
 from budjira.utils.errors import BudjiraError
+from budjira.utils.time_parser import parse_time_string
 
 app = typer.Typer(
     name="issue",
@@ -32,6 +33,16 @@ def update_issue(
     summary: Annotated[str | None, typer.Option("--summary", help="Update summary")] = None,
     description: Annotated[str | None, typer.Option("--description", help="Update description")] = None,
     epic: Annotated[str | None, typer.Option("--epic", "-e", help="Link to epic (epic key)")] = None,
+    original_estimate: Annotated[
+        str | None, typer.Option("--original-estimate", help="Update original estimate (e.g., 2h, 30m)")
+    ] = None,
+    remaining_estimate: Annotated[
+        str | None, typer.Option("--remaining-estimate", help="Update remaining estimate (e.g., 2h, 30m)")
+    ] = None,
+    log_work: Annotated[str | None, typer.Option("--log-work", help="Log work time (e.g., 2h, 30m)")] = None,
+    work_comment: Annotated[
+        str | None, typer.Option("--work-comment", help="Work log comment (requires --log-work)")
+    ] = None,
     connection: Annotated[
         str | None, typer.Option("--connection", "-c", help="Connection name (overrides environment)")
     ] = None,
@@ -56,8 +67,27 @@ def update_issue(
             --add-label completed
     """
     try:
+        # Validate work_comment requires log_work
+        if work_comment and not log_work:
+            console.print("[red]Error: --work-comment requires --log-work[/red]")
+            raise typer.Exit(1)
+
         # Check that at least one update option is provided
-        if not any([status, assignee is not None, priority, add_label, remove_label, summary, description, epic]):
+        if not any(
+            [
+                status,
+                assignee is not None,
+                priority,
+                add_label,
+                remove_label,
+                summary,
+                description,
+                epic,
+                original_estimate,
+                remaining_estimate,
+                log_work,
+            ]
+        ):
             console.print("[yellow]No updates specified. Use --help to see available options.[/yellow]")
             raise typer.Exit(1)
 
@@ -116,6 +146,32 @@ def update_issue(
             if epic:
                 client.link_to_epic(issue_key, epic)
                 changes.append(("Epic", f"→ {epic}"))
+
+            # Update time tracking estimates
+            if original_estimate or remaining_estimate:
+                timetracking_fields = {}
+                if original_estimate:
+                    timetracking_fields["originalEstimate"] = original_estimate
+                if remaining_estimate:
+                    timetracking_fields["remainingEstimate"] = remaining_estimate
+
+                client.update_issue(issue_key, fields={"timetracking": timetracking_fields})
+                if original_estimate:
+                    changes.append(("Original Estimate", f"→ {original_estimate}"))
+                if remaining_estimate:
+                    changes.append(("Remaining Estimate", f"→ {remaining_estimate}"))
+
+            # Log work
+            if log_work:
+                time_spent_minutes = parse_time_string(log_work)
+                client.add_worklog(
+                    issue_key=issue_key,
+                    time_spent_minutes=time_spent_minutes,
+                    comment=work_comment,
+                )
+                changes.append(("Work Logged", log_work))
+                if work_comment:
+                    changes.append(("  Comment", work_comment))
 
         except BudjiraError as e:
             console.print(f"[red]✗[/red] Update failed: {e}")

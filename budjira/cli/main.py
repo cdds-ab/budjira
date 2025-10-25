@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 
 from budjira import __version__
-from budjira.cli import ai, connect, create, dor, epic, issue, search, update
+from budjira.cli import ai, connect, create, dor, epic, issue, search, update, worklog
 from budjira.utils.banner import print_header
 
 # Show header early for --help (which bypasses callback)
@@ -33,6 +33,7 @@ app.add_typer(epic.app, name="epic")
 app.add_typer(issue.app, name="issue")
 app.add_typer(search.app, name="search")
 app.add_typer(update.app, name="update")
+app.add_typer(worklog.app, name="worklog")
 
 
 def is_quiet_mode() -> bool:

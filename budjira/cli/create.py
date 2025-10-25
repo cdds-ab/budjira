@@ -78,6 +78,16 @@ def issue(
         "--skip-dor",
         help="Skip Definition of Ready template and validation",
     ),
+    original_estimate: str = typer.Option(
+        None,
+        "--original-estimate",
+        help="Original time estimate (e.g., 2h, 30m, 2h30m)",
+    ),
+    remaining_estimate: str = typer.Option(
+        None,
+        "--remaining-estimate",
+        help="Remaining time estimate (e.g., 2h, 30m, 2h30m)",
+    ),
 ) -> None:
     """Create a new Jira issue.
 
@@ -190,6 +200,16 @@ def issue(
             f"\n[dim]Creating {issue_type} in project {project_key}...[/dim]",
         )
 
+        # Prepare time tracking fields if provided
+        extra_fields = {}
+        if original_estimate or remaining_estimate:
+            timetracking = {}
+            if original_estimate:
+                timetracking["originalEstimate"] = original_estimate
+            if remaining_estimate:
+                timetracking["remainingEstimate"] = remaining_estimate
+            extra_fields["timetracking"] = timetracking
+
         created_issue = client.create_issue(
             project_key=project_key,
             summary=summary,
@@ -198,6 +218,7 @@ def issue(
             priority=priority,
             assignee=assignee,
             labels=labels or [],
+            **extra_fields,
         )
 
         # Display created issue

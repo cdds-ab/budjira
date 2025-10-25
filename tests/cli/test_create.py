@@ -683,3 +683,157 @@ So that I can access my account
         assert result.exit_code == 0
         assert "Issue created successfully" in result.stdout
         mock_client.create_issue.assert_called_once()
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_issue_with_original_estimate(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test creating issue with original estimate."""
+        mock_get_conn.return_value = mock_connection
+        mock_settings = MagicMock()
+        mock_settings.global_config.dor_validation_level = "off"
+        mock_get_settings.return_value = mock_settings
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            [
+                "Fix bug",
+                "--type",
+                "Bug",
+                "--original-estimate",
+                "2h",
+                "--no-interactive",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Issue created successfully" in result.stdout
+
+        # Verify timetracking field was passed
+        call_kwargs = mock_client.create_issue.call_args.kwargs
+        assert "timetracking" in call_kwargs
+        assert call_kwargs["timetracking"]["originalEstimate"] == "2h"
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_issue_with_remaining_estimate(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test creating issue with remaining estimate."""
+        mock_get_conn.return_value = mock_connection
+        mock_settings = MagicMock()
+        mock_settings.global_config.dor_validation_level = "off"
+        mock_get_settings.return_value = mock_settings
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            [
+                "New feature",
+                "--type",
+                "Story",
+                "--remaining-estimate",
+                "3h30m",
+                "--no-interactive",
+            ],
+        )
+
+        assert result.exit_code == 0
+
+        call_kwargs = mock_client.create_issue.call_args.kwargs
+        assert "timetracking" in call_kwargs
+        assert call_kwargs["timetracking"]["remainingEstimate"] == "3h30m"
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_issue_with_both_estimates(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test creating issue with both original and remaining estimate."""
+        mock_get_conn.return_value = mock_connection
+        mock_settings = MagicMock()
+        mock_settings.global_config.dor_validation_level = "off"
+        mock_get_settings.return_value = mock_settings
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            [
+                "Task with estimates",
+                "--type",
+                "Task",
+                "--original-estimate",
+                "8h",
+                "--remaining-estimate",
+                "5h",
+                "--no-interactive",
+            ],
+        )
+
+        assert result.exit_code == 0
+
+        call_kwargs = mock_client.create_issue.call_args.kwargs
+        assert "timetracking" in call_kwargs
+        assert call_kwargs["timetracking"]["originalEstimate"] == "8h"
+        assert call_kwargs["timetracking"]["remainingEstimate"] == "5h"
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_issue_without_estimates(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test creating issue without time estimates."""
+        mock_get_conn.return_value = mock_connection
+        mock_settings = MagicMock()
+        mock_settings.global_config.dor_validation_level = "off"
+        mock_get_settings.return_value = mock_settings
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["Task without estimates", "--type", "Task", "--no-interactive"],
+        )
+
+        assert result.exit_code == 0
+
+        # Verify timetracking field was NOT passed
+        call_kwargs = mock_client.create_issue.call_args.kwargs
+        assert "timetracking" not in call_kwargs
