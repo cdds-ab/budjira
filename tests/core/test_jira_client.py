@@ -882,11 +882,35 @@ class TestJiraClientEpic:
     """Test epic-related methods."""
 
     @patch("budjira.core.jira_client.JIRA")
-    def test_link_to_epic_success(self, mock_jira_class: Mock, connection: Connection) -> None:
-        """Test linking issue to epic."""
+    def test_link_to_epic_success_modern(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test linking issue to epic using modern parent field (Jira Cloud team-managed)."""
         mock_issue = MagicMock()
         mock_jira_instance = MagicMock()
         mock_jira_instance.issue.return_value = mock_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.link_to_epic("TEST-123", "TEST-100")
+
+        # Should use parent field (modern approach)
+        mock_issue.update.assert_called_once()
+        call_args = mock_issue.update.call_args[1]["fields"]
+        assert "parent" in call_args
+        assert call_args["parent"] == {"key": "TEST-100"}
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_link_to_epic_success_legacy(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test linking issue to epic using legacy Epic Link field (fallback)."""
+        mock_issue = MagicMock()
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+
+        # Make parent field fail (to trigger fallback)
+        mock_issue.update.side_effect = [
+            JIRAError("Parent field not supported", status_code=400),
+            None,  # Second call succeeds
+        ]
+
         mock_jira_instance.fields.return_value = [
             {"id": "customfield_10014", "name": "Epic Link"},
             {"id": "customfield_10015", "name": "Sprint"},
@@ -896,22 +920,33 @@ class TestJiraClientEpic:
         client = JiraClient(connection, "test-token")
         client.link_to_epic("TEST-123", "TEST-100")
 
-        mock_issue.update.assert_called_once()
+        # Should have called update twice (parent fails, Epic Link succeeds)
+        assert mock_issue.update.call_count == 2
+        # Check the second call used Epic Link
         call_args = mock_issue.update.call_args[1]["fields"]
         assert "customfield_10014" in call_args
         assert call_args["customfield_10014"] == "TEST-100"
 
     @patch("budjira.core.jira_client.JIRA")
     def test_link_to_epic_no_epic_field(self, mock_jira_class: Mock, connection: Connection) -> None:
-        """Test linking when Epic Link field doesn't exist."""
+        """Test linking when neither parent nor Epic Link field exists."""
+        mock_issue = MagicMock()
         mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_issue
+
+        # Make parent field fail
+        mock_issue.update.side_effect = JIRAError("Parent field not supported", status_code=400)
+
+        # No Epic Link field in fields list
         mock_jira_instance.fields.return_value = [
             {"id": "customfield_10015", "name": "Sprint"},
         ]
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(JiraAPIError, match="Epic Link field not found"):
+        with pytest.raises(
+            JiraAPIError, match="Epic linking failed. Neither 'parent' field nor 'Epic Link' custom field found"
+        ):
             client.link_to_epic("TEST-123", "TEST-100")
 
     @patch("budjira.core.jira_client.JIRA")
@@ -931,10 +966,10 @@ class TestJiraClientEpic:
 
     @patch("budjira.core.jira_client.JIRA")
     @patch.object(JiraClient, "search_issues")
-    def test_get_epic_issues(
+    def test_get_epic_issues_modern(
         self, mock_search: Mock, mock_jira_class: Mock, connection: Connection, mock_jira_issue: MagicMock
     ) -> None:
-        """Test getting issues linked to epic."""
+        """Test getting issues linked to epic using modern parent field."""
         mock_issue_obj = Issue.from_jira_issue(mock_jira_issue)
         mock_search.return_value = [mock_issue_obj]
 
@@ -946,7 +981,32 @@ class TestJiraClientEpic:
 
         assert len(issues) == 1
         assert issues[0].key == "TEST-123"
-        mock_search.assert_called_once_with('"Epic Link" = TEST-100', max_results=100)
+        # Should try modern approach first
+        mock_search.assert_called_once_with("parent = TEST-100", max_results=100)
+
+    @patch("budjira.core.jira_client.JIRA")
+    @patch.object(JiraClient, "search_issues")
+    def test_get_epic_issues_legacy_fallback(
+        self, mock_search: Mock, mock_jira_class: Mock, connection: Connection, mock_jira_issue: MagicMock
+    ) -> None:
+        """Test getting issues linked to epic using legacy Epic Link field (fallback)."""
+        mock_issue_obj = Issue.from_jira_issue(mock_jira_issue)
+        # First call (modern) returns empty, second call (legacy) returns issues
+        mock_search.side_effect = [[], [mock_issue_obj]]
+
+        mock_jira_instance = MagicMock()
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        issues = client.get_epic_issues("TEST-100")
+
+        assert len(issues) == 1
+        assert issues[0].key == "TEST-123"
+        # Should have called search_issues twice
+        assert mock_search.call_count == 2
+        # First with modern, then with legacy
+        mock_search.assert_any_call("parent = TEST-100", max_results=100)
+        mock_search.assert_any_call('"Epic Link" = TEST-100', max_results=100)
 
 
 class TestJiraClientEdgeCases:

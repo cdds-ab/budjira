@@ -590,8 +590,19 @@ class JiraClient:
         try:
             logger.info(f"Linking {issue_key} to epic {epic_key}")
 
+            issue = self.client.issue(issue_key)
+
+            # Try modern approach first (parent field - used in Jira Cloud team-managed projects)
+            try:
+                issue.update(fields={"parent": {"key": epic_key}})
+                logger.info(f"Successfully linked {issue_key} to epic {epic_key} using parent field")
+                return
+            except JIRAError as e:
+                # If parent field fails, try legacy Epic Link field
+                logger.debug(f"Parent field failed, trying legacy Epic Link: {e}")
+
+            # Fallback to legacy Epic Link custom field (company-managed projects)
             # Epic Link is usually customfield_10014, but can vary
-            # Try to find it dynamically
             epic_link_field = None
             fields = self.client.fields()
             for field in fields:
@@ -600,11 +611,13 @@ class JiraClient:
                     break
 
             if not epic_link_field:
-                raise JiraAPIError("Epic Link field not found. Your Jira instance may not have epics enabled.")
+                raise JiraAPIError(
+                    "Epic linking failed. Neither 'parent' field nor 'Epic Link' custom field found. "
+                    "Your Jira instance may not have epics enabled, or you may lack permission."
+                )
 
-            issue = self.client.issue(issue_key)
             issue.update(fields={epic_link_field: epic_key})
-            logger.info(f"Successfully linked {issue_key} to epic {epic_key}")
+            logger.info(f"Successfully linked {issue_key} to epic {epic_key} using Epic Link field")
 
         except JIRAError as e:
             if e.status_code == 404:
@@ -632,9 +645,21 @@ class JiraClient:
         try:
             logger.info(f"Fetching issues for epic {epic_key}")
 
-            # Search for issues linked to this epic
-            jql = f'"Epic Link" = {epic_key}'
-            return self.search_issues(jql, max_results=100)
+            # Try modern approach first (parent field - Jira Cloud team-managed projects)
+            try:
+                jql_modern = f"parent = {epic_key}"
+                issues = self.search_issues(jql_modern, max_results=100)
+                if issues:
+                    logger.debug(f"Found {len(issues)} issues using parent field")
+                    return issues
+            except Exception as e:
+                logger.debug(f"Modern parent query failed, trying legacy: {e}")
+
+            # Fallback to legacy Epic Link custom field (company-managed projects)
+            jql_legacy = f'"Epic Link" = {epic_key}'
+            issues = self.search_issues(jql_legacy, max_results=100)
+            logger.debug(f"Found {len(issues)} issues using Epic Link field")
+            return issues
 
         except Exception as e:
             raise JiraAPIError(f"Failed to fetch epic issues: {e}") from e
