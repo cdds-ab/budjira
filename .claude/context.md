@@ -11,19 +11,41 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.4.2 (Released)
-- **Next Version**: v1.5.0 (Time Tracking Feature - READY FOR COMMIT)
+- **Current Version**: v1.5.3 (Released: 2025-10-25)
 - **Branch**: master
-- **Letzter Release**: v1.4.2 - 2025-10-12T17:37:01Z
-- **Status**: ✅ **Time Tracking Feature complete - ready for commit and release**
+- **Status**: ✅ **All features stable, no open issues**
+- **Recent Releases**:
+  - v1.5.3 (2025-10-25): GitHub API rate limit fix for update checks
+  - v1.5.2 (2025-10-25): Epic linking compatibility (modern + legacy)
+  - v1.5.1 (2025-10-25): Bandit security fix
+  - v1.5.0 (2025-10-25): Time Tracking Feature
+  - v1.4.2 (2025-10-12): Service Release
 
-### ✅ COMPLETED: v1.5.0 Time Tracking Feature
+### ✅ RELEASED: Recent Features (v1.5.x)
 
-**Status**: Implementation + Tests + Documentation COMPLETE ✅ | Commit READY ⏳
+#### v1.5.3: GitHub API Rate Limit Fix (2025-10-25)
+**GitHub Issue**: User-reported bug - update check showing wrong version
 
+**Changes**:
+- Added optional GitHub token authentication for update checks
+- Supports `GITHUB_TOKEN` or `GH_TOKEN` environment variables
+- Improved error messages for rate limiting scenarios
+- Better logging for diagnostics
+- Avoids 60 req/hour limit (→ 5000 req/hour with auth)
+
+#### v1.5.2: Epic Linking Compatibility (2025-10-25)
+**GitHub Issue**: #2 - Epic Link field not found
+
+**Changes**:
+- Support for both modern (parent field) and legacy (Epic Link) approaches
+- Two-step fallback: Try modern first, fallback to legacy if needed
+- Works with team-managed AND company-managed projects
+- Comprehensive tests for both scenarios
+
+#### v1.5.0: Time Tracking Feature (2025-10-25)
 **GitHub Issue**: #1 - Feature Request: Time Tracking Support for Issues
 
-**Was bereits fertig ist:**
+**Features**:
 
 #### Neue Dateien (implementiert + getestet):
 1. **`budjira/utils/datetime_parser.py`** - Flexible datetime parsing
@@ -52,23 +74,17 @@
    - `JiraClient.get_worklogs()` - Retrieve worklog entries
    - 4 neue Tests in `tests/core/test_jira_client.py`
 
-**Abgeschlossene Schritte:**
-1. ✅ Run full test suite: 323 tests pass, 81.26% coverage
-2. ✅ Update README.md mit Time Tracking examples (Section 8)
-3. ✅ Update .claude/context.md mit Feature-Dokumentation (in progress)
-4. ⏳ Regenerate AI usage prompt: `uv run budjira -q ai usage-prompt --plain > .claude/ai-usage-prompt.md`
-5. ⏳ Commit mit `feat:` message (bereit zum Commit)
-6. ⏳ Push und warten auf v1.5.0 release
-7. ⏳ Close GitHub Issue #1 mit Release-Link
+**Implementierte Features:**
+- Worklog add/list commands
+- Time estimates bei issue creation/update
+- Datetime parser (ISO, today, yesterday)
+- Time parser (1h, 30m, 2h30m, 1.5h)
 
-**Finale Statistiken:**
+**Statistiken:**
 - Neue Code-Files: 2 (`datetime_parser.py`, `worklog.py`)
-- Modifizierte Files: 7 (`jira_client.py`, `create.py`, `issue.py`, `main.py`, `README.md`)
 - Neue Test-Files: 2 (`test_datetime_parser.py`, `test_worklog.py`)
-- Modifizierte Test-Files: 3 (`test_jira_client.py`, `test_create.py`, `test_issue.py`)
 - Neue Tests: 51 (279 → 323 tests)
-- Finale Coverage: 81.26% (+2% von 79%)
-- Test-Änderungen: 4 Testdaten fixes (2025 → 2024 für vergangene Daten)
+- Coverage: 81.26% (+2% von 79%)
 
 ---
 
@@ -443,12 +459,14 @@ budjira ai usage-prompt --plain > file.md   # Save to file
 
 ## Testing
 
-### Test-Statistiken
-- **Total Tests**: 323 (↑ from 279 in v1.4.1)
-- **Coverage**: 81.26% (↑ from 79.34% in v1.4.1)
-- **Test Duration**: ~6.4 seconds
+### Test-Statistiken (Current: v1.5.3)
+- **Total Tests**: 325 (↑ from 279 in v1.4.1)
+- **Coverage**: 81.54% (↑ from 79.34% in v1.4.1)
+- **Test Duration**: ~7.1 seconds
 - **Framework**: pytest + pytest-cov + pytest-mock
-- **v1.5.0 Additions**: +51 tests for time tracking feature
+- **Recent Additions**:
+  - v1.5.0: +51 tests for time tracking
+  - v1.5.2: +6 tests for epic linking fallback
 
 ### Coverage by Module (v1.4.1)
 ```
@@ -690,10 +708,12 @@ types-requests = ">=2.32.4"     # Type stubs for requests
 
 ## Nächste Schritte
 
+### Current GitHub Issues
+- No open issues ✅
+
 ### Immediate (Next Session)
-- [ ] **v1.5.0 Release finalisieren** (AI prompt regenerieren, commit, push)
-- [ ] **Comment command** implementieren
-- [ ] **Budget tracking** features (Spezifikation klären)
+- [ ] **Comment command** implementieren (wenn User benötigt)
+- [ ] **Budget tracking** features (Spezifikation klären wenn User benötigt)
 
 ### Short-term (1-2 Wochen)
 - [ ] **--pre flag** für `budjira update` (Pre-Release support)
@@ -886,5 +906,12 @@ docs: update installation instructions
 
 ---
 
-**Letzte Aktualisierung**: 2025-10-12 18:00 (nach v1.4.1 Service Release)
+**Letzte Aktualisierung**: 2025-10-25 11:45 (nach v1.5.3 Release - Update Check Fix)
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
+
+**Recent Session Summary** (2025-10-25):
+- ✅ Fixed Bug #2: Epic linking compatibility (v1.5.2)
+- ✅ Fixed Update Check: GitHub API rate limiting (v1.5.3)
+- ✅ All Issues closed (#1 Time Tracking, #2 Epic Linking)
+- ✅ 325 tests passing, 81.54% coverage
+- 📊 Status: Production-ready, all features stable
