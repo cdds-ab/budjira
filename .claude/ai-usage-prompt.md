@@ -4,12 +4,16 @@
 
 **budjira** (pronounced "buddy-ra") is a command-line interface for Jira Cloud. It provides efficient,
 AI-friendly access to Jira functionality including connection management, issue search, issue creation,
-and time tracking.
+issue updates, epic management, and comprehensive time tracking.
 
 **Key Features:**
 - Multi-connection management with environment variable support
 - JQL-based search with convenient filter options
 - Interactive and non-interactive issue creation
+- Definition of Ready (DoR) templates with validation
+- Issue updates (status transitions, fields, labels, epic linking)
+- Epic management with progress tracking
+- Comprehensive time tracking (worklogs and estimates)
 - Automatic update checking via GitHub Releases
 - Rich terminal output with tables and colors
 
@@ -355,6 +359,124 @@ budjira epic show PROJ-100
 
 ---
 
+## Time Tracking
+
+### Add Worklog Entry
+
+```bash
+budjira worklog add ISSUE-KEY TIME [OPTIONS]
+```
+
+Log time spent on an issue. Time can be specified in hours (h), minutes (m), or combined (e.g., 2h30m).
+
+**Time Formats:**
+- `1h` - 1 hour
+- `30m` - 30 minutes
+- `2h30m` - 2 hours 30 minutes
+- `1.5h` - 1.5 hours (90 minutes)
+
+**Options:**
+- `--comment TEXT`, `-c`: Add comment to worklog entry
+- `--started DATETIME`, `-s`: Specify when work started (default: now)
+
+**Datetime Formats for --started:**
+- ISO format: `2024-10-25T14:30:00` or `2024-10-25 14:30:00`
+- Date only: `2024-10-25` (time defaults to 00:00)
+- Relative: `today` or `yesterday`
+
+**Examples:**
+
+```bash
+# Log 2 hours of work
+budjira worklog add PROJ-123 2h
+
+# Log work with comment
+budjira worklog add PROJ-123 3h --comment "Implemented user authentication"
+
+# Log work started at specific time
+budjira worklog add PROJ-123 1h30m --started "2024-10-24 14:00" --comment "Code review"
+
+# Log work from yesterday
+budjira worklog add PROJ-123 4h --started yesterday --comment "Bug fixing"
+
+# Log work from today at specific time
+budjira worklog add PROJ-123 2h --started "today"
+```
+
+### List Worklog Entries
+
+```bash
+budjira worklog list ISSUE-KEY
+```
+
+Display all worklog entries for an issue.
+
+**Output includes:**
+- Author
+- Time spent
+- Started date/time
+- Comment (if any)
+
+**Example:**
+```bash
+budjira worklog list PROJ-123
+# Shows table of all worklog entries
+```
+
+### Time Estimates
+
+Set time estimates when creating or updating issues.
+
+**During Issue Creation:**
+
+```bash
+budjira create issue "Feature implementation" \
+  --type Story \
+  --original-estimate 8h \
+  --remaining-estimate 8h \
+  --no-interactive
+```
+
+**During Issue Update:**
+
+```bash
+# Update time estimates
+budjira issue update PROJ-123 \
+  --original-estimate 10h \
+  --remaining-estimate 5h
+
+# Log work while updating
+budjira issue update PROJ-456 \
+  --log-work 2h \
+  --work-comment "Completed API integration"
+```
+
+**Time Estimate Options:**
+- `--original-estimate TIME`: Initial time estimate for the issue
+- `--remaining-estimate TIME`: Remaining time estimate
+- `--log-work TIME`: Log work time (alternative to `worklog add`)
+- `--work-comment TEXT`: Comment for work logged via `--log-work`
+
+**Combined Example:**
+
+```bash
+# Create issue with time tracking
+budjira create issue "Implement feature X" \
+  --type Story \
+  --description "Full feature description" \
+  --original-estimate 16h \
+  --remaining-estimate 16h \
+  --no-interactive
+
+# Log work and update remaining estimate
+budjira issue update PROJ-789 \
+  --log-work 4h \
+  --work-comment "Completed backend API" \
+  --remaining-estimate 12h
+```
+
+---
+
 ## Update Management
 
 ### Check for Updates
@@ -551,6 +673,36 @@ budjira issue update PROJ-789 \
 budjira issue update PROJ-789 \
   --status Done \
   --add-label completed
+```
+
+### 11. Time Tracking Workflow
+
+```bash
+# 1. Create issue with time estimate
+budjira create issue "Implement API endpoint" \
+  --type Story \
+  --original-estimate 8h \
+  --remaining-estimate 8h \
+  --no-interactive
+
+# 2. Log work as you progress
+budjira worklog add PROJ-456 2h --comment "Set up project structure"
+
+# 3. Update remaining estimate
+budjira issue update PROJ-456 --remaining-estimate 6h
+
+# 4. Log more work
+budjira worklog add PROJ-456 3h --comment "Implemented core functionality"
+
+# 5. View all logged time
+budjira worklog list PROJ-456
+
+# 6. Final work log and complete
+budjira issue update PROJ-456 \
+  --log-work 3h \
+  --work-comment "Completed testing and documentation" \
+  --remaining-estimate 0h \
+  --status Done
 ```
 
 ---
