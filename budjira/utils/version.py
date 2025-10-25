@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess  # nosec B404
 from datetime import datetime, timedelta
 from typing import Any
@@ -11,6 +12,8 @@ import requests
 
 from budjira import __version__
 from budjira.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class VersionChecker:
@@ -24,6 +27,23 @@ class VersionChecker:
         self.settings = get_settings()
         self.cache_file = self.settings.data_dir / self.CACHE_FILENAME
         self.current_version = __version__
+
+    def _get_headers(self) -> dict[str, str]:
+        """Get headers for GitHub API request with optional authentication.
+
+        Returns:
+            Headers dict with optional GitHub token
+        """
+        import os
+
+        headers = {"Accept": "application/vnd.github.v3+json"}
+
+        # Use GitHub token if available (avoids rate limiting)
+        github_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        if github_token:
+            headers["Authorization"] = f"token {github_token}"
+
+        return headers
 
     def _load_cache(self) -> dict[str, Any] | None:
         """Load cached update check result.
@@ -88,7 +108,7 @@ class VersionChecker:
 
         # Fetch from GitHub API
         try:
-            response = requests.get(self.GITHUB_API_URL, timeout=10)
+            response = requests.get(self.GITHUB_API_URL, headers=self._get_headers(), timeout=10)
             response.raise_for_status()
 
             release_data = response.json()
@@ -107,8 +127,18 @@ class VersionChecker:
                 release_notes,
             )
 
-        except (requests.RequestException, KeyError, ValueError):
-            # Network error or API change - return no update available
+        except requests.RequestException as e:
+            # Network error or API rate limiting
+            logger.warning(f"Failed to check for updates: {e}")
+            if hasattr(e, "response") and e.response is not None and e.response.status_code == 403:
+                logger.info(
+                    "GitHub API rate limit may be exceeded. "
+                    "Set GITHUB_TOKEN or GH_TOKEN environment variable to increase limits."
+                )
+            return (False, None, None, None)
+        except (KeyError, ValueError) as e:
+            # API response format changed
+            logger.warning(f"Failed to parse GitHub API response: {e}")
             return (False, None, None, None)
 
     def _is_newer_version(self, latest_version: str) -> bool:
