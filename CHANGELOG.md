@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## v1.5.3 (2025-10-25)
+
+### Bug Fixes
+
+- Support GitHub token for update checks to avoid rate limiting
+  ([`b50ba72`](https://github.com/cdds-ab/budjira/commit/b50ba72a7ca65238a40c402cec91c9493ce05fba))
+
+GitHub API rate limits unauthenticated requests to 60/hour, causing update checks to fail with
+  network errors. Added support for optional GITHUB_TOKEN or GH_TOKEN environment variables to
+  authenticate requests and avoid rate limiting (5000 requests/hour for authenticated users).
+
+Changes: - Added _get_headers() method to include GitHub token if available - Updated API request to
+  use authentication headers - Improved error messages to guide users when rate limited - Added
+  logging for better diagnostics
+
+Resolves issue where 'budjira update' showed wrong version or network errors due to rate limiting.
+
+
 ## v1.5.2 (2025-10-25)
 
 ### Bug Fixes
