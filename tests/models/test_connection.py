@@ -70,6 +70,41 @@ class TestConnection:
         key = conn.get_credential_key()
         assert key == "budjira_test_connection"
 
+    def test_tempo_enabled_default_false(self) -> None:
+        """Test that tempo_enabled defaults to False."""
+        conn = Connection(
+            name="Test",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+        )
+
+        assert conn.tempo_enabled is False
+
+    def test_tempo_enabled_can_be_set(self) -> None:
+        """Test that tempo_enabled can be set to True."""
+        conn = Connection(
+            name="Test",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+            tempo_enabled=True,
+        )
+
+        assert conn.tempo_enabled is True
+
+    def test_get_tempo_credential_key(self) -> None:
+        """Test Tempo credential key generation."""
+        conn = Connection(
+            name="My Jira",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+        )
+
+        key = conn.get_tempo_credential_key()
+        assert key == "budjira_tempo_my_jira"
+
 
 class TestConnectionList:
     """Test ConnectionList model."""

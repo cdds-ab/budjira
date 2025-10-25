@@ -114,6 +114,43 @@ class CredentialStore:
         """
         return self._get_credential_file(connection).exists()
 
+    def store_credential(self, key: str, token: str) -> None:
+        """Store a credential by key (for non-connection credentials like Tempo).
+
+        Args:
+            key: Unique credential key
+            token: Token to store
+
+        Raises:
+            ValueError: If token is empty
+        """
+        if not token or not token.strip():
+            raise ValueError("Token cannot be empty")
+
+        credential_file = self.credentials_dir / f"{key}.json"
+        data = {"token": token.strip()}
+        credential_file.write_text(json.dumps(data, indent=2))
+        credential_file.chmod(0o600)
+
+    def get_credential(self, key: str) -> str | None:
+        """Retrieve a credential by key.
+
+        Args:
+            key: Credential key to retrieve
+
+        Returns:
+            Token if found, None otherwise
+        """
+        credential_file = self.credentials_dir / f"{key}.json"
+        if not credential_file.exists():
+            return None
+
+        try:
+            data = json.loads(credential_file.read_text())
+            return data.get("token")  # type: ignore[no-any-return]
+        except (json.JSONDecodeError, KeyError):
+            return None
+
 
 # Global credential store instance
 _credential_store: CredentialStore | None = None

@@ -46,6 +46,10 @@ class Connection(BaseModel):
         ge=1,
         le=168,  # Max 1 week
     )
+    tempo_enabled: bool = Field(
+        default=False,
+        description="Whether Tempo Timesheets integration is enabled for this connection",
+    )
 
     @field_validator("project_key")
     @classmethod
@@ -65,6 +69,14 @@ class Connection(BaseModel):
         """
         # Use name with prefix for credential storage
         return f"budjira_{self.name.lower().replace(' ', '_')}"
+
+    def get_tempo_credential_key(self) -> str:
+        """Generate unique key for Tempo token storage.
+
+        Returns:
+            String key for Tempo token based on connection name
+        """
+        return f"budjira_tempo_{self.name.lower().replace(' ', '_')}"
 
     model_config = {"frozen": False, "validate_assignment": True}
 

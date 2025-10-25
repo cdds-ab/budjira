@@ -402,3 +402,118 @@ def test_connection(
         console.print("  • Network connectivity problems")
         console.print("  • Jira instance is down or unreachable")
         raise typer.Exit(1) from None
+
+
+@app.command("tempo-setup")
+def tempo_setup(
+    connection_name: str = typer.Option(
+        None,
+        "--connection",
+        "-c",
+        help="Connection name (uses active connection if not specified)",
+    ),
+) -> None:
+    """Configure Tempo Timesheets integration for a connection.
+
+    Sets up Tempo API token for advanced time tracking functionality.
+    Create a Tempo API token at: Tempo → Settings → API Integration → Tokens
+
+    Examples:
+        # Setup Tempo for active connection
+        budjira connect tempo-setup
+
+        # Setup Tempo for specific connection
+        budjira connect tempo-setup --connection work
+    """
+    try:
+        from budjira.utils.connection import get_active_connection
+
+        settings = get_settings()
+        credential_store = get_credential_store()
+
+        # Get connection
+        if connection_name:
+            connection = settings.connections.find_by_name(connection_name)
+            if not connection:
+                console.print(
+                    f"[red]✗[/red] Connection '{connection_name}' not found",
+                    style="red",
+                )
+                raise typer.Exit(1)
+        else:
+            try:
+                connection = get_active_connection()
+            except BudjiraError:
+                console.print(
+                    "[yellow]⚠[/yellow] No active connection configured",
+                    style="yellow",
+                )
+                console.print("\nSpecify a connection with --connection or set a default with 'budjira connect use'")
+                raise typer.Exit(1) from None
+
+        console.print(f"\n[bold]Configuring Tempo for connection:[/bold] [cyan]{connection.name}[/cyan]\n")
+
+        # Show instructions
+        console.print("[bold]To create a Tempo API token:[/bold]")
+        console.print("  1. Go to your Jira instance")
+        console.print("  2. Navigate to: Tempo → Settings → API Integration")
+        console.print("  3. Click 'New Token' and copy the generated token\n")
+
+        # Check if Tempo token already exists
+        existing_token_key = connection.get_tempo_credential_key()
+        has_existing = credential_store.get_credential(existing_token_key) is not None
+
+        if has_existing:
+            console.print("[yellow]⚠[/yellow] Tempo token already configured for this connection")
+            if not Confirm.ask("Replace existing Tempo token?", default=False):
+                console.print("[yellow]Setup cancelled[/yellow]")
+                raise typer.Exit(0)
+
+        # Prompt for Tempo token
+        tempo_token = Prompt.ask(
+            "Tempo API token",
+            password=True,
+        )
+
+        if not tempo_token or tempo_token.strip() == "":
+            console.print("[red]✗[/red] Tempo token cannot be empty", style="red")
+            raise typer.Exit(1)
+
+        # Test the Tempo token
+        console.print("\nTesting Tempo API connection...")
+        try:
+            from budjira.tempo.client import TempoClient
+
+            tempo_client = TempoClient(tempo_token=tempo_token)
+            # Try a simple API call to verify the token
+            tempo_client.get_accounts(limit=1)
+            console.print("[green]✓[/green] Tempo API connection successful!")
+
+        except Exception as e:
+            console.print(f"[red]✗[/red] Tempo API connection failed: {e}", style="red")
+            console.print("\n[yellow]Common issues:[/yellow]")
+            console.print("  • Invalid Tempo API token")
+            console.print("  • Tempo is not installed in your Jira instance")
+            console.print("  • Network connectivity problems")
+
+            if not Confirm.ask("\nSave token anyway?", default=False):
+                raise typer.Exit(1) from None
+
+        # Save Tempo token
+        credential_store.store_credential(existing_token_key, tempo_token)
+        console.print("[green]✓[/green] Saved Tempo API token securely")
+
+        # Enable Tempo for this connection
+        connection.tempo_enabled = True
+        settings.update_connection(connection)
+        console.print("[green]✓[/green] Enabled Tempo integration for this connection")
+
+        # Show usage instructions
+        console.print("\n[bold]Tempo is now configured! You can use:[/bold]")
+        console.print("  • [cyan]budjira tempo log ISSUE TIME[/cyan] - Log work via Tempo")
+        console.print("  • [cyan]budjira tempo worklogs[/cyan] - View Tempo worklogs")
+        console.print("  • [cyan]budjira tempo accounts[/cyan] - List Tempo accounts")
+
+    except BudjiraError as e:
+        console.print(f"[red]✗[/red] {e}", style="red")
+        raise typer.Exit(1) from None

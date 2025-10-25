@@ -28,6 +28,7 @@
 - 🔄 **Update Issues**: Transition status, update fields, manage labels
 - 🎯 **Epic Management**: Link stories to epics and view epic progress
 - ⏱️ **Time Tracking**: Comprehensive worklog management and time estimates
+- 🎼 **Tempo Integration**: Full support for Tempo Timesheets API for enterprise time tracking
 - 📦 **Smart Caching**: Optional offline-capable caching *(coming soon)*
 
 ## 📦 Installation
@@ -346,6 +347,56 @@ budjira issue update PROJ-123 --log-work 2h --work-comment "Implemented API endp
 - ISO format: `2024-10-25T14:30:00`, `2024-10-25 14:30`
 - Date only: `2024-10-25` (time defaults to 00:00)
 - Relative: `today`, `yesterday`
+
+### 9. Tempo Timesheets Integration
+
+For enterprise teams using [Tempo Timesheets](https://www.tempo.io/), budjira provides full API integration for advanced time tracking and billing.
+
+**Setup:**
+
+```bash
+# Configure Tempo for your connection
+budjira connect tempo-setup
+
+# Create a Tempo API token at: Tempo → Settings → API Integration → Tokens
+```
+
+**Usage:**
+
+```bash
+# Log work via Tempo
+budjira tempo log PROJ-123 2h --comment "Sizing analysis"
+budjira tempo log PROJ-456 3h30m --started "yesterday" --comment "Client meeting"
+
+# Log work with specific datetime
+budjira tempo log PROJ-123 2h --started "2024-10-24 14:00" --comment "Development"
+
+# List Tempo worklogs
+budjira tempo worklogs PROJ-123                    # For specific issue
+budjira tempo worklogs --from 2024-10-01 --to 2024-10-31  # Date range
+budjira tempo worklogs --max 50                    # Limit results
+
+# Delete worklog entry
+budjira tempo delete-worklog 12345
+budjira tempo delete-worklog 12345 --force        # Skip confirmation
+
+# List Tempo accounts (for billing)
+budjira tempo accounts
+```
+
+**Features:**
+- ✅ Full Tempo Cloud API support
+- ✅ Worklog creation with time tracking
+- ✅ Worklog listing with filters
+- ✅ Worklog deletion
+- ✅ Tempo Accounts listing for billing
+- ✅ Automatic connection detection
+- ✅ Secure token storage
+
+**When to use Tempo vs. Standard Jira:**
+- Use `budjira tempo` commands when your organization uses Tempo for time tracking
+- Use `budjira worklog` commands for standard Jira time tracking
+- Tempo integration is optional and requires a separate API token
 
 ## 🚧 Coming Soon
 
