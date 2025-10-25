@@ -1,6 +1,72 @@
 # CHANGELOG
 
 
+## v1.5.0 (2025-10-25)
+
+### Documentation
+
+- Add comprehensive development workflow specifications
+  ([`1f88554`](https://github.com/cdds-ab/budjira/commit/1f88554f3507091ff61b594aa26a59dfc9675ea7))
+
+Implements structured checklists for repeatable, high-quality development:
+
+**New Files:** - scripts/session_start.py: Automated session start checker - Shows git status,
+  recent commits, open issues, version - Provides session reminders -
+  scripts/check_documentation_updates.py: Pre-commit doc reminder hook - Detects CLI/model/test
+  changes - Reminds about documentation updates - Non-blocking warnings only
+
+**CLAUDE.md Extended:** - Feature Development Lifecycle (7 phases with detailed checklists) -
+  Documentation Update Matrix (when to update which docs) - Testing Requirements by Feature Type
+  (CLI/Core/Models/Utils) - Definition of Done (code quality, testing, docs, release) - Quick
+  Pre-Commit Checklist (manual checks) - Session Start Checklist (automated + manual) - Post-Release
+  Checklist (verify, update, cleanup)
+
+**Pre-Commit Hook:** - Added check-documentation-updates hook to .pre-commit-config.yaml - Provides
+  reminders based on staged files and commit type - Always exits 0 (warnings only)
+
+**context.md Updated:** - Session-Hinweise references new scripts - Links to CLAUDE.md workflow
+  checklists
+
+**pyproject.toml:** - Excluded scripts/ from bandit scanning (subprocess usage is intentional)
+
+**Benefits:** - Nothing forgotten during feature development - Consistent development process -
+  Automatic reminders for documentation updates - Clear Definition of Done - Repeatable quality
+  standards
+
+- Update project context to v1.4.1
+  ([`f06cdc1`](https://github.com/cdds-ab/budjira/commit/f06cdc1ad8149255102c28339fd191a8368f5a48))
+
+- Update version and release status to v1.4.1 - Document comprehensive test coverage improvements
+  (72% → 79%) - Add DoR feature documentation across all sections - Update test statistics (248 →
+  279 tests) - Document new modules (dor.py, dor_validator.py, editor.py) - Update coverage
+  breakdown with new DoR components - Clarify semantic release workflow and version bumping rules
+
+### Features
+
+- Add comprehensive time tracking support
+  ([`36f260f`](https://github.com/cdds-ab/budjira/commit/36f260f2ef234bce15de8cdaf72593f6a6bedf74))
+
+Implements GitHub Issue #1 - Time Tracking Support for Issues
+
+New Features: - Worklog management: budjira worklog add/list commands - Time estimates for issue
+  creation: --original-estimate, --remaining-estimate - Time tracking for issue updates:
+  --original-estimate, --remaining-estimate, --log-work - Flexible datetime parsing: support for
+  "today", "yesterday", ISO formats
+
+CLI Commands: - budjira worklog add ISSUE TIME [--comment] [--started] - budjira worklog list ISSUE
+  - budjira create issue ... --original-estimate 2h --remaining-estimate 2h - budjira issue update
+  ISSUE --log-work 2h --work-comment "..."
+
+Backend: - JiraClient.get_worklogs() - Retrieve worklog entries - datetime_parser.py - Flexible
+  datetime string parsing
+
+Tests: - 51 new tests added (279 → 323 tests) - All Jira API calls mocked (no live API) - Coverage
+  increased to 81.26% (+2%)
+
+Documentation: - README.md updated with time tracking examples - AI usage prompt regenerated -
+  .claude/context.md updated with v1.5.0 feature documentation
+
+
 ## v1.4.2 (2025-10-12)
 
 ### Bug Fixes
