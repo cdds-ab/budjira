@@ -744,9 +744,13 @@ docs: update installation instructions
 ## Session-Hinweise für Claude
 
 ### Beim Session-Start
-1. `.claude/context.md` ist automatisch geladen ✅
-2. Check ob neue User-Nachrichten Kontext-Updates erfordern
-3. Bei Feature-Requests: Erst Architektur verstehen, dann implementieren
+1. **Automatisch**: `.claude/context.md` ist geladen ✅
+2. **Run Session Start Script**: `uv run python scripts/session_start.py`
+   - Zeigt Git Status, offene Issues, Version, letzte Commits
+   - Gibt automatische Reminders aus
+3. Check ob neue User-Nachrichten Kontext-Updates erfordern
+4. Bei Feature-Requests: Erst Architektur verstehen, dann implementieren
+5. **Refer to CLAUDE.md**: Comprehensive Development Workflow & Checklists verfügbar
 
 ### Bei "sichere context" oder "aktualisiere den context"
 1. Diese Datei aktualisieren mit:

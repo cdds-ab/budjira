@@ -489,3 +489,352 @@ To maintain context across session boundaries (compact/restart), use the `.claud
 - Type checking must pass (mypy strict)
 - Security scanning must pass (bandit)
 - No TODO comments in main branch (use issues instead)
+
+## Development Workflow & Checklists
+
+This section provides structured checklists for repeatable, high-quality development. These checklists ensure nothing is forgotten and maintain consistency across features.
+
+### Feature Development Lifecycle
+
+#### Phase 1: Planning & Analysis
+- [ ] GitHub Issue exists with clear description and use cases
+- [ ] Use cases defined with examples
+- [ ] API/Backend functionality checked (what exists already?)
+- [ ] Architecture decisions made (where does the code belong?)
+- [ ] Breaking changes identified (if yes: use `feat!`)
+- [ ] Dependencies checked (new packages needed?)
+- [ ] Review existing similar features for consistency
+
+#### Phase 2: Implementation
+- [ ] Tests written FIRST or PARALLEL (TDD encouraged)
+- [ ] Code placed in correct module (`cli/`, `core/`, `models/`, `utils/`)
+- [ ] Type hints on all functions/methods
+- [ ] Docstrings for public APIs (Google style)
+- [ ] Error handling with custom exceptions from `utils/errors.py`
+- [ ] Logging added (`logger.info`/`logger.debug`)
+- [ ] Rich Console used for user output (not `print()`)
+- [ ] No hardcoded values (use config/constants)
+- [ ] No debug `print()` statements left in code
+
+#### Phase 3: Testing
+- [ ] Unit tests written (pytest)
+- [ ] Mocked integration tests (NO live API calls)
+- [ ] Edge cases tested (empty input, None, invalid data)
+- [ ] Error paths tested (`pytest.raises`)
+- [ ] Coverage ≥70% overall (check with `uv run pytest --cov`)
+- [ ] Coverage ≥80% for new code (aim for 90%+ for core logic)
+- [ ] Tests use fixtures from `conftest.py` where appropriate
+- [ ] Jira API calls mocked with `autospec=True`
+
+#### Phase 4: Documentation
+- [ ] **README.md** updated if user-facing feature
+- [ ] **.claude/context.md** updated:
+  - [ ] "Implementierte Features" section
+  - [ ] Test statistics (`pytest --cov` output)
+  - [ ] Roadmap status
+  - [ ] Known limitations if any
+- [ ] **AI prompt updated** if CLI commands or models changed:
+  - [ ] Edit `budjira/cli/ai.py` template
+  - [ ] Regenerate: `uv run budjira -q ai usage-prompt --plain > .claude/ai-usage-prompt.md`
+  - [ ] Commit separately with `docs: update AI usage prompt`
+- [ ] **.claude/ai-prompt-supplements.md** extended if new workflows
+- [ ] **CLAUDE.md** updated if architectural changes
+- [ ] Inline code comments added for complex logic
+- [ ] CHANGELOG.md NOT updated (automatic via semantic-release)
+
+#### Phase 5: Pre-Commit Checks
+**Automatic (via pre-commit hooks):**
+- [ ] ruff format & lint pass
+- [ ] mypy type checking pass
+- [ ] bandit security scan pass
+- [ ] pytest with ≥70% coverage pass
+- [ ] commitizen commit message validation
+- [ ] Documentation update reminders shown
+
+**Manual checks before commit:**
+- [ ] No `print()` statements (use `logger` instead)
+- [ ] No `# TODO` comments (create GitHub Issue instead)
+- [ ] No hardcoded secrets/credentials
+- [ ] No unused imports
+- [ ] No commented-out code blocks
+- [ ] No `# type: ignore` without explanation comment
+
+#### Phase 6: Commit & Push
+- [ ] Conventional Commit message prepared:
+  - `feat:` for new features (MINOR bump: 1.4.0 → 1.5.0)
+  - `fix:` for bug fixes (PATCH bump: 1.4.0 → 1.4.1)
+  - `test:` for test additions (PATCH bump)
+  - `docs:` for documentation only (NO bump)
+  - `feat!:` or `fix!:` for breaking changes (MAJOR bump)
+- [ ] **NO Claude attribution** in commit message
+- [ ] Imperative mood ("Add feature" not "Added feature")
+- [ ] Describes WHAT and WHY, not HOW
+- [ ] Commit message is concise (1-2 sentences in subject)
+- [ ] Commit pushed to master branch
+- [ ] GitHub Actions CI passes (green checkmark)
+
+#### Phase 7: Post-Release
+- [ ] Semantic release created automatically (if `feat`/`fix` commit)
+- [ ] Release notes reviewed on GitHub Releases
+- [ ] **.claude/context.md** updated with new version number
+- [ ] Related GitHub Issue closed with link to release
+- [ ] `uv.lock` synced if needed (`uv sync`)
+
+---
+
+### Documentation Update Matrix
+
+Use this matrix to determine which documentation files need updates based on the type of change:
+
+| Change Type | README.md | CLAUDE.md | context.md | ai-usage-prompt | ai-prompt-supplements |
+|-------------|-----------|-----------|------------|-----------------|----------------------|
+| **New CLI command** | ✅ Yes | ✅ If architectural | ✅ Yes | ✅ Yes | ✅ Yes (workflows) |
+| **New CLI flags** | ✅ If user-facing | ❌ No | ✅ Yes | ✅ Yes | ✅ If best practice |
+| **Backend/Core change** | ❌ No | ✅ If pattern change | ✅ Yes | ❌ No | ❌ No |
+| **New model** | ❌ No | ✅ If important | ✅ Yes | ❌ No | ❌ No |
+| **Test addition** | ❌ No | ❌ No | ✅ Yes (stats) | ❌ No | ❌ No |
+| **Bug fix** | ❌ No | ❌ No | ✅ If significant | ❌ No | ❌ No |
+| **Breaking change** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Dependency update** | ❌ No | ✅ If major | ✅ If major | ❌ No | ❌ No |
+
+**Quick Rules:**
+- **context.md**: Always update for any significant change
+- **README.md**: Only for user-facing features
+- **AI prompt**: Only when CLI or models change
+- **CLAUDE.md**: Only for architectural or process changes
+
+---
+
+### Testing Requirements by Feature Type
+
+#### CLI Commands (`budjira/cli/`)
+**Required Tests:**
+- ✅ Command execution with valid inputs
+- ✅ Command with all flag combinations
+- ✅ Error handling (missing args, invalid input)
+- ✅ Interactive mode (mock `typer.prompt()` and `typer.confirm()`)
+- ✅ Non-interactive mode
+- ✅ Rich Console output (verify key elements present)
+- ✅ Connection resolution (`--connection` flag)
+
+**Tools:** `typer.testing.CliRunner`, `pytest-mock`, `unittest.mock.patch`
+
+**Target Coverage:** 85%+
+
+**Example:**
+```python
+def test_command_with_valid_input(mock_jira_client):
+    runner = CliRunner()
+    result = runner.invoke(app, ["command", "ARG"])
+    assert result.exit_code == 0
+    assert "Expected output" in result.stdout
+```
+
+---
+
+#### Core Logic (`budjira/core/`)
+**Required Tests:**
+- ✅ Happy path with valid data
+- ✅ All method parameters tested (optional/required)
+- ✅ Error scenarios (API errors, network issues, 404/403/401)
+- ✅ Custom exceptions raised correctly
+- ✅ Logging calls present (check with `caplog` fixture)
+- ✅ Jira API calls mocked with `autospec=True`
+
+**Tools:** `unittest.mock`, `pytest` fixtures, `caplog`
+
+**Target Coverage:** 90%+
+
+**Example:**
+```python
+@patch("budjira.core.jira_client.JIRA", autospec=True)
+def test_get_issue(mock_jira):
+    client = JiraClient(...)
+    issue = client.get_issue("PROJ-123")
+    mock_jira.return_value.issue.assert_called_once_with("PROJ-123")
+```
+
+---
+
+#### Models (`budjira/models/`)
+**Required Tests:**
+- ✅ Valid data parsing
+- ✅ Invalid data raises `ValidationError`
+- ✅ Optional fields use default values
+- ✅ Serialization works (`dict()`, `model_dump()`)
+- ✅ Custom validators (if any)
+
+**Tools:** Pydantic validation testing
+
+**Target Coverage:** 100%
+
+**Example:**
+```python
+def test_model_valid_data():
+    data = {"field1": "value", "field2": 123}
+    model = MyModel(**data)
+    assert model.field1 == "value"
+
+def test_model_invalid_data():
+    with pytest.raises(ValidationError):
+        MyModel(field1="invalid")
+```
+
+---
+
+#### Utils (`budjira/utils/`)
+**Required Tests:**
+- ✅ Pure function tests (input → output)
+- ✅ Edge cases (empty string, None, invalid input)
+- ✅ Error handling (raise appropriate exceptions)
+- ✅ Integration with dependencies (mocked)
+
+**Target Coverage:** 95%+
+
+**Example:**
+```python
+def test_parse_time_string():
+    assert parse_time_string("1h") == 60
+    assert parse_time_string("2h30m") == 150
+    with pytest.raises(ValueError):
+        parse_time_string("invalid")
+```
+
+---
+
+### Definition of Done
+
+A feature is considered **DONE** when ALL of the following are met:
+
+#### Code Quality
+- [ ] Implementation complete in correct module
+- [ ] Type hints on all functions/methods (mypy strict passes)
+- [ ] Docstrings on all public APIs (Google style)
+- [ ] Error handling with custom exceptions
+- [ ] Logging added (`logger.info`/`debug`)
+- [ ] No `# TODO` comments (moved to GitHub Issues)
+- [ ] No hardcoded values (use config/constants)
+- [ ] No `print()` statements (use logger or Rich Console)
+
+#### Testing
+- [ ] Unit tests written (pytest)
+- [ ] Integration tests mocked (no live API)
+- [ ] Edge cases covered
+- [ ] Error paths tested
+- [ ] Coverage ≥70% overall
+- [ ] Coverage ≥80% for new code
+- [ ] All tests pass locally
+
+#### Quality Checks
+- [ ] `ruff format` and `ruff check` pass
+- [ ] `mypy --strict` passes
+- [ ] `bandit` security scan passes
+- [ ] All pre-commit hooks pass
+- [ ] No `# type: ignore` without explanation
+
+#### Documentation
+- [ ] README.md updated (if user-facing)
+- [ ] .claude/context.md updated (stats, status, roadmap)
+- [ ] AI prompt updated (if CLI/models changed)
+- [ ] Inline comments for complex logic
+
+#### Release
+- [ ] Conventional commit message (no Claude attribution)
+- [ ] Pushed to master
+- [ ] CI/CD pipeline green
+- [ ] Semantic release created (if `feat`/`fix`)
+- [ ] GitHub Issue closed with release link
+
+---
+
+### Quick Pre-Commit Checklist
+
+Run this mental checklist **BEFORE** running `git commit`:
+
+#### Code Cleanup
+- [ ] No `print()` statements (use `logger` instead)
+- [ ] No `# TODO` comments (create GitHub Issue)
+- [ ] No hardcoded secrets/credentials
+- [ ] No unused imports
+- [ ] No commented-out code
+- [ ] No debug breakpoints (`import pdb; pdb.set_trace()`)
+
+#### Documentation
+- [ ] If CLI changed → AI prompt updated?
+- [ ] If new feature → context.md updated?
+- [ ] If user-facing → README.md updated?
+
+#### Testing
+- [ ] `uv run pytest --cov` passes locally
+- [ ] New tests added for new code
+- [ ] Coverage not decreased
+
+#### Commit Message
+- [ ] Conventional format (`feat`/`fix`/`docs`/`test`/`chore`)
+- [ ] **NO** Claude attribution
+- [ ] Imperative mood ("Add" not "Added")
+- [ ] Describes WHAT and WHY, not HOW
+
+---
+
+### Session Start Checklist (for Claude)
+
+**Automated via `scripts/session_start.py`:**
+
+Run at the beginning of each development session:
+```bash
+uv run python scripts/session_start.py
+```
+
+This script automatically checks:
+- [ ] Current project version
+- [ ] Git status (clean/dirty)
+- [ ] Current branch
+- [ ] Recent commits (last 3)
+- [ ] Open GitHub Issues
+- [ ] Latest release
+
+**Manual checks after running script:**
+- [ ] Review open issues: Are there feature requests?
+- [ ] Check if uncommitted changes need to be committed
+- [ ] Verify no merge conflicts or issues
+- [ ] Understand user's intent before starting work
+
+**During development:**
+- [ ] Use `TodoWrite` tool to track progress
+- [ ] Update user regularly on progress
+- [ ] Ask clarifying questions if requirements unclear
+- [ ] Write tests alongside implementation
+- [ ] Run `uv run pytest` frequently
+
+---
+
+### Post-Release Checklist
+
+After semantic-release creates a new release (automatic on push to master):
+
+#### Verify Release
+- [ ] Check GitHub Release created: `gh release list`
+- [ ] Verify CI/CD success: `gh run list --limit 1`
+- [ ] Review release notes on GitHub Releases page
+- [ ] Check version number is correct
+
+#### Update Documentation
+- [ ] Update `.claude/context.md`:
+  - [ ] Current Version section
+  - [ ] Release Status
+  - [ ] Implementierte Features (if new feature)
+  - [ ] Updated test statistics
+  - [ ] Updated coverage stats
+- [ ] Commit context update: `docs: update project context to vX.Y.Z`
+
+#### Cleanup
+- [ ] Close related GitHub Issues with release link
+- [ ] Sync `uv.lock` if needed: `uv sync`
+- [ ] Commit lock file if changed: `chore(deps): update uv.lock to vX.Y.Z`
+- [ ] Push final commits
+
+#### Verification
+- [ ] Install released version: `uvx budjira@latest --version`
+- [ ] Test basic commands work
+- [ ] Check PyPI page (if publishing enabled)

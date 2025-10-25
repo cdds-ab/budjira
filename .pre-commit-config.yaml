@@ -67,6 +67,14 @@ repos:
         pass_filenames: false
         files: ^(budjira/cli/.*\.py|budjira/models/.*\.py)$
 
+      # Documentation update reminders - Remind about doc updates based on changes
+      - id: check-documentation-updates
+        name: documentation update reminders
+        entry: python scripts/check_documentation_updates.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
   # Standard pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0

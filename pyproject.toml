@@ -183,7 +183,7 @@ exclude_lines = [
 
 # Bandit configuration
 [tool.bandit]
-exclude_dirs = ["tests", ".venv"]
+exclude_dirs = ["tests", ".venv", "scripts"]
 skips = ["B101"]  # assert_used - we use asserts in tests
 
 # Commitizen configuration
