@@ -945,7 +945,7 @@ class TestJiraClientEpic:
 
         client = JiraClient(connection, "test-token")
         with pytest.raises(
-            JiraAPIError, match="Epic linking failed. Neither 'parent' field nor 'Epic Link' custom field found"
+            JiraAPIError, match=r"Epic linking failed\. Neither 'parent' field nor 'Epic Link' custom field found"
         ):
             client.link_to_epic("TEST-123", "TEST-100")
 
