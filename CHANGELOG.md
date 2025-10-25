@@ -1,6 +1,33 @@
 # CHANGELOG
 
 
+## v1.5.2 (2025-10-25)
+
+### Bug Fixes
+
+- Support both modern and legacy epic linking in Jira Cloud
+  ([`b883bc5`](https://github.com/cdds-ab/budjira/commit/b883bc5c5962adb38d32c0a6d02905d6a2290d58))
+
+Fixes #2 - Epic linking now works with both team-managed and company-managed projects
+
+Modern Jira Cloud team-managed projects use the 'parent' field for epic relationships, while older
+  company-managed projects use the legacy 'Epic Link' custom field. This fix implements a two-step
+  approach:
+
+1. Try modern 'parent' field first (works in most Jira Cloud instances) 2. Fall back to legacy 'Epic
+  Link' custom field if parent fails
+
+Changes: - link_to_epic(): Try parent field, fallback to Epic Link custom field - get_epic_issues():
+  Try parent JQL query, fallback to Epic Link JQL
+
+Tests: - Added test_link_to_epic_success_modern for parent field - Added
+  test_link_to_epic_success_legacy for Epic Link fallback - Updated test_link_to_epic_no_epic_field
+  for both failure cases - Added test_get_epic_issues_modern for parent JQL - Added
+  test_get_epic_issues_legacy_fallback for Epic Link JQL
+
+All 325 tests pass, coverage increased to 81.38%.
+
+
 ## v1.5.1 (2025-10-25)
 
 ### Bug Fixes
