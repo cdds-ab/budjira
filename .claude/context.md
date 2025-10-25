@@ -11,15 +11,16 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.5.3 (Released: 2025-10-25)
+- **Current Version**: v1.5.5 (Released: 2025-10-25)
 - **Branch**: master
-- **Status**: ✅ **All features stable, no open issues**
+- **Status**: ✅ **All features stable, docs complete, no open issues**
 - **Recent Releases**:
+  - v1.5.5 (2025-10-25): Regex pattern fix in tests (RUF043)
+  - v1.5.4 (2025-10-25): Complete AI usage prompt with time tracking docs
   - v1.5.3 (2025-10-25): GitHub API rate limit fix for update checks
   - v1.5.2 (2025-10-25): Epic linking compatibility (modern + legacy)
   - v1.5.1 (2025-10-25): Bandit security fix
   - v1.5.0 (2025-10-25): Time Tracking Feature
-  - v1.4.2 (2025-10-12): Service Release
 
 ### ✅ RELEASED: Recent Features (v1.5.x)
 
@@ -906,12 +907,14 @@ docs: update installation instructions
 
 ---
 
-**Letzte Aktualisierung**: 2025-10-25 11:45 (nach v1.5.3 Release - Update Check Fix)
+**Letzte Aktualisierung**: 2025-10-25 11:55 (nach v1.5.5 Release - AI Docs Complete)
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
 
 **Recent Session Summary** (2025-10-25):
 - ✅ Fixed Bug #2: Epic linking compatibility (v1.5.2)
 - ✅ Fixed Update Check: GitHub API rate limiting (v1.5.3)
+- ✅ Complete AI usage prompt with time tracking docs (v1.5.4)
+- ✅ Fixed RUF043 regex pattern in tests (v1.5.5)
 - ✅ All Issues closed (#1 Time Tracking, #2 Epic Linking)
 - ✅ 325 tests passing, 81.54% coverage
-- 📊 Status: Production-ready, all features stable
+- 📊 Status: Production-ready, all features documented, docs complete
