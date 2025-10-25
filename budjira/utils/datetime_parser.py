@@ -67,7 +67,7 @@ def parse_datetime_string(datetime_str: str) -> datetime:
 
     # Validate: not in the future
     # At this point, result is guaranteed to be a datetime (not None)
-    assert result is not None
+    assert result is not None  # nosec B101
     if result > datetime.now():
         raise ValidationError(f"Datetime cannot be in the future: {result.strftime('%Y-%m-%d %H:%M')}")
 
