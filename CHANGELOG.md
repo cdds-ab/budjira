@@ -1,6 +1,34 @@
 # CHANGELOG
 
 
+## v1.6.7 (2025-10-26)
+
+### Code Style
+
+- Fix ruff formatting in test_tempo.py
+  ([`5ed5f68`](https://github.com/cdds-ab/budjira/commit/5ed5f68942d17b1ab9ae47d01d8846f687ea30bb))
+
+Fixes CI failures since commit 38387bc where test_tempo.py was not correctly formatted. The assert
+  statement formatting was incorrect:
+
+Before: assert ( call_kwargs["author_account_id"] == "557058:abc123def456" ), "error message"
+
+After: assert call_kwargs["author_account_id"] == "557058:abc123def456", ( "error message" )
+
+This fix resolves 4 consecutive CI failures on ruff format check.
+
+### Documentation
+
+- Remove misleading "In Progress" status for Smart Caching
+  ([`c9cc51f`](https://github.com/cdds-ab/budjira/commit/c9cc51f4d95af0c74c3d1372e92e8209b56b351b))
+
+Smart Caching feature was never implemented - only infrastructure skeleton exists (cache_dir,
+  connection flags, CacheError class). The only actual caching is for update checks (24h TTL).
+
+Moved "Smart caching with dirty detection" from "In Progress" to "Planned" section in both README.md
+  and .claude/context.md to accurately reflect the project status.
+
+
 ## v1.6.6 (2025-10-26)
 
 ### Bug Fixes
