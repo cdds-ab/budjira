@@ -200,3 +200,40 @@ class TestSettings:
             settings2 = get_settings()
 
             assert settings1 is settings2
+
+    def test_tempo_enabled_persistence(self, temp_settings: Settings) -> None:
+        """Test that tempo_enabled field is correctly saved and loaded (Bug #4 regression test)."""
+        # Create connection with Tempo enabled
+        connection = Connection(
+            name="Test Tempo",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+            tempo_enabled=True,
+        )
+
+        # Save connection
+        temp_settings.add_connection(connection)
+
+        # Load connections again to verify persistence
+        loaded = temp_settings.load_connections()
+
+        assert len(loaded.connections) == 1
+        loaded_conn = loaded.connections[0]
+        assert loaded_conn.tempo_enabled is True, "tempo_enabled should be persisted to TOML"
+
+    def test_tempo_disabled_by_default(self, temp_settings: Settings) -> None:
+        """Test that tempo_enabled defaults to False when not specified."""
+        connection = Connection(
+            name="Test Default",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+        )
+
+        temp_settings.add_connection(connection)
+        loaded = temp_settings.load_connections()
+
+        assert len(loaded.connections) == 1
+        loaded_conn = loaded.connections[0]
+        assert loaded_conn.tempo_enabled is False, "tempo_enabled should default to False"

@@ -202,6 +202,16 @@ def show_connection(
     cred_status = "[green]Stored[/green]" if has_creds else "[red]Missing[/red]"
     console.print(f"[bold]API Token:[/bold]    {cred_status}")
 
+    # Check Tempo integration
+    if connection.tempo_enabled:
+        tempo_key = connection.get_tempo_credential_key()
+        has_tempo_token = credential_store.get_credential(tempo_key) is not None
+        tempo_token_status = "[green]Stored[/green]" if has_tempo_token else "[red]Missing[/red]"
+        console.print("[bold]Tempo:[/bold]        [green]Enabled[/green]")
+        console.print(f"[bold]Tempo Token:[/bold]  {tempo_token_status}")
+    else:
+        console.print("[bold]Tempo:[/bold]        [dim]Disabled[/dim]")
+
     # Check if this is the default connection
     is_default = settings.global_config.active_connection == connection.name
     if is_default:

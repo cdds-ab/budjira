@@ -155,6 +155,7 @@ class Settings:
                     "is_active": conn.is_active,
                     "cache_enabled": conn.cache_enabled,
                     "cache_ttl_hours": conn.cache_ttl_hours,
+                    "tempo_enabled": conn.tempo_enabled,
                 }
                 for conn in connections.connections
             ]
