@@ -1,6 +1,36 @@
 # CHANGELOG
 
 
+## v1.6.4 (2025-10-26)
+
+### Bug Fixes
+
+- Use Jira myself() API to get accountId for Tempo worklogs
+  ([`38387bc`](https://github.com/cdds-ab/budjira/commit/38387bc5a0aaa37e171b0b0fae005310bcada5ad))
+
+Fixed Bug #5 where tempo log failed with 400 Bad Request from Tempo API.
+
+Root cause: Code used current_user() which returns username, but Tempo API requires accountId from
+  the myself() endpoint.
+
+Changes: - Changed from jira_client.client.current_user() to myself() - Extract accountId from
+  myself() response dict - Updated test fixtures to mock myself() instead of current_user() - Added
+  regression test: test_tempo_log_passes_correct_account_id
+
+This fix enables tempo log command to work correctly: budjira tempo log PROJ-123 30m --comment
+  "Development work"
+
+Closes #5
+
+### Documentation
+
+- Update project context to v1.6.3 with bugfixes
+  ([`93c7643`](https://github.com/cdds-ab/budjira/commit/93c76435af13317cd0f2883db3b26b6452790f8c))
+
+- Update project context to v1.6.4 with Bug #5 fix
+  ([`ee22c5b`](https://github.com/cdds-ab/budjira/commit/ee22c5b73be604532096ff0d3c0d6e42729a3f2d))
+
+
 ## v1.6.3 (2025-10-26)
 
 ### Bug Fixes
