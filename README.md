@@ -29,6 +29,7 @@
 - 🎯 **Epic Management**: Link stories to epics and view epic progress
 - ⏱️ **Time Tracking**: Comprehensive worklog management and time estimates
 - 🎼 **Tempo Integration**: Full support for Tempo Timesheets API for enterprise time tracking
+- 📊 **JSON Output**: Machine-readable JSON format for automation and integration with other tools
 
 ## 📦 Installation
 
@@ -396,6 +397,59 @@ budjira tempo accounts
 - Use `budjira tempo` commands when your organization uses Tempo for time tracking
 - Use `budjira worklog` commands for standard Jira time tracking
 - Tempo integration is optional and requires a separate API token
+
+### 10. JSON Output Format
+
+budjira supports JSON output for automation and integration with other tools (e.g., reporting systems, data analysis).
+
+**Usage:**
+
+```bash
+# Global --format flag (works with all list-based commands)
+budjira --format json tempo worklogs --from 2025-10-01 --to 2025-10-31
+
+# Output to file for processing
+budjira --format json tempo worklogs PROJ-123 > worklogs.json
+
+# Pipe to jq for analysis
+budjira --format json tempo worklogs --from 2025-10-01 | jq '.worklogs[].time_spent_seconds' | jq -s add
+```
+
+**Example JSON Output:**
+
+```json
+{
+  "total": 2,
+  "worklogs": [
+    {
+      "id": 619,
+      "issue_key": "PRD-1",
+      "epic_key": "PRD-1",
+      "epic_name": "budjira Development",
+      "time_spent_seconds": 900,
+      "time_spent_display": "15m",
+      "date": "2025-10-26",
+      "author_account_id": "712020:5...",
+      "author_display_name": "Fred Thiele",
+      "description": "Testing budjira Tempo integration"
+    }
+  ]
+}
+```
+
+**Features:**
+- ✅ Machine-readable JSON output
+- ✅ Epic information included (epic_key, epic_name)
+- ✅ Performance mode with `--no-epic` flag
+- ✅ Works with all list-based commands
+- ✅ Pipes and redirection friendly
+
+**Performance Note:**
+Epic information requires additional Jira API calls. Use `--no-epic` for faster output:
+
+```bash
+budjira --format json tempo worklogs --no-epic
+```
 
 ## 🚧 Coming Soon
 

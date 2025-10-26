@@ -21,6 +21,7 @@ from budjira.utils.errors import (
     PermissionError,
     ValidationError,
 )
+from budjira.utils.formatter import OutputFormatter
 from budjira.utils.time_parser import parse_time_string
 
 console = Console()
@@ -165,6 +166,7 @@ def tempo_log_worklog(
 
 @app.command(name="worklogs")
 def tempo_list_worklogs(
+    ctx: typer.Context,
     issue_key: Annotated[
         str | None,
         typer.Argument(help="Issue key to filter worklogs (optional)"),
@@ -189,6 +191,10 @@ def tempo_list_worklogs(
             envvar="BUDJIRA_CONNECTION",
         ),
     ] = None,
+    no_epic: Annotated[
+        bool,
+        typer.Option("--no-epic", help="Skip epic information (faster, JSON format only)"),
+    ] = False,
 ) -> None:
     """List Tempo worklog entries.
 
@@ -213,11 +219,18 @@ def tempo_list_worklogs(
         from_date_obj = date.fromisoformat(from_date) if from_date else None
         to_date_obj = date.fromisoformat(to_date) if to_date else None
 
-        # Convert issue_key to issue_id if provided (Tempo API requires numeric ID)
-        issue_id = None
-        if issue_key:
+        # Get format from context
+        output_format = ctx.obj.get("format", "table") if ctx.obj else "table"
+
+        # Get Jira client only if needed (for issue_id conversion or JSON epic fetching)
+        jira_client = None
+        if issue_key or OutputFormatter.is_json_format(output_format):
             connection = get_active_connection(connection_name)
             jira_client = JiraClient.from_connection(connection)
+
+        # Convert issue_key to issue_id if provided (Tempo API requires numeric ID)
+        issue_id = None
+        if issue_key and jira_client:
             issue = jira_client.client.issue(issue_key)
             issue_id = int(issue.id)
 
@@ -230,34 +243,87 @@ def tempo_list_worklogs(
         )
 
         if not worklogs:
-            console.print("[yellow]No worklogs found matching the criteria[/yellow]")
+            if OutputFormatter.is_json_format(output_format):
+                OutputFormatter.output_json({"total": 0, "worklogs": []})
+            else:
+                console.print("[yellow]No worklogs found matching the criteria[/yellow]")
             return
 
-        # Create table
-        table = Table(title=f"Tempo Worklogs ({len(worklogs)} entries)")
-        table.add_column("ID", style="cyan")
-        table.add_column("Issue", style="magenta")
-        table.add_column("Time Spent", style="green")
-        table.add_column("Date", style="blue")
-        table.add_column("Author", style="yellow")
-        table.add_column("Description", style="white", max_width=40)
+        if OutputFormatter.is_json_format(output_format) and jira_client:
+            # JSON output - fetch epic information if not disabled
+            worklog_dicts = []
+            epic_cache: dict[str, tuple[str, str] | None] = {}  # Cache: issue_key -> (epic_key, epic_name)
 
-        for worklog in worklogs:
-            # Convert seconds to hours/minutes
-            hours = worklog.timeSpentSeconds // 3600
-            minutes = (worklog.timeSpentSeconds % 3600) // 60
-            time_display = f"{hours}h {minutes}m" if hours else f"{minutes}m"
+            for worklog in worklogs:
+                # Convert seconds to hours/minutes display
+                hours = worklog.timeSpentSeconds // 3600
+                minutes = (worklog.timeSpentSeconds % 3600) // 60
+                time_display = f"{hours}h {minutes}m" if hours else f"{minutes}m"
 
-            table.add_row(
-                str(worklog.tempoWorklogId),
-                worklog.issue.key or "[dim]N/A[/dim]",
-                time_display,
-                worklog.startDate.strftime("%Y-%m-%d"),
-                worklog.author.displayName or worklog.author.accountId[:8],
-                worklog.description or "",
-            )
+                # Base worklog dict
+                worklog_dict = {
+                    "id": worklog.tempoWorklogId,
+                    "issue_key": worklog.issue.key,
+                    "time_spent_seconds": worklog.timeSpentSeconds,
+                    "time_spent_display": time_display,
+                    "date": worklog.startDate.isoformat(),
+                    "author_account_id": worklog.author.accountId,
+                    "author_display_name": worklog.author.displayName,
+                    "description": worklog.description or "",
+                }
 
-        console.print(table)
+                # Add epic information if enabled and issue has a key
+                if not no_epic and worklog.issue.key:
+                    if worklog.issue.key not in epic_cache:
+                        # Fetch epic info and cache it
+                        try:
+                            epic_info = jira_client.get_issue_epic(worklog.issue.key)
+                            epic_cache[worklog.issue.key] = epic_info
+                        except Exception:
+                            # If epic fetch fails, cache None
+                            epic_cache[worklog.issue.key] = None
+
+                    # Add epic fields
+                    epic_info = epic_cache.get(worklog.issue.key)
+                    if epic_info:
+                        worklog_dict["epic_key"] = epic_info[0]
+                        worklog_dict["epic_name"] = epic_info[1]
+                    else:
+                        worklog_dict["epic_key"] = None
+                        worklog_dict["epic_name"] = None
+
+                worklog_dicts.append(worklog_dict)
+
+            # Output JSON
+            output = {"total": len(worklog_dicts), "worklogs": worklog_dicts}
+            OutputFormatter.output_json(output)
+
+        else:
+            # Table output (existing behavior)
+            table = Table(title=f"Tempo Worklogs ({len(worklogs)} entries)")
+            table.add_column("ID", style="cyan")
+            table.add_column("Issue", style="magenta")
+            table.add_column("Time Spent", style="green")
+            table.add_column("Date", style="blue")
+            table.add_column("Author", style="yellow")
+            table.add_column("Description", style="white", max_width=40)
+
+            for worklog in worklogs:
+                # Convert seconds to hours/minutes
+                hours = worklog.timeSpentSeconds // 3600
+                minutes = (worklog.timeSpentSeconds % 3600) // 60
+                time_display = f"{hours}h {minutes}m" if hours else f"{minutes}m"
+
+                table.add_row(
+                    str(worklog.tempoWorklogId),
+                    worklog.issue.key or "[dim]N/A[/dim]",
+                    time_display,
+                    worklog.startDate.strftime("%Y-%m-%d"),
+                    worklog.author.displayName or worklog.author.accountId[:8],
+                    worklog.description or "",
+                )
+
+            console.print(table)
 
     except (ConnectionError, AuthenticationError, PermissionError) as e:
         console.print(f"❌ [red]Error:[/red] {e}")

@@ -82,6 +82,7 @@ def version_callback(value: bool) -> None:
 
 @app.callback()
 def main(
+    ctx: typer.Context,
     version: bool = typer.Option(  # noqa: ARG001
         False,
         "--version",
@@ -102,20 +103,29 @@ def main(
         "-d",
         help="Enable debug output",
     ),
+    output_format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format: table (default) or json",
+    ),
 ) -> None:
     """budjira - Your Jira buddy on the command line.
 
     A tool for efficient Jira interaction: search tickets, create issues, log time, and more.
     """
-    # Show header unless in quiet mode
-    if not quiet:
+    # Store format in context for subcommands
+    ctx.obj = {"format": output_format, "debug": debug, "quiet": quiet}
+
+    # Show header unless in quiet mode or JSON format
+    if not quiet and output_format != "json":
         print_header(console, quiet=False)
 
-    if debug:
+    if debug and output_format != "json":
         console.print("[dim]Debug mode enabled[/dim]")
 
     # Check for updates if enabled (skip for update command itself)
-    if not quiet and "update" not in sys.argv:
+    if not quiet and "update" not in sys.argv and output_format != "json":
         _check_for_updates_on_startup()
 
 

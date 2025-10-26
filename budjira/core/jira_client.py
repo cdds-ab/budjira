@@ -664,6 +664,63 @@ class JiraClient:
         except Exception as e:
             raise JiraAPIError(f"Failed to fetch epic issues: {e}") from e
 
+    def get_issue_epic(self, issue_key: str) -> tuple[str, str] | None:
+        """Get epic information for an issue.
+
+        Fetches the parent epic key and name for a given issue.
+        Supports both modern (parent field) and legacy (Epic Link) approaches.
+
+        Args:
+            issue_key: Issue key (e.g., PROJ-123)
+
+        Returns:
+            Tuple of (epic_key, epic_name) if issue has an epic, None otherwise
+
+        Raises:
+            InvalidIssueError: If issue not found
+            JiraAPIError: If retrieval fails
+        """
+        try:
+            logger.debug(f"Fetching epic for issue {issue_key}")
+
+            # Get issue with parent and epic link fields
+            jira_issue = self.client.issue(issue_key, fields="parent,customfield_*,summary")
+
+            # Try modern approach first (parent field)
+            if hasattr(jira_issue.fields, "parent") and jira_issue.fields.parent:
+                parent = jira_issue.fields.parent
+                epic_key = parent.key
+                epic_name = parent.fields.summary if hasattr(parent.fields, "summary") else epic_key
+                logger.debug(f"Found epic via parent field: {epic_key}")
+                return (epic_key, epic_name)
+
+            # Try legacy Epic Link custom field
+            for field_name in dir(jira_issue.fields):
+                if "epic" in field_name.lower() and "link" in field_name.lower():
+                    epic_key = getattr(jira_issue.fields, field_name, None)
+                    if epic_key:
+                        # Fetch epic details for name
+                        try:
+                            epic_issue = self.client.issue(epic_key, fields="summary")
+                            epic_name = epic_issue.fields.summary
+                        except Exception:
+                            epic_name = epic_key  # Fallback to key if fetch fails
+                        logger.debug(f"Found epic via Epic Link field: {epic_key}")
+                        return (epic_key, epic_name)
+
+            # No epic found
+            logger.debug(f"No epic found for issue {issue_key}")
+            return None
+
+        except JIRAError as e:
+            if e.status_code == 404:
+                raise InvalidIssueError(
+                    f"Issue '{issue_key}' not found. Check that the issue exists and you have permission to view it."
+                ) from e
+            raise JiraAPIError(f"Failed to fetch epic for issue {issue_key}: {e}") from e
+        except Exception as e:
+            raise JiraAPIError(f"Failed to fetch epic for issue {issue_key}: {e}") from e
+
     @classmethod
     def from_connection(cls, connection: Connection) -> JiraClient:
         """Create JiraClient from connection configuration.

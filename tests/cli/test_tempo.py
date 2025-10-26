@@ -118,9 +118,9 @@ def test_tempo_log_passes_correct_account_id(mock_tempo_connection, mock_tempo_c
     # CRITICAL: Verify that create_worklog was called with the correct accountId
     mock_tempo_client.create_worklog.assert_called_once()
     call_kwargs = mock_tempo_client.create_worklog.call_args[1]
-    assert call_kwargs["author_account_id"] == "557058:abc123def456", (
-        "author_account_id must be the Jira accountId from myself() API, not the username from current_user()"
-    )
+    assert (
+        call_kwargs["author_account_id"] == "557058:abc123def456"
+    ), "author_account_id must be the Jira accountId from myself() API, not the username from current_user()"
 
 
 def test_tempo_log_uses_issue_id_not_key(mock_tempo_connection, mock_tempo_client, mock_jira_client):
@@ -426,3 +426,155 @@ def test_tempo_accounts_empty(mock_tempo_connection, mock_tempo_client):
 
     assert result.exit_code == 0
     assert "No Tempo accounts found" in result.stdout
+
+
+# JSON Output Tests (Feature Request #8)
+
+
+def test_tempo_worklogs_json_output(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test tempo worklogs with JSON output format."""
+    import json
+
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    # Mock worklogs
+    mock_worklogs = [
+        TempoWorklog(
+            self="https://api.tempo.io/worklogs/100",
+            tempoWorklogId=100,
+            issue=TempoIssue(self="https://api.tempo.io/issues/1", key="TEST-1"),
+            timeSpentSeconds=3600,
+            startDate=date(2025, 10, 26),
+            startTime="09:00:00",
+            description="Test work",
+            createdAt=datetime(2025, 10, 26, 9, 0),
+            updatedAt=datetime(2025, 10, 26, 9, 0),
+            author=TempoAuthor(self="https://api.tempo.io/users/1", accountId="123"),
+        ),
+    ]
+    mock_tempo_client.get_worklogs.return_value = mock_worklogs
+
+    # Mock epic fetching
+    mock_jira_client.from_connection.return_value.get_issue_epic.return_value = ("EPIC-1", "Test Epic")
+
+    # Run command with --format json
+    result = runner.invoke(app, ["--format", "json", "tempo", "worklogs"])
+
+    assert result.exit_code == 0
+
+    # Parse JSON output
+    output = json.loads(result.stdout)
+    assert output["total"] == 1
+    assert len(output["worklogs"]) == 1
+
+    worklog = output["worklogs"][0]
+    assert worklog["id"] == 100
+    assert worklog["issue_key"] == "TEST-1"
+    assert worklog["time_spent_seconds"] == 3600
+    assert worklog["time_spent_display"] == "1h 0m"
+    assert worklog["date"] == "2025-10-26"
+    assert worklog["epic_key"] == "EPIC-1"
+    assert worklog["epic_name"] == "Test Epic"
+
+
+def test_tempo_worklogs_json_no_epic_flag(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test tempo worklogs JSON output with --no-epic flag (performance mode)."""
+    import json
+
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    # Mock worklogs
+    mock_worklogs = [
+        TempoWorklog(
+            self="https://api.tempo.io/worklogs/100",
+            tempoWorklogId=100,
+            issue=TempoIssue(self="https://api.tempo.io/issues/1", key="TEST-1"),
+            timeSpentSeconds=1800,
+            startDate=date(2025, 10, 26),
+            startTime="09:00:00",
+            description="Test work",
+            createdAt=datetime(2025, 10, 26, 9, 0),
+            updatedAt=datetime(2025, 10, 26, 9, 0),
+            author=TempoAuthor(self="https://api.tempo.io/users/1", accountId="123", displayName="Test User"),
+        ),
+    ]
+    mock_tempo_client.get_worklogs.return_value = mock_worklogs
+
+    # Run command with --format json --no-epic
+    result = runner.invoke(app, ["--format", "json", "tempo", "worklogs", "--no-epic"])
+
+    assert result.exit_code == 0
+
+    # Parse JSON output
+    output = json.loads(result.stdout)
+    assert output["total"] == 1
+
+    worklog = output["worklogs"][0]
+    assert worklog["id"] == 100
+    assert worklog["time_spent_display"] == "30m"
+    assert worklog["author_display_name"] == "Test User"
+    # Epic fields should not be present when --no-epic is used
+    assert "epic_key" not in worklog
+    assert "epic_name" not in worklog
+
+    # Verify get_issue_epic was NOT called (performance optimization)
+    mock_jira_client.from_connection.return_value.get_issue_epic.assert_not_called()
+
+
+def test_tempo_worklogs_json_empty_results(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test tempo worklogs JSON output with no results."""
+    import json
+
+    mock_tempo_client.get_worklogs.return_value = []
+
+    result = runner.invoke(app, ["--format", "json", "tempo", "worklogs"])
+
+    assert result.exit_code == 0
+
+    # Parse JSON output
+    output = json.loads(result.stdout)
+    assert output["total"] == 0
+    assert output["worklogs"] == []
+
+
+def test_tempo_worklogs_json_epic_caching(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test that epic information is cached when multiple worklogs have same issue."""
+    import json
+
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    # Mock 3 worklogs on the same issue
+    mock_worklogs = [
+        TempoWorklog(
+            self=f"https://api.tempo.io/worklogs/{i}",
+            tempoWorklogId=i,
+            issue=TempoIssue(self="https://api.tempo.io/issues/1", key="TEST-1"),
+            timeSpentSeconds=3600,
+            startDate=date(2025, 10, 26),
+            startTime="09:00:00",
+            description=f"Work {i}",
+            createdAt=datetime(2025, 10, 26, 9, 0),
+            updatedAt=datetime(2025, 10, 26, 9, 0),
+            author=TempoAuthor(self="https://api.tempo.io/users/1", accountId="123"),
+        )
+        for i in range(1, 4)
+    ]
+    mock_tempo_client.get_worklogs.return_value = mock_worklogs
+
+    # Mock epic fetching
+    mock_jira_client.from_connection.return_value.get_issue_epic.return_value = ("EPIC-1", "Test Epic")
+
+    # Run command
+    result = runner.invoke(app, ["--format", "json", "tempo", "worklogs"])
+
+    assert result.exit_code == 0
+
+    # Verify epic was fetched only ONCE (cached for subsequent worklogs)
+    assert mock_jira_client.from_connection.return_value.get_issue_epic.call_count == 1
+
+    # Parse JSON output - all worklogs should have epic info
+    output = json.loads(result.stdout)
+    assert output["total"] == 3
+    for worklog in output["worklogs"]:
+        assert worklog["epic_key"] == "EPIC-1"
+        assert worklog["epic_name"] == "Test Epic"
