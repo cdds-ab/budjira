@@ -927,9 +927,6 @@ types-requests = ">=2.32.4"     # Type stubs for requests
 - [x] AI usage prompt generation
 - [x] Shell completion (bash, zsh, fish)
 
-### In Progress 🚧
-- [ ] Smart caching with dirty detection
-
 ### Planned 📋
 - [ ] Comment management
 - [ ] Attachment upload/download

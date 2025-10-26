@@ -29,7 +29,6 @@
 - 🎯 **Epic Management**: Link stories to epics and view epic progress
 - ⏱️ **Time Tracking**: Comprehensive worklog management and time estimates
 - 🎼 **Tempo Integration**: Full support for Tempo Timesheets API for enterprise time tracking
-- 📦 **Smart Caching**: Optional offline-capable caching *(coming soon)*
 
 ## 📦 Installation
 
@@ -509,11 +508,9 @@ Found a bug? Have a feature request?
 - [x] Automatic update checks
 - [x] AI usage prompt generation
 
-### In Progress 🚧
-- [ ] Smart caching with dirty detection
-
 ### Planned 📋
 - [ ] E2E Testing with Atlassian Developer Cloud (see [#6](https://github.com/cdds-ab/budjira/issues/6))
+- [ ] Smart caching with dirty detection
 - [ ] Comment management
 - [ ] Attachment upload/download
 - [ ] Offline mode
