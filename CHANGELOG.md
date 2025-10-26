@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v1.6.3 (2025-10-26)
+
+### Bug Fixes
+
+- Handle tempo worklogs without issue key
+  ([`794c302`](https://github.com/cdds-ab/budjira/commit/794c3026c14751a87c654521153f87439b78dcd2))
+
+Fixed ValidationError when Tempo API returns worklogs without issue.key field.
+
+Changes: - Made TempoIssue.key optional (some worklogs may not have an issue) - Display "N/A" in
+  worklogs table when issue.key is None - Added tests for worklogs without issue key
+
+Resolves Pydantic validation error: "1 validation error for TempoWorklogList results.0.issue.key
+  Field required"
+
+
 ## v1.6.2 (2025-10-26)
 
 ### Bug Fixes
