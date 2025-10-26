@@ -707,6 +707,86 @@ budjira issue update PROJ-456 \
 
 ---
 
+## Tempo Timesheets Integration (Enterprise)
+
+For organizations using Tempo Timesheets instead of standard Jira time tracking.
+
+### Setup Tempo
+
+First-time setup for a connection:
+```bash
+budjira connect tempo-setup
+```
+
+This will:
+- Prompt for Tempo API token (create at Tempo → Settings → API Integration → Tokens)
+- Test the connection
+- Enable Tempo for the current connection
+- Store token securely (separate from Jira token)
+
+### Log Work to Tempo
+
+```bash
+# Basic worklog
+budjira tempo log PROJ-123 2h --comment "Development work"
+
+# With specific start time
+budjira tempo log PROJ-456 3h30m --started "2024-10-24 14:00" --comment "Client meeting"
+
+# Yesterday
+budjira tempo log PROJ-789 1h --started yesterday --comment "Bug fixing"
+```
+
+**Time Formats:** Same as standard worklog (2h, 30m, 2h30m, 1.5h)
+**Datetime Formats:** YYYY-MM-DD HH:MM, YYYY-MM-DD, today, yesterday
+
+### View Tempo Worklogs
+
+```bash
+# For specific issue
+budjira tempo worklogs PROJ-123
+
+# Date range filter
+budjira tempo worklogs --from 2024-10-01 --to 2024-10-31
+
+# Limit results
+budjira tempo worklogs --max 50
+```
+
+### Delete Tempo Worklog
+
+```bash
+# With confirmation
+budjira tempo delete-worklog 12345
+
+# Skip confirmation
+budjira tempo delete-worklog 12345 --force
+```
+
+### List Tempo Accounts
+
+Tempo accounts are used for billing and project tracking:
+```bash
+budjira tempo accounts
+```
+
+### When to Use Tempo vs Standard Jira
+
+**Use Tempo commands (`budjira tempo ...`) when:**
+- Organization uses Tempo Timesheets add-on
+- Need to track time against Tempo accounts for billing
+- Require enterprise-grade time tracking features
+- Tempo is installed in the Jira instance
+
+**Use standard worklog commands (`budjira worklog ...`) when:**
+- Using standard Jira time tracking
+- No Tempo add-on installed
+- Simple time tracking needs
+
+**Important:** Tempo requires a separate API token (different from Jira API token).
+
+---
+
 ## Error Handling
 
 ### Connection Errors
@@ -733,6 +813,23 @@ Error: Authentication failed. Check your API token.
 Invalid JQL:
 ```
 Error: Invalid JQL query: [Jira error message]
+```
+
+### Tempo Errors
+
+Tempo not enabled for connection:
+```
+Error: Tempo is not enabled for connection 'name'. Run 'budjira connect tempo-setup' to configure.
+```
+
+Tempo token not found:
+```
+Error: Tempo token not found for connection 'name'. Run 'budjira connect tempo-setup'.
+```
+
+Tempo authentication failed:
+```
+Error: Tempo authentication failed. Check your Tempo API token at Tempo → Settings → API Integration → Tokens
 ```
 
 ---

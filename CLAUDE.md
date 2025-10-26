@@ -67,31 +67,43 @@ budjira/
 ├── cli/              # Command-line interface layer (Typer commands)
 │   ├── __init__.py
 │   ├── main.py       # Main CLI entry point and global flags
-│   ├── connect.py    # Connection management commands
-│   ├── search.py     # Issue search commands
-│   ├── create.py     # Issue creation commands
-│   ├── time.py       # Time logging commands
-│   ├── logs.py       # Log viewing commands
-│   └── update.py     # Self-update commands
+│   ├── ai.py         # AI usage prompt generation
+│   ├── connect.py    # Connection management (+ tempo-setup)
+│   ├── create.py     # Issue creation (interactive + DoR templates)
+│   ├── dor.py        # Definition of Ready template management
+│   ├── epic.py       # Epic management commands
+│   ├── issue.py      # Issue updates (status, fields, labels, epic linking)
+│   ├── search.py     # Issue search (JQL + filters)
+│   ├── tempo.py      # Tempo Timesheets integration ✨ NEW v1.6.0
+│   ├── update.py     # Self-update commands
+│   └── worklog.py    # Worklog commands (add, list)
 ├── core/             # Core business logic
 │   ├── __init__.py
-│   ├── jira_client.py    # Wrapper around jira library
-│   ├── connection.py     # Connection/context management
-│   └── cache.py          # Optional caching layer
+│   └── jira_client.py    # Wrapper around jira library
+├── tempo/            # Tempo Timesheets integration ✨ NEW v1.6.0
+│   ├── __init__.py
+│   ├── client.py     # TempoClient - REST API integration
+│   └── models.py     # Pydantic models (TempoWorklog, TempoAccount)
 ├── config/           # Configuration management
 │   ├── __init__.py
-│   ├── settings.py       # Settings using pydantic-settings
-│   └── credentials.py    # Secure credential handling
+│   ├── settings.py   # Settings using pydantic-settings
+│   └── credentials.py    # Secure credential handling (+ key-based storage)
 ├── models/           # Pydantic data models
 │   ├── __init__.py
-│   ├── issue.py          # Issue models
-│   ├── connection.py     # Connection models
-│   └── config.py         # Configuration models
+│   ├── config.py     # GlobalConfig
+│   ├── connection.py # Connection, ConnectionList (+ tempo_enabled)
+│   ├── dor.py        # DoR templates and validation
+│   └── issue.py      # Issue, WorkLog, User, Status, IssueType, Priority
 ├── utils/            # Utilities
 │   ├── __init__.py
-│   ├── logging.py        # Logging configuration
-│   ├── version.py        # Version checking and updates
-│   └── errors.py         # Custom exceptions
+│   ├── banner.py     # ASCII art banner
+│   ├── connection.py # Connection resolution (3-tier priority)
+│   ├── datetime_parser.py  # Datetime parsing (ISO, today, yesterday)
+│   ├── dor_validator.py    # DoR template validation
+│   ├── editor.py     # Multi-line markdown editor
+│   ├── errors.py     # Custom exceptions
+│   ├── time_parser.py      # Time string parsing (1h, 30m, 2h30m)
+│   └── version.py    # Version checking via GitHub Releases
 └── __main__.py       # Entry point for `python -m budjira`
 ```
 
@@ -132,8 +144,8 @@ All errors produce helpful, actionable messages in English:
 
 **Core Layer:**
 - `JiraClient`: High-level interface to Jira API
-- `ConnectionManager`: Handles multiple connections, context switching
-- `CacheManager`: Optional SQLite-based caching with dirty detection
+- `TempoClient`: REST API client for Tempo Timesheets (v1.6.0+)
+- Connection management with multi-instance support
 
 **Configuration Layer:**
 - Pydantic models for type-safe configuration
