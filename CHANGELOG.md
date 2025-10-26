@@ -1,6 +1,33 @@
 # CHANGELOG
 
 
+## v1.7.0 (2025-10-26)
+
+### Features
+
+- **cli**: Add global JSON output format for automation
+  ([`26b659b`](https://github.com/cdds-ab/budjira/commit/26b659bf41f52ee68923dd8d64e2678d089433ac))
+
+Implements global --format flag (table|json) for all list-based commands with initial support for
+  tempo worklogs. Enables FoU reporting automation for Swedish tax compliance (Forsknings- och
+  utvecklingsavdrag).
+
+Key features: - Global --format/-f flag stored in Typer context - OutputFormatter utility with
+  Pydantic/datetime/Enum serialization - JiraClient.get_issue_epic() method with modern/legacy
+  fallback - tempo worklogs JSON output with epic_key/epic_name fields - In-memory epic caching to
+  minimize API calls - Optional --no-epic flag for performance mode - Auto-suppress banner/header in
+  JSON mode
+
+Output format for tempo worklogs: { "total": N, "worklogs": [ { "id": 123, "issue_key": "PROJ-1",
+  "epic_key": "PROJ-100", "epic_name": "Epic Title", "time_spent_seconds": 3600,
+  "time_spent_display": "1h", "date": "2025-10-26", "author_account_id": "...",
+  "author_display_name": "Name", "description": "Work description" } ] }
+
+Test coverage: 81.09% (399 tests passing) New tests: 22 formatter tests + 4 tempo JSON tests
+
+Closes #8
+
+
 ## v1.6.7 (2025-10-26)
 
 ### Code Style
