@@ -1,6 +1,36 @@
 # CHANGELOG
 
 
+## v1.6.1 (2025-10-26)
+
+### Bug Fixes
+
+- Persist tempo_enabled flag in connections.toml
+  ([`fd88a3e`](https://github.com/cdds-ab/budjira/commit/fd88a3e623122bfa2a9beabc924687d9147a2b31))
+
+Fixed Bug #4 where tempo-setup command succeeded but tempo commands failed with "Tempo is not
+  enabled for connection" error.
+
+Root cause: tempo_enabled field was not being serialized to TOML in save_connections() method.
+
+Changes: - Added tempo_enabled to TOML serialization in settings.py - Enhanced 'connect show'
+  command to display Tempo status - Added regression tests for tempo_enabled persistence
+
+Closes #4
+
+### Testing
+
+- Add comprehensive tests for tempo-setup command
+  ([`d69a034`](https://github.com/cdds-ab/budjira/commit/d69a03471f3b4e5eaf4fd08102c06077adea21be))
+
+Added 4 tests to prevent regression of Bug #4: - test_tempo_setup_success_and_persistence: Verifies
+  tempo_enabled persists to TOML - test_tempo_setup_with_existing_token_replacement: Tests token
+  replacement flow - test_tempo_setup_api_failure_abort: Tests API failure handling -
+  test_tempo_setup_no_connection: Tests missing connection error
+
+Coverage increased from 78.80% to 81.92% (368 tests passing).
+
+
 ## v1.6.0 (2025-10-26)
 
 ### Documentation
