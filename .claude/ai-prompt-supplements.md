@@ -6,9 +6,10 @@ This file contains manually curated sections for the AI usage prompt that cannot
 
 ## Version Tracking
 
-- **Last Updated:** 2025-10-12
-- **Commands Covered:** connect, search, create, update, ai
+- **Last Updated:** 2025-10-26
+- **Commands Covered:** connect, search, create, update, ai, tempo
 - **Last Reviewed By:** Human developer
+- **Recent Changes:** Added Tempo Timesheets integration workflows
 
 ## Common Workflows for AI Assistants
 
@@ -71,6 +72,49 @@ budjira search --type Bug --assignee currentUser() --status Open
 - Finding issues to fix
 - Sprint planning
 
+### 6. Tempo Time Tracking (Enterprise)
+```bash
+# Setup Tempo for connection
+budjira connect tempo-setup
+
+# Log work to Tempo
+budjira tempo log PROJ-123 2h --comment "Development work"
+budjira tempo log PROJ-456 3h30m --started yesterday --comment "Client meeting"
+
+# View worklogs
+budjira tempo worklogs PROJ-123
+budjira tempo worklogs --from 2024-10-01 --to 2024-10-31
+
+# List billing accounts
+budjira tempo accounts
+```
+
+**When to use:**
+- Organization uses Tempo Timesheets instead of standard Jira time tracking
+- Need to track time against specific Tempo accounts for billing
+- Enterprise time tracking with advanced reporting
+- Tempo is installed in Jira instance
+
+**Note:** Requires separate Tempo API token (different from Jira token)
+
+### 7. Combined Issue + Time Tracking Workflow
+```bash
+# Standard Jira time tracking
+budjira worklog add PROJ-123 2h --comment "Bug fixing"
+
+# OR for Tempo users
+budjira tempo log PROJ-123 2h --comment "Bug fixing"
+
+# View logged time
+budjira worklog list PROJ-123    # Standard Jira
+budjira tempo worklogs PROJ-123   # Tempo
+```
+
+**When to use:**
+- Daily time logging
+- End of day time tracking
+- Tracking time across multiple issues
+
 ## AI Assistant Tips
 
 ### Connection Management
@@ -90,11 +134,20 @@ budjira search --type Bug --assignee currentUser() --status Open
 3. **Suggest reasonable defaults**: Based on conversation context (priority, type, labels)
 4. **Validate before creation**: Confirm key details with user before creating issues
 
+### Tempo Integration
+1. **Check if Tempo is installed**: Ask user if their organization uses Tempo
+2. **Separate tokens**: Tempo requires its own API token (different from Jira)
+3. **Setup first**: Run `budjira connect tempo-setup` before using tempo commands
+4. **Choose correct command**: Use `tempo` commands for Tempo, `worklog` for standard Jira
+5. **Account awareness**: Tempo accounts are used for billing/project tracking
+
 ### Error Handling
 1. **Connection errors**: Check network, credentials, and API token validity
 2. **Invalid JQL**: Simplify query or use filters instead
 3. **Missing project**: Verify project key exists and user has access
 4. **Authentication failures**: Guide user to regenerate API token
+5. **Tempo not enabled**: Run `budjira connect tempo-setup` if "Tempo is not enabled" error occurs
+6. **Missing Tempo token**: Verify Tempo API token is configured correctly
 
 ### Output Parsing
 1. **Use `-q` for programmatic access**: Suppress header when parsing output

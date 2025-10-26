@@ -11,16 +11,61 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.5.5 (Released: 2025-10-25)
+- **Current Version**: v1.6.0 (Unreleased - committed to master)
 - **Branch**: master
-- **Status**: ✅ **All features stable, docs complete, no open issues**
+- **Status**: ✅ **Tempo integration complete, ready for release**
 - **Recent Releases**:
+  - v1.6.0 (2025-10-26): Tempo Timesheets Integration ✨ NEW
   - v1.5.5 (2025-10-25): Regex pattern fix in tests (RUF043)
   - v1.5.4 (2025-10-25): Complete AI usage prompt with time tracking docs
   - v1.5.3 (2025-10-25): GitHub API rate limit fix for update checks
   - v1.5.2 (2025-10-25): Epic linking compatibility (modern + legacy)
   - v1.5.1 (2025-10-25): Bandit security fix
   - v1.5.0 (2025-10-25): Time Tracking Feature
+
+### 🎼 NEW: v1.6.0 - Tempo Timesheets Integration (2025-10-26)
+**GitHub Issue**: #3 - Tempo Timesheets Integration
+
+**Summary**:
+Full enterprise-grade time tracking via Tempo Cloud API for teams using Tempo instead of standard Jira time tracking.
+
+**Implementation**:
+- New `budjira/tempo/` module with TempoClient and Pydantic models
+- CLI commands: `tempo log`, `tempo worklogs`, `tempo delete-worklog`, `tempo accounts`
+- Connection setup: `budjira connect tempo-setup` with separate Tempo token
+- Extended Connection model with `tempo_enabled` flag
+- Extended CredentialStore with key-based credential storage
+
+**Features**:
+- ✅ Worklog creation with time tracking (hours, minutes, datetime)
+- ✅ Worklog listing with filters (date range, issue, project)
+- ✅ Worklog deletion (with confirmation)
+- ✅ Tempo Accounts listing for billing
+- ✅ Secure Tempo token storage (separate from Jira tokens)
+- ✅ Full Tempo Cloud API v4 support
+- ✅ Rich Console output with tables
+
+**Tests**:
+- 37 new tests (362 total, up from 325)
+- Test coverage: 79.53% (maintained >70% requirement)
+- New test files:
+  - `tests/tempo/test_models.py` - 10 tests, 100% coverage
+  - `tests/tempo/test_client.py` - 12 tests, 96% coverage
+  - `tests/cli/test_tempo.py` - 12 tests, 75% coverage
+  - Extended `tests/models/test_connection.py` - 3 new tests
+
+**Files Created**:
+- `budjira/tempo/__init__.py`
+- `budjira/tempo/client.py` - TempoClient with REST API
+- `budjira/tempo/models.py` - Pydantic models (TempoWorklog, TempoAccount)
+- `budjira/cli/tempo.py` - CLI commands
+- Extended: `budjira/config/credentials.py` - Added `store_credential()`, `get_credential()`
+- Extended: `budjira/models/connection.py` - Added `tempo_enabled`, `get_tempo_credential_key()`
+
+**Documentation**:
+- ✅ README.md updated with Tempo section
+- ✅ .claude/context.md updated
+- ⏳ .claude/ai-prompt-supplements.md (pending)
 
 ### ✅ RELEASED: Recent Features (v1.5.x)
 
@@ -120,7 +165,7 @@ Output: Rich (tables, colors, formatting)
 Validation: Pydantic v2
 Jira API: jira-python library
 Config Storage: XDG Base Directory Spec (~/.config/budjira/)
-Testing: pytest + pytest-cov (279 tests, 79% coverage)
+Testing: pytest + pytest-cov (362 tests, 79.5% coverage)
 Linting: ruff (formatting + linting)
 Type Checking: mypy (strict mode)
 Security: bandit
@@ -132,32 +177,37 @@ CI/CD: GitHub Actions
 ### Modul-Struktur
 ```
 budjira/
-├── __init__.py              # Version, Metadaten (__version__ = "1.5.0")
+├── __init__.py              # Version, Metadaten (__version__ = "1.6.0")
 ├── cli/                     # Command-line interface
 │   ├── main.py             # Haupteinstiegspunkt, App-Setup
 │   ├── ai.py               # AI usage prompt generation
-│   ├── connect.py          # Connection management commands
+│   ├── connect.py          # Connection management commands (+ tempo-setup)
 │   ├── create.py           # Issue creation (interactive + non-interactive + DoR + time estimates)
 │   ├── dor.py              # DoR template management (list, show, edit, validate)
 │   ├── epic.py             # Epic management commands
 │   ├── issue.py            # Issue update commands (+ time tracking + worklog)
 │   ├── search.py           # Issue search (JQL + Filter)
+│   ├── tempo.py            # Tempo Timesheets commands (log, worklogs, accounts) ✨ NEW v1.6.0
 │   ├── update.py           # Self-update command
-│   └── worklog.py          # Worklog commands (add, list) ✨ NEW v1.5.0
+│   └── worklog.py          # Worklog commands (add, list)
 ├── core/                    # Core business logic
 │   └── jira_client.py      # Jira API wrapper mit Error Handling (+ get_worklogs)
+├── tempo/                   # Tempo Timesheets integration ✨ NEW v1.6.0
+│   ├── __init__.py         # Tempo module exports
+│   ├── client.py           # TempoClient - REST API integration
+│   └── models.py           # Pydantic models (TempoWorklog, TempoAccount, etc.)
 ├── models/                  # Pydantic data models
-│   ├── connection.py       # Connection, ConnectionList
+│   ├── connection.py       # Connection, ConnectionList (+ tempo_enabled)
 │   ├── config.py           # GlobalConfig
 │   ├── dor.py              # DoR templates, validation models
 │   └── issue.py            # Issue, WorkLog, User, Status, IssueType, Priority
 ├── config/                  # Configuration management
 │   ├── settings.py         # Settings singleton, TOML persistence
-│   └── credentials.py      # Secure credential storage (keyring fallback to file)
+│   └── credentials.py      # Secure credential storage (+ store_credential, get_credential)
 └── utils/                   # Utilities
     ├── banner.py           # ASCII art banner for CLI
     ├── connection.py       # Connection resolution (3-tier priority)
-    ├── datetime_parser.py  # Datetime string parsing (ISO, today, yesterday) ✨ NEW v1.5.0
+    ├── datetime_parser.py  # Datetime string parsing (ISO, today, yesterday)
     ├── dor_validator.py    # DoR template validation
     ├── editor.py           # Multi-line markdown editor integration
     ├── errors.py           # Custom exceptions
@@ -433,7 +483,49 @@ budjira update --force      # Force update check (bypass cache)
 - **Nur stable releases**: Verwendet `/releases/latest` API endpoint
 - **Keine Pre-Release-Unterstützung**: User möchte aber Pre-Releases installieren können
 
-### 9. AI Integration (`budjira ai usage-prompt`)
+### 9. Tempo Timesheets Integration
+**Status**: ✅ Fully implemented (v1.6.0)
+
+#### CLI Commands:
+```bash
+# Setup
+budjira connect tempo-setup
+
+# Log work
+budjira tempo log PROJ-123 2h --comment "Development"
+budjira tempo log PROJ-456 3h30m --started yesterday --comment "Meeting"
+
+# List worklogs
+budjira tempo worklogs PROJ-123
+budjira tempo worklogs --from 2024-10-01 --to 2024-10-31
+
+# Delete worklog
+budjira tempo delete-worklog 12345
+
+# List accounts
+budjira tempo accounts
+```
+
+#### Features:
+- Full Tempo Cloud API v4 support
+- Worklog creation, listing, deletion
+- Tempo Accounts management
+- Secure token storage (separate from Jira)
+- Date range filtering
+- Rich Console output
+
+#### Implementation:
+- `budjira/tempo/client.py`: TempoClient with REST API integration
+- `budjira/tempo/models.py`: Pydantic models (TempoWorklog, TempoAccount, etc.)
+- `budjira/cli/tempo.py`: CLI commands
+- Extended Connection model with `tempo_enabled` flag
+
+#### Test Coverage:
+- `tests/tempo/test_models.py`: 10 tests (100% coverage)
+- `tests/tempo/test_client.py`: 12 tests (96% coverage)
+- `tests/cli/test_tempo.py`: 12 tests (75% coverage)
+
+### 10. AI Integration (`budjira ai usage-prompt`)
 **Status**: ✅ Fully implemented with auto-generation
 
 #### Usage:
@@ -460,12 +552,13 @@ budjira ai usage-prompt --plain > file.md   # Save to file
 
 ## Testing
 
-### Test-Statistiken (Current: v1.5.3)
-- **Total Tests**: 325 (↑ from 279 in v1.4.1)
-- **Coverage**: 81.54% (↑ from 79.34% in v1.4.1)
-- **Test Duration**: ~7.1 seconds
+### Test-Statistiken (Current: v1.6.0)
+- **Total Tests**: 362 (↑ from 325 in v1.5.5, +37 for Tempo)
+- **Coverage**: 79.53% (maintained >70% requirement)
+- **Test Duration**: ~10.2 seconds
 - **Framework**: pytest + pytest-cov + pytest-mock
 - **Recent Additions**:
+  - v1.6.0: +37 tests for Tempo integration
   - v1.5.0: +51 tests for time tracking
   - v1.5.2: +6 tests for epic linking fallback
 
