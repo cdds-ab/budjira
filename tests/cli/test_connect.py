@@ -308,3 +308,181 @@ class TestConnectTest:
 
             assert result.exit_code == 1
             assert "Connection failed" in result.stdout
+
+
+class TestConnectTempoSetup:
+    """Test connect tempo-setup command."""
+
+    def test_tempo_setup_success_and_persistence(self, tmp_path: Path) -> None:
+        """Test that tempo-setup enables Tempo and persists the flag (Bug #4 regression test)."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+            patch("budjira.cli.connect.Prompt.ask", return_value="test-tempo-token"),
+            patch("budjira.cli.connect.Confirm.ask", return_value=False),  # No existing token
+            patch("budjira.tempo.client.TempoClient") as mock_tempo_client,
+        ):
+            # Reset singletons
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            credential_store = get_credential_store()
+
+            # Mock successful Tempo API call
+            mock_tempo_instance = MagicMock()
+            mock_tempo_instance.get_accounts.return_value = []
+            mock_tempo_client.return_value = mock_tempo_instance
+
+            # Add a connection
+            conn = Connection(
+                name="Test Tempo Setup",
+                url="https://test.atlassian.net",
+                email="test@example.com",
+                project_key="TEST",
+                tempo_enabled=False,  # Initially disabled
+            )
+            settings.add_connection(conn)
+
+            # Verify tempo_enabled is initially False
+            initial_conn = settings.connections.find_by_name("Test Tempo Setup")
+            assert initial_conn is not None
+            assert initial_conn.tempo_enabled is False
+
+            # Run tempo-setup command
+            result = runner.invoke(app, ["connect", "tempo-setup", "--connection", "Test Tempo Setup"])
+
+            # Assert command succeeded
+            assert result.exit_code == 0
+            assert "Tempo API connection successful" in result.stdout
+            assert "Enabled Tempo integration" in result.stdout
+
+            # Verify tempo_enabled is now True in memory
+            loaded_conn = settings.connections.find_by_name("Test Tempo Setup")
+            assert loaded_conn is not None
+            assert loaded_conn.tempo_enabled is True, "tempo_enabled should be True after tempo-setup"
+
+            # CRITICAL: Reload settings from disk to verify persistence
+            settings_reloaded = settings.load_connections()
+            conn_reloaded = settings_reloaded.find_by_name("Test Tempo Setup")
+            assert conn_reloaded is not None
+            assert conn_reloaded.tempo_enabled is True, "tempo_enabled should persist to TOML file"
+
+            # Verify Tempo token was stored
+            tempo_key = conn.get_tempo_credential_key()
+            assert credential_store.get_credential(tempo_key) is not None
+
+    def test_tempo_setup_with_existing_token_replacement(self, tmp_path: Path) -> None:
+        """Test tempo-setup when replacing existing token."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+            patch("budjira.cli.connect.Prompt.ask", return_value="new-tempo-token"),
+            patch("budjira.cli.connect.Confirm.ask", return_value=True),  # Confirm replacement
+            patch("budjira.tempo.client.TempoClient") as mock_tempo_client,
+        ):
+            # Reset singletons
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            credential_store = get_credential_store()
+
+            # Mock successful Tempo API call
+            mock_tempo_instance = MagicMock()
+            mock_tempo_instance.get_accounts.return_value = []
+            mock_tempo_client.return_value = mock_tempo_instance
+
+            # Add a connection with existing Tempo token
+            conn = Connection(
+                name="Test Replace",
+                url="https://test.atlassian.net",
+                email="test@example.com",
+                project_key="TEST",
+                tempo_enabled=True,
+            )
+            settings.add_connection(conn)
+            credential_store.store_credential(conn.get_tempo_credential_key(), "old-token")
+
+            # Run tempo-setup command
+            result = runner.invoke(app, ["connect", "tempo-setup", "--connection", "Test Replace"])
+
+            # Assert command succeeded
+            assert result.exit_code == 0
+            assert "Tempo token already configured" in result.stdout
+            assert "Tempo API connection successful" in result.stdout
+
+    def test_tempo_setup_api_failure_abort(self, tmp_path: Path) -> None:
+        """Test tempo-setup with API failure and user chooses not to save."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+            patch("budjira.cli.connect.Prompt.ask", return_value="invalid-token"),
+            patch("budjira.cli.connect.Confirm.ask", return_value=False),  # Don't save on failure
+            patch("budjira.tempo.client.TempoClient") as mock_tempo_client,
+        ):
+            # Reset singletons
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+
+            # Mock failed Tempo API call
+            mock_tempo_instance = MagicMock()
+            mock_tempo_instance.get_accounts.side_effect = Exception("401 Unauthorized")
+            mock_tempo_client.return_value = mock_tempo_instance
+
+            # Add a connection
+            conn = Connection(
+                name="Test Fail",
+                url="https://test.atlassian.net",
+                email="test@example.com",
+                project_key="TEST",
+            )
+            settings.add_connection(conn)
+
+            # Run tempo-setup command
+            result = runner.invoke(app, ["connect", "tempo-setup", "--connection", "Test Fail"])
+
+            # Assert command failed
+            assert result.exit_code == 1
+            assert "Tempo API connection failed" in result.stdout
+
+    def test_tempo_setup_no_connection(self, tmp_path: Path) -> None:
+        """Test tempo-setup without specifying connection and no default."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+        ):
+            # Reset singleton
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+
+            # Run tempo-setup without connection
+            result = runner.invoke(app, ["connect", "tempo-setup"])
+
+            # Assert command failed
+            assert result.exit_code == 1
+            assert "No active connection" in result.stdout
