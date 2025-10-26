@@ -11,7 +11,7 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.7.0 (Pending release)
+- **Current Version**: v1.7.0 ✅ RELEASED (2025-10-26)
 - **Branch**: master
 - **Status**: ✅ **All features functional, JSON output ready for automation**
 - **Recent Releases**:
@@ -1235,11 +1235,11 @@ docs: update installation instructions
 
 ---
 
-**Letzte Aktualisierung**: 2025-10-26 (nach Feature #8 - v1.7.0 pending)
+**Letzte Aktualisierung**: 2025-10-26 (nach Feature #8 - v1.7.0 released)
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
 
 **Recent Session Summary** (2025-10-26):
-- ✅ Implemented Feature #8: JSON output format for automation (v1.7.0 pending)
+- ✅ Implemented Feature #8: JSON output format for automation (v1.7.0 ✅ RELEASED)
   - Global `--format json` flag for all list-based commands
   - OutputFormatter utility with custom JSON serializer
   - JiraClient.get_issue_epic() method with modern/legacy fallback
