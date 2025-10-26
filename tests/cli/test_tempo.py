@@ -118,9 +118,9 @@ def test_tempo_log_passes_correct_account_id(mock_tempo_connection, mock_tempo_c
     # CRITICAL: Verify that create_worklog was called with the correct accountId
     mock_tempo_client.create_worklog.assert_called_once()
     call_kwargs = mock_tempo_client.create_worklog.call_args[1]
-    assert (
-        call_kwargs["author_account_id"] == "557058:abc123def456"
-    ), "author_account_id must be the Jira accountId from myself() API, not the username from current_user()"
+    assert call_kwargs["author_account_id"] == "557058:abc123def456", (
+        "author_account_id must be the Jira accountId from myself() API, not the username from current_user()"
+    )
 
 
 def test_tempo_log_uses_issue_id_not_key(mock_tempo_connection, mock_tempo_client, mock_jira_client):
