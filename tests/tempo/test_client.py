@@ -165,7 +165,7 @@ def test_get_worklogs_with_filters(mock_request, tempo_client):
     tempo_client.get_worklogs(
         from_date=date(2025, 10, 1),
         to_date=date(2025, 10, 31),
-        issue_key="PROJ-123",
+        issue_id=12345,
         project_key="PROJ",
         account_id="557058:abc",
         limit=100,
@@ -174,7 +174,7 @@ def test_get_worklogs_with_filters(mock_request, tempo_client):
 
     call_kwargs = mock_request.call_args[1]
     params = call_kwargs["params"]
-    assert params["issue"] == "PROJ-123"
+    assert params["issue"] == 12345
     assert params["project"] == "PROJ"
     assert params["accountId"] == "557058:abc"
     assert params["limit"] == 100

@@ -157,7 +157,7 @@ class TempoClient:
         self,
         from_date: date | None = None,
         to_date: date | None = None,
-        issue_key: str | None = None,
+        issue_id: int | None = None,
         project_key: str | None = None,
         account_id: str | None = None,
         limit: int = 50,
@@ -168,7 +168,7 @@ class TempoClient:
         Args:
             from_date: Start date filter (inclusive)
             to_date: End date filter (inclusive)
-            issue_key: Filter by issue key
+            issue_id: Filter by numeric issue ID (e.g., 12345, NOT "PROJ-123")
             project_key: Filter by project key
             account_id: Filter by author account ID
             limit: Maximum number of results (default: 50, max: 1000)
@@ -189,8 +189,8 @@ class TempoClient:
             params["from"] = from_date.isoformat()
         if to_date:
             params["to"] = to_date.isoformat()
-        if issue_key:
-            params["issue"] = issue_key
+        if issue_id:
+            params["issue"] = issue_id
         if project_key:
             params["project"] = project_key
         if account_id:

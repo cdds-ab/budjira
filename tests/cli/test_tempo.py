@@ -224,8 +224,8 @@ def test_tempo_log_no_token(mock_connection):
             assert "Tempo token not found" in result.stdout
 
 
-def test_tempo_worklogs_success(mock_tempo_connection, mock_tempo_client):
-    """Test successful worklog listing."""
+def test_tempo_worklogs_success(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test successful worklog listing with issue filter."""
     mock_worklogs = [
         TempoWorklog(
             self="https://api.tempo.io/worklogs/1",
@@ -251,6 +251,13 @@ def test_tempo_worklogs_success(mock_tempo_connection, mock_tempo_client):
     assert "PROJ-123" in result.stdout
     assert "2h 0m" in result.stdout
     assert "John Doe" in result.stdout
+
+    # Verify that get_worklogs was called with numeric issue_id, not issue_key
+    mock_tempo_client.get_worklogs.assert_called_once()
+    call_kwargs = mock_tempo_client.get_worklogs.call_args[1]
+    assert "issue_id" in call_kwargs
+    assert call_kwargs["issue_id"] == 12345  # Numeric ID from mock_jira_client
+    assert "issue_key" not in call_kwargs
 
 
 def test_tempo_worklogs_with_date_range(mock_tempo_connection, mock_tempo_client):
@@ -307,6 +314,42 @@ def test_tempo_worklogs_without_issue_key(mock_tempo_connection, mock_tempo_clie
     assert result.exit_code == 0
     assert "999" in result.stdout  # Worklog ID shown
     assert "N/A" in result.stdout or "n/a" in result.stdout.lower()  # No issue key
+
+
+def test_tempo_worklogs_uses_issue_id_not_key(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test that tempo worklogs uses numeric issueId for filtering (Bug #7).
+
+    Regression test for Bug #7: tempo worklogs ISSUE-KEY fails with 400 Bad Request.
+    The Tempo API requires numeric issueId (like 12345) not issueKey (like "AS-13")
+    when filtering worklogs by issue.
+
+    Root cause from user report:
+    400 Client Error: Bad Request for url: https://api.tempo.io/4/worklogs?issue=AS-13
+    """
+    # Mock Jira API issue() response with numeric ID
+    mock_issue = MagicMock()
+    mock_issue.id = "12345"  # Jira returns as string
+    mock_issue.key = "AS-13"
+    mock_jira_client.from_connection.return_value.client.issue.return_value = mock_issue
+
+    # Mock empty worklog response
+    mock_tempo_client.get_worklogs.return_value = []
+
+    result = runner.invoke(app, ["tempo", "worklogs", "AS-13"])
+    assert result.exit_code == 0
+
+    # CRITICAL 1: Verify Jira API was called to fetch the issue (to get numeric ID)
+    mock_jira_client.from_connection.return_value.client.issue.assert_called_once_with("AS-13")
+
+    # CRITICAL 2: Verify that get_worklogs was called with numeric issue_id, NOT issue_key
+    mock_tempo_client.get_worklogs.assert_called_once()
+    call_kwargs = mock_tempo_client.get_worklogs.call_args[1]
+    assert "issue_id" in call_kwargs, "Tempo API requires 'issue_id' parameter"
+    assert call_kwargs["issue_id"] == 12345, (
+        "issue_id must be numeric ID (12345) from Jira API, "
+        "not issueKey string ('AS-13'). Tempo returns 400 Bad Request otherwise."
+    )
+    assert "issue_key" not in call_kwargs, "issue_key should not be sent to Tempo API, only issue_id"
 
 
 def test_tempo_delete_worklog_with_confirmation(mock_tempo_connection, mock_tempo_client):

@@ -213,11 +213,19 @@ def tempo_list_worklogs(
         from_date_obj = date.fromisoformat(from_date) if from_date else None
         to_date_obj = date.fromisoformat(to_date) if to_date else None
 
+        # Convert issue_key to issue_id if provided (Tempo API requires numeric ID)
+        issue_id = None
+        if issue_key:
+            connection = get_active_connection(connection_name)
+            jira_client = JiraClient.from_connection(connection)
+            issue = jira_client.client.issue(issue_key)
+            issue_id = int(issue.id)
+
         # Fetch worklogs
         worklogs = tempo_client.get_worklogs(
             from_date=from_date_obj,
             to_date=to_date_obj,
-            issue_key=issue_key,
+            issue_id=issue_id,
             limit=max_results,
         )
 

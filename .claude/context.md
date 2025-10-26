@@ -11,10 +11,11 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.6.5 (Pending release)
+- **Current Version**: v1.6.6 (Pending release)
 - **Branch**: master
-- **Status**: ✅ **Tempo log command fully fixed, production ready**
+- **Status**: ✅ **Tempo fully functional, all commands working**
 - **Recent Releases**:
+  - v1.6.6 (2025-10-26): Fix Tempo worklogs filtering by issue (#7) 🐛
   - v1.6.5 (2025-10-26): Fix Tempo issueId requirement (#5 part 2) 🐛
   - v1.6.4 (2025-10-26): Fix Tempo accountId requirement (#5 part 1) 🐛
   - v1.6.3 (2025-10-26): Fix Tempo worklogs without issue key 🐛
@@ -25,7 +26,20 @@
   - v1.5.4 (2025-10-25): Complete AI usage prompt with time tracking docs
   - v1.5.3 (2025-10-25): GitHub API rate limit fix for update checks
 
-### 🐛 v1.6.1-v1.6.5: Tempo Bugfixes (2025-10-26)
+### 🐛 v1.6.1-v1.6.6: Tempo Bugfixes (2025-10-26)
+
+#### v1.6.6: Fix Tempo worklogs filtering (Bug #7) ✅
+**GitHub Issue**: #7 - tempo worklogs ISSUE-KEY fails with 400 Bad Request
+**Problem**: `budjira tempo worklogs AS-13` failed with 400 Bad Request from Tempo API
+**Root Cause**: Same as Bug #5 - Tempo API requires numeric issueId for filtering, not issueKey
+**Fix**:
+- CLI now fetches issue from Jira when filtering: `issue = jira_client.client.issue(issue_key)`
+- Extract numeric ID: `issue_id = int(issue.id)`
+- Updated `TempoClient.get_worklogs()`: parameter `issue_key` → `issue_id`
+- Updated all tests to use `issue_id`
+- Added regression test: `test_tempo_worklogs_uses_issue_id_not_key`
+
+**Impact**: Tempo worklog filtering by issue now works correctly. All Tempo commands functional.
 
 #### v1.6.5: Fix Tempo issueId requirement (Bug #5 part 2) ✅
 **GitHub Issue**: #5 - tempo log command fails with 400 Bad Request (continued)
@@ -100,13 +114,13 @@ Full enterprise-grade time tracking via Tempo Cloud API for teams using Tempo in
 - ✅ Full Tempo Cloud API v4 support
 - ✅ Rich Console output with tables
 
-**Tests** (updated with v1.6.1-v1.6.5):
-- 47 new tests total (372 tests, up from 325)
+**Tests** (updated with v1.6.1-v1.6.6):
+- 48 new tests total (373 tests, up from 325)
 - Test coverage: **81.93%** (improved from 79.53%)
 - v1.6.0 tests:
   - `tests/tempo/test_models.py` - 11 tests, 100% coverage (1 added in v1.6.3)
   - `tests/tempo/test_client.py` - 12 tests, 96% coverage
-  - `tests/cli/test_tempo.py` - 15 tests, 72% coverage (3 added: v1.6.3, v1.6.4, v1.6.5)
+  - `tests/cli/test_tempo.py` - 16 tests, 72% coverage (4 added: v1.6.3, v1.6.4, v1.6.5, v1.6.6)
   - Extended `tests/models/test_connection.py` - 3 new tests
 - v1.6.1 tests:
   - `tests/config/test_settings.py` - 2 new tests for tempo_enabled persistence
@@ -115,6 +129,8 @@ Full enterprise-grade time tracking via Tempo Cloud API for teams using Tempo in
   - `tests/cli/test_tempo.py` - 1 new test for Bug #5 part 1 (test_tempo_log_passes_correct_account_id)
 - v1.6.5 tests:
   - `tests/cli/test_tempo.py` - 1 new test for Bug #5 part 2 (test_tempo_log_uses_issue_id_not_key)
+- v1.6.6 tests:
+  - `tests/cli/test_tempo.py` - 1 new test for Bug #7 (test_tempo_worklogs_uses_issue_id_not_key)
 
 **Files Created**:
 - `budjira/tempo/__init__.py`
@@ -616,8 +632,8 @@ budjira ai usage-prompt --plain > file.md   # Save to file
 
 ## Testing
 
-### Test-Statistiken (Current: v1.6.5)
-- **Total Tests**: 372 (↑ from 325 in v1.5.5, +47 for Tempo including bugfixes)
+### Test-Statistiken (Current: v1.6.6)
+- **Total Tests**: 373 (↑ from 325 in v1.5.5, +48 for Tempo including bugfixes)
 - **Coverage**: 81.93% (maintained >70% requirement)
 - **Test Duration**: ~5.7 seconds
 - **Framework**: pytest + pytest-cov + pytest-mock
@@ -626,7 +642,8 @@ budjira ai usage-prompt --plain > file.md   # Save to file
   - v1.6.1: +6 tests for Tempo setup persistence (Bug #4)
   - v1.6.3: +1 test for worklogs without issue key
   - v1.6.4: +1 test for Bug #5 part 1 (accountId)
-  - v1.6.5: +1 test for Bug #5 part 2 (issueId)
+  - v1.6.5: +1 test for Bug #5 part 2 (issueId for tempo log)
+  - v1.6.6: +1 test for Bug #7 (issueId for tempo worklogs)
   - v1.5.0: +51 tests for time tracking
   - v1.5.2: +6 tests for epic linking fallback
 
@@ -1068,13 +1085,14 @@ docs: update installation instructions
 
 ---
 
-**Letzte Aktualisierung**: 2025-10-26 (nach Bug #5 complete fix - v1.6.5 pending)
+**Letzte Aktualisierung**: 2025-10-26 (nach Bug #7 fix - v1.6.6 pending)
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
 
 **Recent Session Summary** (2025-10-26):
 - ✅ Fixed Bug #4: Tempo setup persistence (v1.6.1)
 - ✅ Fixed Bug #5 part 1: accountId from myself() (v1.6.4)
-- ✅ Fixed Bug #5 part 2: issueId instead of issueKey (v1.6.5 pending)
+- ✅ Fixed Bug #5 part 2: issueId instead of issueKey for tempo log (v1.6.5)
+- ✅ Fixed Bug #7: issueId instead of issueKey for tempo worklogs (v1.6.6 pending)
 - ✅ Added E2E Testing feature request (#6)
-- ✅ 372 tests passing, 81.93% coverage
-- 📊 Status: Production-ready, Tempo fully functional, Bug #5 completely resolved
+- ✅ 373 tests passing, 81.93% coverage
+- 📊 Status: Production-ready, all Tempo commands fully functional
