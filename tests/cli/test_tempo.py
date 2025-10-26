@@ -22,7 +22,12 @@ def mock_tempo_client():
 def mock_jira_client():
     """Mock JiraClient for testing."""
     with patch("budjira.cli.tempo.JiraClient") as mock:
-        mock.from_connection.return_value.client.current_user.return_value = "557058:abc123"
+        # Mock myself() API call to return accountId (Bug #5 fix)
+        mock.from_connection.return_value.client.myself.return_value = {
+            "accountId": "557058:abc123",
+            "emailAddress": "test@example.com",
+            "displayName": "Test User",
+        }
         yield mock
 
 
@@ -65,6 +70,52 @@ def test_tempo_log_success(mock_tempo_connection, mock_tempo_client, mock_jira_c
     assert "Logged 2h to PROJ-123 via Tempo" in result.stdout
     assert "Tempo Worklog ID: 12345" in result.stdout
     mock_tempo_client.create_worklog.assert_called_once()
+
+
+def test_tempo_log_passes_correct_account_id(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test that tempo log correctly retrieves and passes Jira accountId to Tempo API (Bug #5).
+
+    Regression test for Bug #5: tempo log must use myself() to get accountId,
+    not current_user() which returns username.
+    """
+    # Mock Jira API myself() response with accountId
+    mock_jira_client.from_connection.return_value.client.myself.return_value = {
+        "accountId": "557058:abc123def456",
+        "emailAddress": "user@example.com",
+        "displayName": "Test User",
+    }
+
+    # Mock successful worklog creation
+    mock_worklog = TempoWorklog(
+        self="https://api.tempo.io/worklogs/99999",
+        tempoWorklogId=99999,
+        issue=TempoIssue(self="https://api.tempo.io/issues/123", key="TEST-1"),
+        timeSpentSeconds=1800,
+        startDate=date(2025, 10, 26),
+        startTime="09:00:00",
+        description="Testing accountId",
+        createdAt=datetime(2025, 10, 26, 9, 0),
+        updatedAt=datetime(2025, 10, 26, 9, 0),
+        author=TempoAuthor(
+            self="https://api.tempo.io/users/123",
+            accountId="557058:abc123def456",
+        ),
+    )
+    mock_tempo_client.create_worklog.return_value = mock_worklog
+
+    result = runner.invoke(
+        app,
+        ["tempo", "log", "TEST-1", "30m", "--comment", "Testing accountId"],
+    )
+
+    assert result.exit_code == 0
+
+    # CRITICAL: Verify that create_worklog was called with the correct accountId
+    mock_tempo_client.create_worklog.assert_called_once()
+    call_kwargs = mock_tempo_client.create_worklog.call_args[1]
+    assert (
+        call_kwargs["author_account_id"] == "557058:abc123def456"
+    ), "author_account_id must be the Jira accountId from myself() API, not the username from current_user()"
 
 
 def test_tempo_log_with_started_date(mock_tempo_connection, mock_tempo_client, mock_jira_client):

@@ -116,7 +116,8 @@ def tempo_log_worklog(
 
         # Get Jira client to retrieve author account ID
         jira_client = JiraClient.from_connection(connection)
-        current_user = jira_client.client.current_user()
+        myself = jira_client.client.myself()
+        author_account_id = myself["accountId"]
 
         # Parse time spent (convert minutes to seconds)
         time_spent_minutes = parse_time_string(time_spent)
@@ -135,7 +136,7 @@ def tempo_log_worklog(
             time_spent_seconds=time_spent_seconds,
             start_date=start_date,
             start_time=start_time,
-            author_account_id=current_user,
+            author_account_id=author_account_id,
             description=comment,
         )
 
