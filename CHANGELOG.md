@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## v1.6.5 (2025-10-26)
+
+### Bug Fixes
+
+- **tempo**: Use numeric issueId instead of issueKey for Tempo API
+  ([`2ebd935`](https://github.com/cdds-ab/budjira/commit/2ebd935c40b2b98f408fb1e41c2b64095fb58f88))
+
+Tempo Cloud API requires numeric issueId (e.g., 12345) not string issueKey (e.g., "AS-13"). The CLI
+  now fetches the issue from Jira API to extract the numeric ID before calling Tempo.
+
+Fixes #5 (second root cause)
+
+Changes: - Changed TempoWorklogCreate model: issueKey → issueId (int) - Updated
+  TempoClient.create_worklog: issue_key → issue_id parameter - CLI fetches issue from Jira to get
+  numeric ID - Updated all tests to use issue_id - Added regression test:
+  test_tempo_log_uses_issue_id_not_key
+
+
 ## v1.6.4 (2025-10-26)
 
 ### Bug Fixes
