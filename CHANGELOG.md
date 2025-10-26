@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v1.6.2 (2025-10-26)
+
+### Bug Fixes
+
+- Remove incorrect typer.Option check in tempo error handler
+  ([`c7bdf98`](https://github.com/cdds-ab/budjira/commit/c7bdf98d131defc7134ce2bfb0647c070139ea1b))
+
+Removed 'if typer.Option:' check which was always true and caused mypy truthy-function error. The
+  debug hint should always be shown for unexpected errors.
+
+
 ## v1.6.1 (2025-10-26)
 
 ### Bug Fixes
