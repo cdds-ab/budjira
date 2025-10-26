@@ -11,10 +11,11 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.6.3 (Latest)
+- **Current Version**: v1.6.4 (Pending release)
 - **Branch**: master
-- **Status**: ✅ **All Tempo bugs fixed, production ready**
+- **Status**: ✅ **Tempo log command fixed, production ready**
 - **Recent Releases**:
+  - v1.6.4 (2025-10-26): Fix Tempo log 400 Bad Request (#5) 🐛
   - v1.6.3 (2025-10-26): Fix Tempo worklogs without issue key 🐛
   - v1.6.2 (2025-10-26): Fix MyPy error in tempo error handler 🐛
   - v1.6.1 (2025-10-26): Fix Tempo setup persistence bug (#4) 🐛
@@ -22,9 +23,20 @@
   - v1.5.5 (2025-10-25): Regex pattern fix in tests (RUF043)
   - v1.5.4 (2025-10-25): Complete AI usage prompt with time tracking docs
   - v1.5.3 (2025-10-25): GitHub API rate limit fix for update checks
-  - v1.5.2 (2025-10-25): Epic linking compatibility (modern + legacy)
 
-### 🐛 v1.6.1-v1.6.3: Tempo Bugfixes (2025-10-26)
+### 🐛 v1.6.1-v1.6.4: Tempo Bugfixes (2025-10-26)
+
+#### v1.6.4: Fix Tempo log command 400 Bad Request (Bug #5) ✅
+**GitHub Issue**: #5 - tempo log command fails with 400 Bad Request
+**Problem**: `budjira tempo log PROJ-123 30m` failed with 400 Bad Request from Tempo API
+**Root Cause**: Code used `current_user()` API which returns username, but Tempo API requires `accountId` from `myself()` endpoint
+**Fix**:
+- Changed from `jira_client.client.current_user()` to `myself()`
+- Extract `accountId` from `myself()` response dict
+- Updated test fixtures to mock `myself()` instead of `current_user()`
+- Added regression test: `test_tempo_log_passes_correct_account_id`
+
+**Impact**: Core Tempo functionality (logging work) now works correctly
 
 #### v1.6.3: Fix Tempo worklogs without issue key
 **Problem**: Pydantic ValidationError when Tempo API returns worklogs without `issue.key` field
@@ -72,17 +84,19 @@ Full enterprise-grade time tracking via Tempo Cloud API for teams using Tempo in
 - ✅ Full Tempo Cloud API v4 support
 - ✅ Rich Console output with tables
 
-**Tests** (updated with v1.6.1-v1.6.3):
-- 45 new tests total (370 tests, up from 325)
-- Test coverage: **81.91%** (improved from 79.53%)
+**Tests** (updated with v1.6.1-v1.6.4):
+- 46 new tests total (371 tests, up from 325)
+- Test coverage: **81.92%** (improved from 79.53%)
 - v1.6.0 tests:
   - `tests/tempo/test_models.py` - 11 tests, 100% coverage (1 added in v1.6.3)
   - `tests/tempo/test_client.py` - 12 tests, 96% coverage
-  - `tests/cli/test_tempo.py` - 13 tests, 71% coverage (1 added in v1.6.3)
+  - `tests/cli/test_tempo.py` - 14 tests, 72% coverage (2 added in v1.6.3, v1.6.4)
   - Extended `tests/models/test_connection.py` - 3 new tests
 - v1.6.1 tests:
   - `tests/config/test_settings.py` - 2 new tests for tempo_enabled persistence
   - `tests/cli/test_connect.py` - 4 new tests for tempo-setup command
+- v1.6.4 tests:
+  - `tests/cli/test_tempo.py` - 1 new test for Bug #5 (test_tempo_log_passes_correct_account_id)
 
 **Files Created**:
 - `budjira/tempo/__init__.py`
