@@ -1,6 +1,57 @@
 # CHANGELOG
 
 
+## v1.6.0 (2025-10-26)
+
+### Documentation
+
+- Update AI usage prompt and CLAUDE.md for Tempo
+  ([`af07849`](https://github.com/cdds-ab/budjira/commit/af078495863f0182fd2faeb073f5e5b9a003b20e))
+
+Updated comprehensive documentation with Tempo integration:
+
+- .claude/ai-usage-prompt.md: Added Tempo Timesheets section - Setup instructions (budjira connect
+  tempo-setup) - CLI commands (tempo log, tempo worklogs, tempo delete-worklog, tempo accounts) -
+  When to use Tempo vs standard Jira - Tempo-specific error handling
+
+- CLAUDE.md: Updated architecture overview - Added tempo/ module to structure diagram - Added
+  tempo.py to CLI commands list - Extended Connection and CredentialStore descriptions - Added
+  TempoClient to Core Layer components
+
+- Update project context to v1.5.5
+  ([`a058522`](https://github.com/cdds-ab/budjira/commit/a0585225c63c9608ec0bb46d00b0454e4178021e))
+
+- Update project context to v1.6.0 with Tempo integration
+  ([`e65c258`](https://github.com/cdds-ab/budjira/commit/e65c258b8c55c254b3113ccc57e94aff24d9dd8f))
+
+Updated comprehensive documentation for Tempo Timesheets feature:
+
+- .claude/context.md: Added v1.6.0 release section with full Tempo details - .claude/context.md:
+  Updated test statistics (362 tests, 79.53% coverage) - .claude/context.md: Added Tempo to module
+  structure and implemented features - .claude/ai-prompt-supplements.md: Added Tempo workflows and
+  integration tips
+
+### Features
+
+- Add Tempo Timesheets integration for enterprise time tracking
+  ([`af75349`](https://github.com/cdds-ab/budjira/commit/af75349d2fdaa3ba24598dd2e09cdc37fe434847))
+
+Implements comprehensive Tempo Cloud API support for organizations using Tempo for time tracking and
+  billing.
+
+Features: - New tempo module with TempoClient for API communication - CLI commands: tempo log, tempo
+  worklogs, tempo delete-worklog, tempo accounts - Connection setup: budjira connect tempo-setup -
+  Pydantic models for Tempo API responses - Secure Tempo token storage via credential store - Full
+  test coverage (37 new tests)
+
+Implementation: - budjira/tempo/client.py: TempoClient with REST API integration -
+  budjira/tempo/models.py: Pydantic models (TempoWorklog, TempoAccount) - budjira/cli/tempo.py: CLI
+  commands for Tempo operations - Extended Connection model with tempo_enabled flag - Tests: 100%
+  coverage for models, 96% for client, 75% for CLI
+
+Breaking Changes: None Coverage: +0.19% (79.53% total, 362 tests passing)
+
+
 ## v1.5.5 (2025-10-25)
 
 ### Bug Fixes
