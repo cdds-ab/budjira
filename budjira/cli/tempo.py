@@ -154,8 +154,7 @@ def tempo_log_worklog(
         raise typer.Exit(1)  # noqa: B904
     except Exception as e:
         console.print(f"❌ [red]Unexpected error:[/red] {e}")
-        if typer.Option:
-            console.print("[yellow]Run with --debug for more details[/yellow]")
+        console.print("[yellow]Run with --debug for more details[/yellow]")
         raise typer.Exit(1)  # noqa: B904
 
 
