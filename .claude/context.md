@@ -11,19 +11,46 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.6.0 (Unreleased - committed to master)
+- **Current Version**: v1.6.3 (Latest)
 - **Branch**: master
-- **Status**: ✅ **Tempo integration complete, ready for release**
+- **Status**: ✅ **All Tempo bugs fixed, production ready**
 - **Recent Releases**:
-  - v1.6.0 (2025-10-26): Tempo Timesheets Integration ✨ NEW
+  - v1.6.3 (2025-10-26): Fix Tempo worklogs without issue key 🐛
+  - v1.6.2 (2025-10-26): Fix MyPy error in tempo error handler 🐛
+  - v1.6.1 (2025-10-26): Fix Tempo setup persistence bug (#4) 🐛
+  - v1.6.0 (2025-10-26): Tempo Timesheets Integration ✨
   - v1.5.5 (2025-10-25): Regex pattern fix in tests (RUF043)
   - v1.5.4 (2025-10-25): Complete AI usage prompt with time tracking docs
   - v1.5.3 (2025-10-25): GitHub API rate limit fix for update checks
   - v1.5.2 (2025-10-25): Epic linking compatibility (modern + legacy)
-  - v1.5.1 (2025-10-25): Bandit security fix
-  - v1.5.0 (2025-10-25): Time Tracking Feature
 
-### 🎼 NEW: v1.6.0 - Tempo Timesheets Integration (2025-10-26)
+### 🐛 v1.6.1-v1.6.3: Tempo Bugfixes (2025-10-26)
+
+#### v1.6.3: Fix Tempo worklogs without issue key
+**Problem**: Pydantic ValidationError when Tempo API returns worklogs without `issue.key` field
+**Root Cause**: Some worklogs (e.g., general time entries) may not be linked to a Jira issue
+**Fix**:
+- Made `TempoIssue.key` optional in models
+- Display "N/A" in worklogs table when key is missing
+- Added 2 regression tests
+
+#### v1.6.2: Fix MyPy truthy-function error
+**Problem**: `if typer.Option:` check always True, caused mypy error in CI
+**Fix**: Removed incorrect condition, always show debug hint on unexpected errors
+
+#### v1.6.1: Fix Tempo setup persistence (Bug #4) ✅
+**GitHub Issue**: #4 - Tempo setup succeeds but integration remains disabled
+**Problem**: `budjira connect tempo-setup` succeeded but `tempo` commands failed with "Tempo is not enabled"
+**Root Cause**: `tempo_enabled` field was not serialized to `connections.toml` in `save_connections()`
+**Fix**:
+- Added `tempo_enabled` to TOML serialization in `settings.py`
+- Enhanced `connect show` to display Tempo status
+- Added 4 comprehensive tests for `tempo-setup` command
+- Added 2 regression tests for `tempo_enabled` persistence
+
+**Impact**: This test would have prevented Bug #4 from reaching production
+
+### 🎼 v1.6.0 - Tempo Timesheets Integration (2025-10-26)
 **GitHub Issue**: #3 - Tempo Timesheets Integration
 
 **Summary**:
@@ -45,14 +72,17 @@ Full enterprise-grade time tracking via Tempo Cloud API for teams using Tempo in
 - ✅ Full Tempo Cloud API v4 support
 - ✅ Rich Console output with tables
 
-**Tests**:
-- 37 new tests (362 total, up from 325)
-- Test coverage: 79.53% (maintained >70% requirement)
-- New test files:
-  - `tests/tempo/test_models.py` - 10 tests, 100% coverage
+**Tests** (updated with v1.6.1-v1.6.3):
+- 45 new tests total (370 tests, up from 325)
+- Test coverage: **81.91%** (improved from 79.53%)
+- v1.6.0 tests:
+  - `tests/tempo/test_models.py` - 11 tests, 100% coverage (1 added in v1.6.3)
   - `tests/tempo/test_client.py` - 12 tests, 96% coverage
-  - `tests/cli/test_tempo.py` - 12 tests, 75% coverage
+  - `tests/cli/test_tempo.py` - 13 tests, 71% coverage (1 added in v1.6.3)
   - Extended `tests/models/test_connection.py` - 3 new tests
+- v1.6.1 tests:
+  - `tests/config/test_settings.py` - 2 new tests for tempo_enabled persistence
+  - `tests/cli/test_connect.py` - 4 new tests for tempo-setup command
 
 **Files Created**:
 - `budjira/tempo/__init__.py`
@@ -64,8 +94,10 @@ Full enterprise-grade time tracking via Tempo Cloud API for teams using Tempo in
 
 **Documentation**:
 - ✅ README.md updated with Tempo section
-- ✅ .claude/context.md updated
-- ⏳ .claude/ai-prompt-supplements.md (pending)
+- ✅ .claude/context.md updated (v1.6.0-v1.6.3 documented)
+- ✅ .claude/ai-prompt-supplements.md updated
+- ✅ .claude/ai-usage-prompt.md updated
+- ✅ CLAUDE.md updated with architecture changes
 
 ### ✅ RELEASED: Recent Features (v1.5.x)
 
