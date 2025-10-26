@@ -1,6 +1,25 @@
 # CHANGELOG
 
 
+## v1.6.6 (2025-10-26)
+
+### Bug Fixes
+
+- **tempo**: Use numeric issueId for worklogs filtering
+  ([`7650356`](https://github.com/cdds-ab/budjira/commit/76503566127f040209ce3aa52a56738855f2fd2a))
+
+Tempo Cloud API requires numeric issueId (e.g., 12345) not string issueKey (e.g., "AS-13") when
+  filtering worklogs by issue. The CLI now fetches the issue from Jira API to extract the numeric ID
+  before calling Tempo.
+
+Fixes #7
+
+Changes: - Changed TempoClient.get_worklogs: issue_key → issue_id parameter - CLI fetches issue from
+  Jira to get numeric ID when filtering - Updated all tests to use issue_id - Added regression test:
+  test_tempo_worklogs_uses_issue_id_not_key - Enhanced test_tempo_worklogs_success with issueId
+  verification
+
+
 ## v1.6.5 (2025-10-26)
 
 ### Bug Fixes
