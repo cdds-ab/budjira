@@ -11,10 +11,12 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.6.6 (Pending release)
+- **Current Version**: v1.7.0 (Pending release)
 - **Branch**: master
-- **Status**: ✅ **Tempo fully functional, all commands working**
+- **Status**: ✅ **All features functional, JSON output ready for automation**
 - **Recent Releases**:
+  - v1.7.0 (2025-10-26): JSON output format for automation (#8) ✨
+  - v1.6.7 (2025-10-26): Fix ruff formatting in test_tempo.py 🎨
   - v1.6.6 (2025-10-26): Fix Tempo worklogs filtering by issue (#7) 🐛
   - v1.6.5 (2025-10-26): Fix Tempo issueId requirement (#5 part 2) 🐛
   - v1.6.4 (2025-10-26): Fix Tempo accountId requirement (#5 part 1) 🐛
@@ -23,8 +25,6 @@
   - v1.6.1 (2025-10-26): Fix Tempo setup persistence bug (#4) 🐛
   - v1.6.0 (2025-10-26): Tempo Timesheets Integration ✨
   - v1.5.5 (2025-10-25): Regex pattern fix in tests (RUF043)
-  - v1.5.4 (2025-10-25): Complete AI usage prompt with time tracking docs
-  - v1.5.3 (2025-10-25): GitHub API rate limit fix for update checks
 
 ### 🐛 v1.6.1-v1.6.6: Tempo Bugfixes (2025-10-26)
 
@@ -92,6 +92,84 @@
 
 **Impact**: This test would have prevented Bug #4 from reaching production
 
+### ✨ v1.7.0 - JSON Output Format for Automation (2025-10-26)
+**GitHub Issue**: #8 - Add JSON output format for automation/FoU reporting
+
+**Summary**:
+Implements global `--format json` flag for all list-based commands, enabling automation workflows and FoU (Forsknings- och utvecklingsavdrag) tax reporting for Swedish companies.
+
+**Implementation**:
+- New `budjira/utils/formatter.py` module with OutputFormatter utility
+- Global `--format`/`-f` flag stored in Typer context
+- Custom JSON serializer handling Pydantic models, datetime/date, Enums
+- `JiraClient.get_issue_epic()` method with modern/legacy fallback
+- Epic information caching to minimize API calls
+- Auto-suppress banner/header when JSON format selected
+
+**Features**:
+- ✅ Global `--format` flag (table|json) for all commands
+- ✅ OutputFormatter with custom JSON serializer
+- ✅ `tempo worklogs` JSON output with epic_key/epic_name fields
+- ✅ In-memory epic caching (1 API call for multiple worklogs on same issue)
+- ✅ Optional `--no-epic` flag for performance mode
+- ✅ Machine-readable output for reporting/automation
+
+**JSON Output Format Example**:
+```json
+{
+  "total": 2,
+  "worklogs": [
+    {
+      "id": 619,
+      "issue_key": "PRD-1",
+      "epic_key": "PRD-1",
+      "epic_name": "budjira Development",
+      "time_spent_seconds": 900,
+      "time_spent_display": "15m",
+      "date": "2025-10-26",
+      "author_account_id": "712020:5...",
+      "author_display_name": "Fred Thiele",
+      "description": "Testing budjira Tempo integration"
+    }
+  ]
+}
+```
+
+**Tests**:
+- 26 new tests total (373 → 399 tests)
+- Test coverage: **81.09%** (maintained >70% requirement)
+- v1.7.0 tests:
+  - `tests/utils/test_formatter.py` - 22 tests, 90% coverage ✨ NEW
+  - `tests/cli/test_tempo.py` - 4 new JSON tests (20 total, 76% coverage)
+    - `test_tempo_worklogs_json_output`: Basic JSON with epic info
+    - `test_tempo_worklogs_json_no_epic_flag`: Performance mode
+    - `test_tempo_worklogs_json_empty_results`: Empty results
+    - `test_tempo_worklogs_json_epic_caching`: Epic caching verification
+
+**Files Created**:
+- `budjira/utils/formatter.py` - OutputFormatter utility (29 statements, 90% coverage)
+- `tests/utils/test_formatter.py` - Comprehensive formatter tests
+
+**Files Modified**:
+- `budjira/cli/main.py` - Added global `--format`/`-f` flag, Typer context storage
+- `budjira/core/jira_client.py` - Added `get_issue_epic()` method with fallback logic
+- `budjira/cli/tempo.py` - JSON output support, epic caching, `--no-epic` flag
+- `tests/cli/test_tempo.py` - 4 new JSON output tests
+
+**Documentation**:
+- ✅ README.md updated with JSON Output section
+- ✅ .claude/context.md updated
+- ✅ .claude/ai-usage-prompt.md regenerated
+- ✅ .claude/ai-prompt-supplements.md extended with JSON workflows
+- ✅ CLAUDE.md updated with architecture changes
+
+**Design Decisions**:
+- **Scope**: Global flag for all commands (not just tempo worklogs)
+- **Implementation**: Typer context pattern (like gh --json)
+- **Epic Data**: Included by default (opt-out via --no-epic)
+- **Caching**: In-memory dictionary per command invocation
+- **Performance**: Minimal API calls via caching strategy
+
 ### 🎼 v1.6.0 - Tempo Timesheets Integration (2025-10-26)
 **GitHub Issue**: #3 - Tempo Timesheets Integration
 
@@ -114,13 +192,16 @@ Full enterprise-grade time tracking via Tempo Cloud API for teams using Tempo in
 - ✅ Full Tempo Cloud API v4 support
 - ✅ Rich Console output with tables
 
-**Tests** (updated with v1.6.1-v1.6.6):
-- 48 new tests total (373 tests, up from 325)
-- Test coverage: **81.93%** (improved from 79.53%)
-- v1.6.0 tests:
+**Tests** (updated with v1.6.1-v1.7.0):
+- 74 new tests total since v1.5.5 (325 → 399 tests)
+- Test coverage: **81.09%** (maintained >70% requirement)
+- v1.7.0 tests:
+  - `tests/utils/test_formatter.py` - 22 new tests, 90% coverage ✨ NEW
+  - `tests/cli/test_tempo.py` - 4 new JSON tests (20 total, 76% coverage)
+- v1.6.0-v1.6.6 tests (48 tests):
   - `tests/tempo/test_models.py` - 11 tests, 100% coverage (1 added in v1.6.3)
   - `tests/tempo/test_client.py` - 12 tests, 96% coverage
-  - `tests/cli/test_tempo.py` - 16 tests, 72% coverage (4 added: v1.6.3, v1.6.4, v1.6.5, v1.6.6)
+  - `tests/cli/test_tempo.py` - 20 tests, 76% coverage (8 added across v1.6.0-v1.6.6, 4 in v1.7.0)
   - Extended `tests/models/test_connection.py` - 3 new tests
 - v1.6.1 tests:
   - `tests/config/test_settings.py` - 2 new tests for tempo_enabled persistence
@@ -257,9 +338,9 @@ CI/CD: GitHub Actions
 ### Modul-Struktur
 ```
 budjira/
-├── __init__.py              # Version, Metadaten (__version__ = "1.6.0")
+├── __init__.py              # Version, Metadaten (__version__ = "1.7.0")
 ├── cli/                     # Command-line interface
-│   ├── main.py             # Haupteinstiegspunkt, App-Setup
+│   ├── main.py             # Haupteinstiegspunkt, App-Setup (+ global --format flag)
 │   ├── ai.py               # AI usage prompt generation
 │   ├── connect.py          # Connection management commands (+ tempo-setup)
 │   ├── create.py           # Issue creation (interactive + non-interactive + DoR + time estimates)
@@ -267,12 +348,12 @@ budjira/
 │   ├── epic.py             # Epic management commands
 │   ├── issue.py            # Issue update commands (+ time tracking + worklog)
 │   ├── search.py           # Issue search (JQL + Filter)
-│   ├── tempo.py            # Tempo Timesheets commands (log, worklogs, accounts) ✨ NEW v1.6.0
+│   ├── tempo.py            # Tempo Timesheets commands (log, worklogs, accounts, JSON output) ✨ v1.6.0/v1.7.0
 │   ├── update.py           # Self-update command
 │   └── worklog.py          # Worklog commands (add, list)
 ├── core/                    # Core business logic
-│   └── jira_client.py      # Jira API wrapper mit Error Handling (+ get_worklogs)
-├── tempo/                   # Tempo Timesheets integration ✨ NEW v1.6.0
+│   └── jira_client.py      # Jira API wrapper (+ get_worklogs, get_issue_epic) ✨ v1.7.0
+├── tempo/                   # Tempo Timesheets integration ✨ v1.6.0
 │   ├── __init__.py         # Tempo module exports
 │   ├── client.py           # TempoClient - REST API integration
 │   └── models.py           # Pydantic models (TempoWorklog, TempoAccount, etc.)
@@ -291,6 +372,7 @@ budjira/
     ├── dor_validator.py    # DoR template validation
     ├── editor.py           # Multi-line markdown editor integration
     ├── errors.py           # Custom exceptions
+    ├── formatter.py        # Output formatting (JSON, table) ✨ NEW v1.7.0
     ├── time_parser.py      # Time string parsing (1h, 30m, 2h30m)
     └── version.py          # Version checking via GitHub Releases API
 ```
@@ -630,14 +712,77 @@ budjira ai usage-prompt --plain > file.md   # Save to file
 #### Test Coverage:
 - `tests/cli/test_ai.py`: 7 tests (93% coverage)
 
+### 11. JSON Output Format (`--format json`)
+**Status**: ✅ Fully implemented (v1.7.0)
+
+#### Usage:
+```bash
+# Global --format flag (works with all list-based commands)
+budjira --format json tempo worklogs --from 2025-10-01 --to 2025-10-31
+budjira -f json tempo worklogs PROJ-123
+
+# Output to file for processing
+budjira --format json tempo worklogs PROJ-123 > worklogs.json
+
+# Pipe to jq for analysis
+budjira --format json tempo worklogs --from 2025-10-01 | jq '.worklogs[].time_spent_seconds' | jq -s add
+```
+
+#### Features:
+- **Global Flag**: `--format`/`-f` flag for all list-based commands
+- **Typer Context**: Format preference stored and passed to subcommands
+- **Custom Serializer**: Handles Pydantic models, datetime/date, Enums
+- **Epic Information**: Includes epic_key and epic_name for worklogs
+- **Epic Caching**: In-memory cache minimizes API calls
+- **Performance Mode**: Optional `--no-epic` flag for faster output
+- **Auto-Suppress**: Banner and headers hidden in JSON mode
+
+#### JSON Output Structure:
+```json
+{
+  "total": 2,
+  "worklogs": [
+    {
+      "id": 619,
+      "issue_key": "PRD-1",
+      "epic_key": "PRD-1",
+      "epic_name": "budjira Development",
+      "time_spent_seconds": 900,
+      "time_spent_display": "15m",
+      "date": "2025-10-26",
+      "author_account_id": "712020:5...",
+      "author_display_name": "Fred Thiele",
+      "description": "Testing"
+    }
+  ]
+}
+```
+
+#### Implementation:
+- `budjira/utils/formatter.py`: OutputFormatter utility
+- `budjira/cli/main.py`: Global `--format` flag with Typer context
+- `budjira/core/jira_client.py`: `get_issue_epic()` method
+- `budjira/cli/tempo.py`: JSON output with epic caching
+
+#### Test Coverage:
+- `tests/utils/test_formatter.py`: 22 tests (90% coverage)
+- `tests/cli/test_tempo.py`: 4 JSON tests (76% total coverage)
+
+#### Use Cases:
+- **Automation**: Machine-readable output for scripts and pipelines
+- **FoU Reporting**: Swedish tax reporting (Forsknings- och utvecklingsavdrag)
+- **Data Analysis**: Export to Excel, CSV, or BI tools
+- **Integration**: Pipe to jq, Python scripts, or other tools
+
 ## Testing
 
-### Test-Statistiken (Current: v1.6.6)
-- **Total Tests**: 373 (↑ from 325 in v1.5.5, +48 for Tempo including bugfixes)
-- **Coverage**: 81.93% (maintained >70% requirement)
+### Test-Statistiken (Current: v1.7.0)
+- **Total Tests**: 399 (↑ from 325 in v1.5.5, +74 total for Tempo and JSON output)
+- **Coverage**: 81.09% (maintained >70% requirement)
 - **Test Duration**: ~5.7 seconds
 - **Framework**: pytest + pytest-cov + pytest-mock
 - **Recent Additions**:
+  - v1.7.0: +26 tests for JSON output (22 formatter + 4 tempo JSON)
   - v1.6.0: +37 tests for Tempo integration
   - v1.6.1: +6 tests for Tempo setup persistence (Bug #4)
   - v1.6.3: +1 test for worklogs without issue key
@@ -685,16 +830,17 @@ tests/
 ├── cli/
 │   ├── test_ai.py              # AI prompt command (7 tests)
 │   ├── test_connect.py         # Connection commands (9 tests)
-│   ├── test_create.py          # Create command (21 tests, +4 time tracking) ✨ UPDATED
+│   ├── test_create.py          # Create command (21 tests, +4 time tracking) ✨ v1.5.0
 │   ├── test_dor.py             # DoR commands (17 tests)
 │   ├── test_epic.py            # Epic commands (3 tests)
-│   ├── test_issue.py           # Issue update commands (13 tests, +7 time tracking) ✨ UPDATED
+│   ├── test_issue.py           # Issue update commands (13 tests, +7 time tracking) ✨ v1.5.0
 │   ├── test_main.py            # Main app (3 tests)
 │   ├── test_search.py          # Search command (12 tests)
-│   ├── test_worklog.py         # Worklog commands (17 tests) ✨ NEW v1.5.0
+│   ├── test_tempo.py           # Tempo commands (20 tests, +4 JSON tests) ✨ v1.6.0/v1.7.0
+│   ├── test_worklog.py         # Worklog commands (17 tests) ✨ v1.5.0
 │   └── test_update.py          # Update command
 ├── core/
-│   └── test_jira_client.py     # JiraClient API wrapper (extensive, +4 worklog tests) ✨ UPDATED
+│   └── test_jira_client.py     # JiraClient API wrapper (extensive, +4 worklog tests) ✨ v1.5.0/v1.7.0
 ├── models/
 │   ├── test_config.py          # GlobalConfig (4 tests)
 │   ├── test_connection.py      # Connection models (10 tests)
@@ -703,12 +849,16 @@ tests/
 ├── config/
 │   ├── test_credentials.py     # Credential storage (8 tests)
 │   └── test_settings.py        # Settings singleton (14 tests)
+├── tempo/
+│   ├── test_models.py          # Tempo models (11 tests) ✨ v1.6.0
+│   └── test_client.py          # TempoClient (12 tests) ✨ v1.6.0
 └── utils/
     ├── test_banner.py          # Banner display (5 tests)
-    ├── test_datetime_parser.py # Datetime parsing (19 tests) ✨ NEW v1.5.0
+    ├── test_datetime_parser.py # Datetime parsing (19 tests) ✨ v1.5.0
     ├── test_dor_validator.py   # DoR validation (13 tests)
     ├── test_editor.py          # Editor utility (14 tests)
     ├── test_errors.py          # Custom exceptions (10 tests)
+    ├── test_formatter.py       # Output formatting (22 tests) ✨ NEW v1.7.0
     ├── test_time_parser.py     # Time parsing (14 tests)
     └── test_version.py         # Version checker (12 tests)
 ```
@@ -921,7 +1071,9 @@ types-requests = ">=2.32.4"     # Type stubs for requests
 - [x] **Definition of Ready (DoR) templates with validation** (v1.4.0)
 - [x] **Issue updates (status transitions, fields, labels)** (v1.4.0)
 - [x] **Epic linking and management** (v1.4.0)
-- [x] **Time tracking (worklogs, time estimates)** (v1.5.0) ✨ NEW
+- [x] **Time tracking (worklogs, time estimates)** (v1.5.0)
+- [x] **Tempo Timesheets integration** (v1.6.0)
+- [x] **JSON output format for automation** (v1.7.0) ✨ NEW
 - [x] Self-update mechanism
 - [x] Automatic update checks
 - [x] AI usage prompt generation
@@ -938,6 +1090,7 @@ types-requests = ">=2.32.4"     # Type stubs for requests
 - [ ] Configuration templates
 - [ ] Bulk operations
 - [ ] Pre-release support in update command
+- [ ] E2E Testing with Atlassian Developer Cloud (#6)
 
 ## Technische Schulden
 
@@ -1082,14 +1235,18 @@ docs: update installation instructions
 
 ---
 
-**Letzte Aktualisierung**: 2025-10-26 (nach Bug #7 fix - v1.6.6 pending)
+**Letzte Aktualisierung**: 2025-10-26 (nach Feature #8 - v1.7.0 pending)
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
 
 **Recent Session Summary** (2025-10-26):
-- ✅ Fixed Bug #4: Tempo setup persistence (v1.6.1)
-- ✅ Fixed Bug #5 part 1: accountId from myself() (v1.6.4)
-- ✅ Fixed Bug #5 part 2: issueId instead of issueKey for tempo log (v1.6.5)
-- ✅ Fixed Bug #7: issueId instead of issueKey for tempo worklogs (v1.6.6 pending)
-- ✅ Added E2E Testing feature request (#6)
-- ✅ 373 tests passing, 81.93% coverage
-- 📊 Status: Production-ready, all Tempo commands fully functional
+- ✅ Implemented Feature #8: JSON output format for automation (v1.7.0 pending)
+  - Global `--format json` flag for all list-based commands
+  - OutputFormatter utility with custom JSON serializer
+  - JiraClient.get_issue_epic() method with modern/legacy fallback
+  - Tempo worklogs JSON output with epic_key/epic_name fields
+  - In-memory epic caching to minimize API calls
+  - Optional --no-epic flag for performance mode
+- ✅ 26 new tests (373 → 399 tests)
+- ✅ Test coverage: 81.09% (maintained >70% requirement)
+- ✅ All documentation updated (README, context.md, ai-usage-prompt.md, ai-prompt-supplements.md, CLAUDE.md)
+- 📊 Status: Production-ready, JSON output ready for FoU reporting automation

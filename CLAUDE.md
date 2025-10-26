@@ -102,6 +102,7 @@ budjira/
 │   ├── dor_validator.py    # DoR template validation
 │   ├── editor.py     # Multi-line markdown editor
 │   ├── errors.py     # Custom exceptions
+│   ├── formatter.py  # Output formatting (JSON, table) ✨ NEW v1.7.0
 │   ├── time_parser.py      # Time string parsing (1h, 30m, 2h30m)
 │   └── version.py    # Version checking via GitHub Releases
 └── __main__.py       # Entry point for `python -m budjira`
@@ -122,12 +123,25 @@ Uses `xdg-base-dirs` library for cross-platform configuration paths:
 - `~/.config/budjira/logs/` - Rotating log files per context
 - `~/.config/budjira/config.toml` - Global settings
 
-**3. Jira Library Wrapper:**
+**3. Global Output Formatting (Typer Context Pattern):** ✨ NEW v1.7.0
+- Global `--format` flag (`table` or `json`) stored in Typer context
+- Context object passed to all subcommands via `ctx.obj`
+- Custom JSON serializer handles Pydantic models, datetime/date, Enums
+- Banner/header automatically suppressed in JSON mode
+- Example: `budjira --format json tempo worklogs`
+
+**4. Epic Information Caching:** ✨ NEW v1.7.0
+- In-memory dictionary cache for epic data per command invocation
+- Minimizes Jira API calls when multiple worklogs reference same issue
+- Optional `--no-epic` flag for performance-critical scenarios
+- Fallback: Modern (parent field) → Legacy (Epic Link custom field)
+
+**5. Jira Library Wrapper:**
 - Wraps the `jira` library (pycontribs/jira) rather than reimplementing API calls
 - Provides consistent error handling and logging
 - Adds caching and retry logic
 
-**4. Error Handling Strategy:**
+**6. Error Handling Strategy:**
 All errors produce helpful, actionable messages in English:
 - **Connection errors**: Check URL, credentials, network
 - **Permission errors**: Explain required Jira permissions
@@ -144,6 +158,7 @@ All errors produce helpful, actionable messages in English:
 
 **Core Layer:**
 - `JiraClient`: High-level interface to Jira API
+  - `get_issue_epic()`: Fetch epic info with modern/legacy fallback ✨ NEW v1.7.0
 - `TempoClient`: REST API client for Tempo Timesheets (v1.6.0+)
 - Connection management with multi-instance support
 
@@ -156,6 +171,9 @@ All errors produce helpful, actionable messages in English:
 - Structured logging to files (per-context)
 - Version checking via PyPI JSON API (24h cache)
 - Custom exception hierarchy
+- `OutputFormatter`: JSON/table output formatting ✨ NEW v1.7.0
+  - Custom JSON serializer for Pydantic/datetime/Enums
+  - Global `--format` flag support
 
 ## Technology Stack
 

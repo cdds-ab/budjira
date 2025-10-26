@@ -7,9 +7,9 @@ This file contains manually curated sections for the AI usage prompt that cannot
 ## Version Tracking
 
 - **Last Updated:** 2025-10-26
-- **Commands Covered:** connect, search, create, update, ai, tempo
+- **Commands Covered:** connect, search, create, update, ai, tempo, JSON output
 - **Last Reviewed By:** Human developer
-- **Recent Changes:** Added Tempo Timesheets integration workflows
+- **Recent Changes:** Added JSON output format workflows (v1.7.0)
 
 ## Common Workflows for AI Assistants
 
@@ -115,6 +115,54 @@ budjira tempo worklogs PROJ-123   # Tempo
 - End of day time tracking
 - Tracking time across multiple issues
 
+### 8. JSON Output for Automation and Reporting
+```bash
+# Export Tempo worklogs to JSON
+budjira --format json tempo worklogs --from 2025-10-01 --to 2025-10-31
+
+# Export to file for processing
+budjira -f json tempo worklogs --from 2025-10-01 --to 2025-10-31 > worklogs.json
+
+# Pipe to jq for analysis
+budjira --format json tempo worklogs --from 2025-10-01 | jq '.worklogs[].time_spent_seconds' | jq -s add
+
+# Extract epic information
+budjira -f json tempo worklogs PROJ-123 | jq '.worklogs[] | {issue: .issue_key, epic: .epic_name, time: .time_spent_display}'
+
+# Performance mode (skip epic fetching)
+budjira --format json tempo worklogs --from 2025-10-01 --no-epic
+```
+
+**When to use:**
+- FoU (Forsknings- och utvecklingsavdrag) reporting for Swedish tax compliance
+- Exporting time tracking data for analysis
+- Integration with reporting tools or data pipelines
+- Automation workflows that need machine-readable output
+- Batch processing of worklog data
+
+**Output structure:**
+```json
+{
+  "total": 2,
+  "worklogs": [
+    {
+      "id": 619,
+      "issue_key": "PRD-1",
+      "epic_key": "PRD-1",
+      "epic_name": "budjira Development",
+      "time_spent_seconds": 900,
+      "time_spent_display": "15m",
+      "date": "2025-10-26",
+      "author_account_id": "712020:5...",
+      "author_display_name": "Fred Thiele",
+      "description": "Testing budjira Tempo integration"
+    }
+  ]
+}
+```
+
+**Note:** Epic information requires additional Jira API calls. Use `--no-epic` for faster output when epic data is not needed.
+
 ## AI Assistant Tips
 
 ### Connection Management
@@ -149,10 +197,19 @@ budjira tempo worklogs PROJ-123   # Tempo
 5. **Tempo not enabled**: Run `budjira connect tempo-setup` if "Tempo is not enabled" error occurs
 6. **Missing Tempo token**: Verify Tempo API token is configured correctly
 
+### JSON Output
+1. **Use `--format json` for automation**: Machine-readable output for scripts and pipelines
+2. **Combine with jq**: Powerful JSON processing (e.g., `| jq '.worklogs[].time_spent_seconds'`)
+3. **Epic performance**: Use `--no-epic` flag when epic data not needed (faster, fewer API calls)
+4. **Banner suppression**: Banner/header automatically hidden in JSON mode
+5. **Global flag**: `--format` applies to all list-based commands (future extensibility)
+6. **Export workflows**: Redirect to file (`> output.json`) or pipe to other tools
+
 ### Output Parsing
-1. **Use `-q` for programmatic access**: Suppress header when parsing output
-2. **Parse table output**: Extract key, summary, status from search results
-3. **Handle empty results**: Inform user when no issues match criteria
+1. **Use `-q` for programmatic access**: Suppress header when parsing output (table mode)
+2. **Use `--format json` for structured data**: Machine-readable JSON for automation
+3. **Parse table output**: Extract key, summary, status from search results
+4. **Handle empty results**: Inform user when no issues match criteria
 
 ## Edge Cases and Gotchas
 
