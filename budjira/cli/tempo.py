@@ -237,7 +237,7 @@ def tempo_list_worklogs(
 
             table.add_row(
                 str(worklog.tempoWorklogId),
-                worklog.issue.key,
+                worklog.issue.key or "[dim]N/A[/dim]",
                 time_display,
                 worklog.startDate.strftime("%Y-%m-%d"),
                 worklog.author.displayName or worklog.author.accountId[:8],

@@ -24,6 +24,16 @@ def test_tempo_issue_valid():
     assert issue.id == 123
 
 
+def test_tempo_issue_without_key():
+    """Test TempoIssue model without key (some worklogs may have no issue key)."""
+    issue = TempoIssue(
+        self="https://api.tempo.io/issues/123",
+        id=123,
+    )
+    assert issue.key is None
+    assert issue.id == 123
+
+
 def test_tempo_author_valid():
     """Test TempoAuthor model with valid data."""
     author = TempoAuthor(

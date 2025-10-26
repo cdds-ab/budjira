@@ -10,7 +10,7 @@ class TempoIssue(BaseModel):
     """Jira issue reference in Tempo API."""
 
     self: str
-    key: str
+    key: str | None = None  # Optional: some worklogs may not have an issue key
     id: int | None = None
 
 

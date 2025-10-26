@@ -162,6 +162,36 @@ def test_tempo_worklogs_empty_results(mock_tempo_connection, mock_tempo_client):
     assert "No worklogs found" in result.stdout
 
 
+def test_tempo_worklogs_without_issue_key(mock_tempo_connection, mock_tempo_client):
+    """Test worklog listing handles worklogs without issue key."""
+    from datetime import date, datetime
+
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    # Create worklog without issue key
+    worklog_no_key = TempoWorklog(
+        self="https://api.tempo.io/worklogs/999",
+        tempoWorklogId=999,
+        issue=TempoIssue(self="https://api.tempo.io/issues/999"),  # No key
+        timeSpentSeconds=3600,
+        startDate=date(2025, 10, 25),
+        createdAt=datetime(2025, 10, 25, 10, 0),
+        updatedAt=datetime(2025, 10, 25, 10, 0),
+        author=TempoAuthor(
+            self="https://api.tempo.io/users/123",
+            accountId="557058:test",
+            displayName="Test User",
+        ),
+    )
+    mock_tempo_client.get_worklogs.return_value = [worklog_no_key]
+
+    result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 0
+    assert "999" in result.stdout  # Worklog ID shown
+    assert "N/A" in result.stdout or "n/a" in result.stdout.lower()  # No issue key
+
+
 def test_tempo_delete_worklog_with_confirmation(mock_tempo_connection, mock_tempo_client):
     """Test worklog deletion with user confirmation."""
     result = runner.invoke(
