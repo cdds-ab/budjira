@@ -107,7 +107,7 @@ class TempoClient:
 
     def create_worklog(
         self,
-        issue_key: str,
+        issue_id: int,
         time_spent_seconds: int,
         start_date: str,
         author_account_id: str,
@@ -119,7 +119,7 @@ class TempoClient:
         """Create a new worklog entry.
 
         Args:
-            issue_key: Jira issue key (e.g., PROJ-123)
+            issue_id: Numeric Jira issue ID (e.g., 12345, NOT "PROJ-123")
             time_spent_seconds: Time spent in seconds
             start_date: Start date (YYYY-MM-DD)
             author_account_id: Jira account ID of the author
@@ -135,7 +135,7 @@ class TempoClient:
             JiraAPIError: If worklog creation fails
         """
         worklog_data = TempoWorklogCreate(
-            issueKey=issue_key,
+            issueId=issue_id,
             timeSpentSeconds=time_spent_seconds,
             startDate=start_date,
             startTime=start_time,
@@ -145,7 +145,7 @@ class TempoClient:
             remainingEstimateSeconds=remaining_estimate_seconds,
         )
 
-        logger.info(f"Creating Tempo worklog for {issue_key}: {time_spent_seconds}s")
+        logger.info(f"Creating Tempo worklog for issue ID {issue_id}: {time_spent_seconds}s")
         response = self._make_request(
             method="POST",
             endpoint="/worklogs",

@@ -53,7 +53,7 @@ class TempoWorklog(BaseModel):
 class TempoWorklogCreate(BaseModel):
     """Tempo worklog creation request."""
 
-    issueKey: str
+    issueId: int  # Numeric issue ID (not issueKey string)
     timeSpentSeconds: int
     startDate: str  # YYYY-MM-DD
     startTime: str = "09:00:00"

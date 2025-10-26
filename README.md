@@ -513,6 +513,7 @@ Found a bug? Have a feature request?
 - [ ] Smart caching with dirty detection
 
 ### Planned 📋
+- [ ] E2E Testing with Atlassian Developer Cloud (see [#6](https://github.com/cdds-ab/budjira/issues/6))
 - [ ] Comment management
 - [ ] Attachment upload/download
 - [ ] Offline mode

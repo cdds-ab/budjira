@@ -119,14 +119,14 @@ def test_tempo_worklog_optional_fields():
 def test_tempo_worklog_create_valid():
     """Test TempoWorklogCreate model with valid data."""
     worklog_data = TempoWorklogCreate(
-        issueKey="PROJ-123",
+        issueId=12345,
         timeSpentSeconds=7200,
         startDate="2025-10-25",
         startTime="09:00:00",
         description="Development work",
         authorAccountId="557058:abc123",
     )
-    assert worklog_data.issueKey == "PROJ-123"
+    assert worklog_data.issueId == 12345
     assert worklog_data.timeSpentSeconds == 7200
     assert worklog_data.startDate == "2025-10-25"
     assert worklog_data.description == "Development work"
@@ -135,12 +135,12 @@ def test_tempo_worklog_create_valid():
 def test_tempo_worklog_create_minimal():
     """Test TempoWorklogCreate with minimal required fields."""
     worklog_data = TempoWorklogCreate(
-        issueKey="PROJ-456",
+        issueId=67890,
         timeSpentSeconds=3600,
         startDate="2025-10-25",
         authorAccountId="557058:xyz",
     )
-    assert worklog_data.issueKey == "PROJ-456"
+    assert worklog_data.issueId == 67890
     assert worklog_data.timeSpentSeconds == 3600
     assert worklog_data.startTime == "09:00:00"  # Default value
     assert worklog_data.description is None
@@ -152,14 +152,14 @@ def test_tempo_worklog_create_missing_required():
         TempoWorklogCreate(  # type: ignore[call-arg]
             timeSpentSeconds=3600,
             startDate="2025-10-25",
-            # Missing issueKey and authorAccountId
+            # Missing issueId and authorAccountId
         )
 
 
 def test_tempo_worklog_create_model_dump():
     """Test TempoWorklogCreate model_dump excludes None values."""
     worklog_data = TempoWorklogCreate(
-        issueKey="PROJ-123",
+        issueId=12345,
         timeSpentSeconds=7200,
         startDate="2025-10-25",
         authorAccountId="557058:abc",

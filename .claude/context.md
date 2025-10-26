@@ -11,11 +11,12 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.6.4 (Pending release)
+- **Current Version**: v1.6.5 (Pending release)
 - **Branch**: master
-- **Status**: ✅ **Tempo log command fixed, production ready**
+- **Status**: ✅ **Tempo log command fully fixed, production ready**
 - **Recent Releases**:
-  - v1.6.4 (2025-10-26): Fix Tempo log 400 Bad Request (#5) 🐛
+  - v1.6.5 (2025-10-26): Fix Tempo issueId requirement (#5 part 2) 🐛
+  - v1.6.4 (2025-10-26): Fix Tempo accountId requirement (#5 part 1) 🐛
   - v1.6.3 (2025-10-26): Fix Tempo worklogs without issue key 🐛
   - v1.6.2 (2025-10-26): Fix MyPy error in tempo error handler 🐛
   - v1.6.1 (2025-10-26): Fix Tempo setup persistence bug (#4) 🐛
@@ -24,9 +25,24 @@
   - v1.5.4 (2025-10-25): Complete AI usage prompt with time tracking docs
   - v1.5.3 (2025-10-25): GitHub API rate limit fix for update checks
 
-### 🐛 v1.6.1-v1.6.4: Tempo Bugfixes (2025-10-26)
+### 🐛 v1.6.1-v1.6.5: Tempo Bugfixes (2025-10-26)
 
-#### v1.6.4: Fix Tempo log command 400 Bad Request (Bug #5) ✅
+#### v1.6.5: Fix Tempo issueId requirement (Bug #5 part 2) ✅
+**GitHub Issue**: #5 - tempo log command fails with 400 Bad Request (continued)
+**Problem**: After fixing accountId, still got `{"errors":[{"message":"Issue id cannot be null"}]}`
+**Root Cause**: Tempo API requires numeric `issueId` (e.g., 12345), NOT string `issueKey` (e.g., "AS-13")
+**User Discovery**: User tested with curl and found Tempo rejects issueKey parameter
+**Fix**:
+- Changed `TempoWorklogCreate` model: `issueKey: str` → `issueId: int`
+- Updated `TempoClient.create_worklog()`: parameter `issue_key` → `issue_id`
+- CLI now fetches issue from Jira: `issue = jira_client.client.issue(issue_key)`
+- Extract numeric ID: `issue_id = int(issue.id)` (Jira returns as string)
+- Updated all tests (3 files: test_tempo_e2e.py, test_client.py, test_models.py)
+- Added comprehensive regression test: `test_tempo_log_uses_issue_id_not_key`
+
+**Impact**: Tempo worklog creation now works end-to-end. Both root causes fixed.
+
+#### v1.6.4: Fix Tempo accountId requirement (Bug #5 part 1) ✅
 **GitHub Issue**: #5 - tempo log command fails with 400 Bad Request
 **Problem**: `budjira tempo log PROJ-123 30m` failed with 400 Bad Request from Tempo API
 **Root Cause**: Code used `current_user()` API which returns username, but Tempo API requires `accountId` from `myself()` endpoint
@@ -36,7 +52,7 @@
 - Updated test fixtures to mock `myself()` instead of `current_user()`
 - Added regression test: `test_tempo_log_passes_correct_account_id`
 
-**Impact**: Core Tempo functionality (logging work) now works correctly
+**Impact**: Fixed first part of Bug #5 (accountId), but issueId still missing
 
 #### v1.6.3: Fix Tempo worklogs without issue key
 **Problem**: Pydantic ValidationError when Tempo API returns worklogs without `issue.key` field
@@ -84,19 +100,21 @@ Full enterprise-grade time tracking via Tempo Cloud API for teams using Tempo in
 - ✅ Full Tempo Cloud API v4 support
 - ✅ Rich Console output with tables
 
-**Tests** (updated with v1.6.1-v1.6.4):
-- 46 new tests total (371 tests, up from 325)
-- Test coverage: **81.92%** (improved from 79.53%)
+**Tests** (updated with v1.6.1-v1.6.5):
+- 47 new tests total (372 tests, up from 325)
+- Test coverage: **81.93%** (improved from 79.53%)
 - v1.6.0 tests:
   - `tests/tempo/test_models.py` - 11 tests, 100% coverage (1 added in v1.6.3)
   - `tests/tempo/test_client.py` - 12 tests, 96% coverage
-  - `tests/cli/test_tempo.py` - 14 tests, 72% coverage (2 added in v1.6.3, v1.6.4)
+  - `tests/cli/test_tempo.py` - 15 tests, 72% coverage (3 added: v1.6.3, v1.6.4, v1.6.5)
   - Extended `tests/models/test_connection.py` - 3 new tests
 - v1.6.1 tests:
   - `tests/config/test_settings.py` - 2 new tests for tempo_enabled persistence
   - `tests/cli/test_connect.py` - 4 new tests for tempo-setup command
 - v1.6.4 tests:
-  - `tests/cli/test_tempo.py` - 1 new test for Bug #5 (test_tempo_log_passes_correct_account_id)
+  - `tests/cli/test_tempo.py` - 1 new test for Bug #5 part 1 (test_tempo_log_passes_correct_account_id)
+- v1.6.5 tests:
+  - `tests/cli/test_tempo.py` - 1 new test for Bug #5 part 2 (test_tempo_log_uses_issue_id_not_key)
 
 **Files Created**:
 - `budjira/tempo/__init__.py`
@@ -598,13 +616,17 @@ budjira ai usage-prompt --plain > file.md   # Save to file
 
 ## Testing
 
-### Test-Statistiken (Current: v1.6.0)
-- **Total Tests**: 362 (↑ from 325 in v1.5.5, +37 for Tempo)
-- **Coverage**: 79.53% (maintained >70% requirement)
-- **Test Duration**: ~10.2 seconds
+### Test-Statistiken (Current: v1.6.5)
+- **Total Tests**: 372 (↑ from 325 in v1.5.5, +47 for Tempo including bugfixes)
+- **Coverage**: 81.93% (maintained >70% requirement)
+- **Test Duration**: ~5.7 seconds
 - **Framework**: pytest + pytest-cov + pytest-mock
 - **Recent Additions**:
   - v1.6.0: +37 tests for Tempo integration
+  - v1.6.1: +6 tests for Tempo setup persistence (Bug #4)
+  - v1.6.3: +1 test for worklogs without issue key
+  - v1.6.4: +1 test for Bug #5 part 1 (accountId)
+  - v1.6.5: +1 test for Bug #5 part 2 (issueId)
   - v1.5.0: +51 tests for time tracking
   - v1.5.2: +6 tests for epic linking fallback
 
@@ -1046,14 +1068,13 @@ docs: update installation instructions
 
 ---
 
-**Letzte Aktualisierung**: 2025-10-25 11:55 (nach v1.5.5 Release - AI Docs Complete)
+**Letzte Aktualisierung**: 2025-10-26 (nach Bug #5 complete fix - v1.6.5 pending)
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
 
-**Recent Session Summary** (2025-10-25):
-- ✅ Fixed Bug #2: Epic linking compatibility (v1.5.2)
-- ✅ Fixed Update Check: GitHub API rate limiting (v1.5.3)
-- ✅ Complete AI usage prompt with time tracking docs (v1.5.4)
-- ✅ Fixed RUF043 regex pattern in tests (v1.5.5)
-- ✅ All Issues closed (#1 Time Tracking, #2 Epic Linking)
-- ✅ 325 tests passing, 81.54% coverage
-- 📊 Status: Production-ready, all features documented, docs complete
+**Recent Session Summary** (2025-10-26):
+- ✅ Fixed Bug #4: Tempo setup persistence (v1.6.1)
+- ✅ Fixed Bug #5 part 1: accountId from myself() (v1.6.4)
+- ✅ Fixed Bug #5 part 2: issueId instead of issueKey (v1.6.5 pending)
+- ✅ Added E2E Testing feature request (#6)
+- ✅ 372 tests passing, 81.93% coverage
+- 📊 Status: Production-ready, Tempo fully functional, Bug #5 completely resolved

@@ -28,6 +28,11 @@ def mock_jira_client():
             "emailAddress": "test@example.com",
             "displayName": "Test User",
         }
+        # Mock issue() API call to return numeric ID (Bug #5 fix continued)
+        mock_issue = MagicMock()
+        mock_issue.id = "12345"  # Jira returns as string
+        mock_issue.key = "PROJ-123"
+        mock.from_connection.return_value.client.issue.return_value = mock_issue
         yield mock
 
 
@@ -116,6 +121,67 @@ def test_tempo_log_passes_correct_account_id(mock_tempo_connection, mock_tempo_c
     assert (
         call_kwargs["author_account_id"] == "557058:abc123def456"
     ), "author_account_id must be the Jira accountId from myself() API, not the username from current_user()"
+
+
+def test_tempo_log_uses_issue_id_not_key(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test that tempo log uses numeric issueId from Jira API, not issueKey (Bug #5 continued).
+
+    Regression test: Tempo API requires issueId (numeric like 12345), not issueKey (string like "AS-13").
+    The code must fetch the issue from Jira API to get the numeric ID.
+
+    Root cause from user's curl test:
+    {"errors":[{"message":"Issue id cannot be null"}]}
+    """
+    # Mock Jira API myself() response
+    mock_jira_client.from_connection.return_value.client.myself.return_value = {
+        "accountId": "557058:testuser",
+        "emailAddress": "test@example.com",
+    }
+
+    # Mock Jira API issue() response with numeric ID
+    mock_issue = MagicMock()
+    mock_issue.id = "12345"  # Jira returns this as string
+    mock_issue.key = "AS-13"
+    mock_jira_client.from_connection.return_value.client.issue.return_value = mock_issue
+
+    # Mock successful Tempo worklog creation
+    mock_worklog = TempoWorklog(
+        self="https://api.tempo.io/worklogs/88888",
+        tempoWorklogId=88888,
+        issue=TempoIssue(self="https://api.tempo.io/issues/12345", key="AS-13", id=12345),
+        timeSpentSeconds=1800,
+        startDate=date(2025, 10, 26),
+        startTime="09:00:00",
+        description="Testing issueId",
+        createdAt=datetime(2025, 10, 26, 10, 0),
+        updatedAt=datetime(2025, 10, 26, 10, 0),
+        author=TempoAuthor(
+            self="https://api.tempo.io/users/123",
+            accountId="557058:testuser",
+        ),
+    )
+    mock_tempo_client.create_worklog.return_value = mock_worklog
+
+    result = runner.invoke(
+        app,
+        ["tempo", "log", "AS-13", "30m", "--comment", "Testing issueId"],
+    )
+
+    assert result.exit_code == 0
+
+    # CRITICAL 1: Verify Jira API was called to fetch the issue (to get numeric ID)
+    mock_jira_client.from_connection.return_value.client.issue.assert_called_once_with("AS-13")
+
+    # CRITICAL 2: Verify that create_worklog was called with numeric issueId, NOT issueKey
+    mock_tempo_client.create_worklog.assert_called_once()
+    call_kwargs = mock_tempo_client.create_worklog.call_args[1]
+    assert "issue_id" in call_kwargs, "Tempo API requires 'issue_id' parameter"
+    assert call_kwargs["issue_id"] == 12345, (
+        "issue_id must be numeric ID (12345) from Jira API, "
+        "not issueKey string ('AS-13'). Tempo returns: "
+        '{"errors":[{"message":"Issue id cannot be null"}]}'
+    )
+    assert "issue_key" not in call_kwargs, "issue_key should not be sent to Tempo API, only issue_id"
 
 
 def test_tempo_log_with_started_date(mock_tempo_connection, mock_tempo_client, mock_jira_client):

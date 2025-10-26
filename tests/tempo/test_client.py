@@ -70,7 +70,7 @@ def test_create_worklog_success(mock_request, tempo_client, mock_worklog_respons
     mock_request.return_value = mock_response
 
     worklog = tempo_client.create_worklog(
-        issue_key="PROJ-123",
+        issue_id=12345,
         time_spent_seconds=7200,
         start_date="2025-10-25",
         author_account_id="557058:abc123",
@@ -88,7 +88,7 @@ def test_create_worklog_success(mock_request, tempo_client, mock_worklog_respons
     call_kwargs = mock_request.call_args[1]
     assert call_kwargs["method"] == "POST"
     assert "/worklogs" in call_kwargs["url"]
-    assert call_kwargs["json"]["issueKey"] == "PROJ-123"
+    assert call_kwargs["json"]["issueId"] == 12345
     assert call_kwargs["json"]["timeSpentSeconds"] == 7200
 
 
@@ -102,7 +102,7 @@ def test_create_worklog_authentication_error(mock_request, tempo_client):
 
     with pytest.raises(AuthenticationError, match="Tempo authentication failed"):
         tempo_client.create_worklog(
-            issue_key="PROJ-123",
+            issue_id=12345,
             time_spent_seconds=3600,
             start_date="2025-10-25",
             author_account_id="557058:abc",
@@ -119,7 +119,7 @@ def test_create_worklog_permission_error(mock_request, tempo_client):
 
     with pytest.raises(PermissionError, match="Access denied"):
         tempo_client.create_worklog(
-            issue_key="PROJ-123",
+            issue_id=12345,
             time_spent_seconds=3600,
             start_date="2025-10-25",
             author_account_id="557058:abc",

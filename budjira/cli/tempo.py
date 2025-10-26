@@ -114,10 +114,14 @@ def tempo_log_worklog(
         # Get Tempo client
         tempo_client = get_tempo_client(connection_name)
 
-        # Get Jira client to retrieve author account ID
+        # Get Jira client to retrieve author account ID and issue ID
         jira_client = JiraClient.from_connection(connection)
         myself = jira_client.client.myself()
         author_account_id = myself["accountId"]
+
+        # Get issue from Jira to retrieve numeric ID (Tempo requires issueId, not issueKey)
+        issue = jira_client.client.issue(issue_key)
+        issue_id = int(issue.id)  # Jira returns as string, Tempo needs int
 
         # Parse time spent (convert minutes to seconds)
         time_spent_minutes = parse_time_string(time_spent)
@@ -132,7 +136,7 @@ def tempo_log_worklog(
 
         # Create worklog
         worklog = tempo_client.create_worklog(
-            issue_key=issue_key,
+            issue_id=issue_id,
             time_spent_seconds=time_spent_seconds,
             start_date=start_date,
             start_time=start_time,
