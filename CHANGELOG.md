@@ -1,6 +1,46 @@
 # CHANGELOG
 
 
+## v1.7.1 (2025-10-27)
+
+### Bug Fixes
+
+- **ci**: Remove hardcoded python3.13 from pre-commit config
+  ([`bdb0d5c`](https://github.com/cdds-ab/budjira/commit/bdb0d5c798263ea6e1ad5911979145d35ac833d5))
+
+The default_language_version with python3.13 caused CI failures in the Python matrix (3.10, 3.11,
+  3.12, 3.13) because pre-commit tried to find python3.13 even when running on python3.12.
+
+Solution: Remove default_language_version to let pre-commit use
+
+the current Python version from the CI matrix.
+
+### Documentation
+
+- Mark v1.7.0 as released in context.md
+  ([`ea3075b`](https://github.com/cdds-ab/budjira/commit/ea3075b9f5866aaef4c4cf1cf84d11b3b101d58e))
+
+- Update project documentation for v1.7.0 JSON output feature
+  ([`d15427d`](https://github.com/cdds-ab/budjira/commit/d15427d1ce77444f426bc788328bdaae133e5513))
+
+Updated all project documentation to reflect Feature #8 implementation:
+
+.claude/context.md: - Updated version to v1.7.0 (pending) - Added comprehensive v1.7.0 section with
+  implementation details - Updated test statistics (373 → 399 tests, 81.09% coverage) - Added JSON
+  Output Format to Implementierte Features (Section 11) - Updated module structure with formatter.py
+  - Updated Recent Session Summary
+
+.claude/ai-prompt-supplements.md: - Added Workflow #8: JSON Output for Automation and Reporting -
+  Added JSON Output tips in AI Assistant Tips section - Updated version tracking - Included jq
+  examples and FoU reporting use cases
+
+CLAUDE.md: - Updated architecture overview with formatter.py utility - Added Design Pattern #3:
+  Global Output Formatting (Typer Context) - Added Design Pattern #4: Epic Information Caching -
+  Updated Core Components with get_issue_epic() method - Updated Utils Layer with OutputFormatter
+
+All documentation now consistent with v1.7.0 feature set.
+
+
 ## v1.7.0 (2025-10-26)
 
 ### Features
