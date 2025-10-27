@@ -3,9 +3,6 @@
 # Install: uv run pre-commit install
 # Run manually: uv run pre-commit run --all-files
 
-default_language_version:
-  python: python3.13
-
 repos:
   # Ruff - Fast Python linter and formatter (replaces black, flake8, isort)
   - repo: https://github.com/astral-sh/ruff-pre-commit
