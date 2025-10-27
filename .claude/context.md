@@ -27,6 +27,84 @@
   - v1.6.0 (2025-10-26): Tempo Timesheets Integration ✨
   - v1.5.5 (2025-10-25): Regex pattern fix in tests (RUF043)
 
+### 🐛 Bug #10 - Tempo Worklogs Null Issue Key Backfill (In Progress)
+**GitHub Issue**: #10 - Bug: Tempo worklogs return null issue_key despite valid issueId
+**Status**: ✅ Fixed, ready for commit
+**Date**: 2025-10-27
+
+**Problem**:
+When logging work via `budjira tempo log ISSUE-KEY TIME`, the worklog is successfully created in Tempo with the correct `issueId`. However, when retrieving worklogs via `budjira --format json tempo worklogs`, the `issue_key` field is consistently `null`, even though the worklog is correctly associated with the issue in Tempo.
+
+This breaks automation workflows that rely on filtering/grouping worklogs by issue or epic, particularly for FoU (Research & Development) tax reporting in Sweden where worklogs must be aggregated by project.
+
+**Root Cause**:
+The Tempo REST API's `/worklogs` endpoint returns:
+```json
+{
+  "issue": {
+    "self": "https://...",
+    "key": null,      ⚠️ Tempo doesn't always populate this
+    "id": 12345
+  }
+}
+```
+The `issue.key` field is **optional** in Tempo's API response, even when the worklog has a valid `issueId`.
+
+**Impact**:
+- Breaks FoU tax reporting (primary use case for Swedish companies)
+- Cannot group worklogs by project or epic
+- Cannot correlate Tempo time with Jira issue progress
+- All 19 worklogs (112 hours) appeared as "NO_EPIC" and failed project filters
+
+**Solution Implemented**:
+Implemented issue_key backfill from Jira API with caching in `budjira/cli/tempo.py` (lines 252-312):
+
+1. **Backfill Logic**: When `worklog.issue.key` is null BUT `worklog.issue.id` is present:
+   - Fetch issue key from Jira API: `jira_client.client.issue(worklog.issue.id, fields="key")`
+   - Use backfilled key for JSON output
+
+2. **Caching**: Added `issue_key_cache: dict[int, str | None]` to minimize API calls
+   - Similar to existing `epic_cache` pattern
+   - Only one API call per unique issue_id
+
+3. **Epic Integration**: Backfilled issue_key enables epic lookup
+   - Epic information now works correctly for all worklogs
+   - No changes needed to epic fetching logic
+
+**Files Modified**:
+- `budjira/cli/tempo.py` - Added issue_key backfill logic with caching (lines 256-278)
+- `tests/cli/test_tempo.py` - Added 3 comprehensive tests (lines 583-748)
+
+**Tests Added**:
+1. `test_tempo_worklogs_json_issue_key_backfill` (lines 583-649)
+   - Verifies backfill from Jira API when key is null
+   - Verifies epic information is populated
+   - **Critical assertion**: `issue_key == "PRD-4"` from backfill
+
+2. `test_tempo_worklogs_json_issue_key_caching` (lines 652-702)
+   - Verifies caching works (3 worklogs, 1 API call)
+   - **Critical assertion**: `issue.call_count == 1`
+
+3. `test_tempo_worklogs_json_no_issue_id` (lines 705-747)
+   - Edge case: both key AND id are null
+   - Verifies no crash, no unnecessary API calls
+   - **Assertion**: `issue_key is None` (cannot backfill)
+
+**Test Results**:
+- ✅ All 402 tests pass (23 in test_tempo.py)
+- ✅ Coverage: 81.13% (maintained >70% requirement)
+- ✅ tempo.py coverage: 76%
+
+**Performance Impact**:
+- Minimal: One Jira API call per unique issue (cached)
+- Example: 19 worklogs on 5 different issues = 5 API calls
+- Existing `--no-epic` flag skips epic lookup (no change)
+
+**Next Steps**:
+- [ ] Commit fix with conventional commit message
+- [ ] Close GitHub Issue #10
+- [ ] Release as v1.7.2 (fix: semantic-release patch bump)
+
 ### 🐛 v1.6.1-v1.6.6: Tempo Bugfixes (2025-10-26)
 
 #### v1.6.6: Fix Tempo worklogs filtering (Bug #7) ✅

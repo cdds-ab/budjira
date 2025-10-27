@@ -578,3 +578,170 @@ def test_tempo_worklogs_json_epic_caching(mock_tempo_connection, mock_tempo_clie
     for worklog in output["worklogs"]:
         assert worklog["epic_key"] == "EPIC-1"
         assert worklog["epic_name"] == "Test Epic"
+
+
+def test_tempo_worklogs_json_issue_key_backfill(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test issue_key backfill when Tempo API returns null key (Bug #10).
+
+    Regression test for Bug #10: Tempo API sometimes returns issue.key as null
+    even when worklog has valid issueId. The code should backfill the key from
+    Jira API to enable automation and epic lookup.
+
+    Root cause: Tempo REST API response contains:
+    {"issue": {"self": "...", "key": null, "id": 12345}}
+    """
+    import json
+
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    # Mock worklog with null issue_key but valid issue_id (Bug #10 scenario)
+    mock_worklogs = [
+        TempoWorklog(
+            self="https://api.tempo.io/worklogs/622",
+            tempoWorklogId=622,
+            issue=TempoIssue(
+                self="https://api.tempo.io/issues/12345",
+                key=None,  # Tempo returns null
+                id=12345,  # But has valid ID
+            ),
+            timeSpentSeconds=18000,
+            startDate=date(2025, 10, 7),
+            startTime="09:00:00",
+            description="Development work",
+            createdAt=datetime(2025, 10, 7, 9, 0),
+            updatedAt=datetime(2025, 10, 7, 9, 0),
+            author=TempoAuthor(
+                self="https://api.tempo.io/users/1",
+                accountId="557058:abc",
+                displayName="Test User",
+            ),
+        ),
+    ]
+    mock_tempo_client.get_worklogs.return_value = mock_worklogs
+
+    # Mock Jira API issue() call for backfill
+    mock_issue = MagicMock()
+    mock_issue.key = "PRD-4"
+    mock_jira_client.from_connection.return_value.client.issue.return_value = mock_issue
+
+    # Mock epic fetching
+    mock_jira_client.from_connection.return_value.get_issue_epic.return_value = ("PRD-1", "budjira Development")
+
+    # Run command with JSON format
+    result = runner.invoke(app, ["--format", "json", "tempo", "worklogs"])
+
+    assert result.exit_code == 0
+
+    # CRITICAL 1: Verify Jira API was called to backfill issue_key
+    mock_jira_client.from_connection.return_value.client.issue.assert_called_once_with(12345, fields="key")
+
+    # CRITICAL 2: Verify JSON output has backfilled issue_key
+    output = json.loads(result.stdout)
+    assert output["total"] == 1
+    worklog = output["worklogs"][0]
+    assert worklog["issue_key"] == "PRD-4", (
+        "issue_key should be backfilled from Jira API when Tempo returns null. "
+        "This is critical for FoU tax reporting and epic aggregation."
+    )
+
+    # CRITICAL 3: Verify epic information is populated (depends on issue_key)
+    assert worklog["epic_key"] == "PRD-1"
+    assert worklog["epic_name"] == "budjira Development"
+
+
+def test_tempo_worklogs_json_issue_key_caching(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test that issue_key backfill is cached for multiple worklogs with same issue_id (Bug #10)."""
+    import json
+
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    # Mock 3 worklogs with null issue_key but same issue_id
+    mock_worklogs = [
+        TempoWorklog(
+            self=f"https://api.tempo.io/worklogs/{i}",
+            tempoWorklogId=i,
+            issue=TempoIssue(
+                self="https://api.tempo.io/issues/12345",
+                key=None,  # All have null key
+                id=12345,  # Same issue ID
+            ),
+            timeSpentSeconds=3600 * i,
+            startDate=date(2025, 10, 7),
+            startTime="09:00:00",
+            description=f"Work {i}",
+            createdAt=datetime(2025, 10, 7, 9, 0),
+            updatedAt=datetime(2025, 10, 7, 9, 0),
+            author=TempoAuthor(self="https://api.tempo.io/users/1", accountId="123"),
+        )
+        for i in range(1, 4)
+    ]
+    mock_tempo_client.get_worklogs.return_value = mock_worklogs
+
+    # Mock Jira API backfill
+    mock_issue = MagicMock()
+    mock_issue.key = "TEST-100"
+    mock_jira_client.from_connection.return_value.client.issue.return_value = mock_issue
+
+    # Mock epic fetching
+    mock_jira_client.from_connection.return_value.get_issue_epic.return_value = ("EPIC-50", "Test Epic")
+
+    # Run command
+    result = runner.invoke(app, ["--format", "json", "tempo", "worklogs"])
+
+    assert result.exit_code == 0
+
+    # CRITICAL: Verify issue backfill was called only ONCE (cached)
+    assert (
+        mock_jira_client.from_connection.return_value.client.issue.call_count == 1
+    ), "issue_key backfill should be cached to minimize Jira API calls"
+
+    # Verify all worklogs have backfilled issue_key
+    output = json.loads(result.stdout)
+    assert output["total"] == 3
+    for worklog in output["worklogs"]:
+        assert worklog["issue_key"] == "TEST-100"
+
+
+def test_tempo_worklogs_json_no_issue_id(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test handling of worklogs with null issue_key AND null issue_id (Bug #10 edge case)."""
+    import json
+
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    # Mock worklog with both null key and null id
+    mock_worklogs = [
+        TempoWorklog(
+            self="https://api.tempo.io/worklogs/999",
+            tempoWorklogId=999,
+            issue=TempoIssue(
+                self="https://api.tempo.io/issues/999",
+                key=None,  # No key
+                id=None,  # No ID either
+            ),
+            timeSpentSeconds=3600,
+            startDate=date(2025, 10, 7),
+            startTime="09:00:00",
+            description="Test work",
+            createdAt=datetime(2025, 10, 7, 9, 0),
+            updatedAt=datetime(2025, 10, 7, 9, 0),
+            author=TempoAuthor(self="https://api.tempo.io/users/1", accountId="123"),
+        ),
+    ]
+    mock_tempo_client.get_worklogs.return_value = mock_worklogs
+
+    # Run command
+    result = runner.invoke(app, ["--format", "json", "tempo", "worklogs"])
+
+    assert result.exit_code == 0
+
+    # Verify Jira API was NOT called (no issue_id to backfill)
+    mock_jira_client.from_connection.return_value.client.issue.assert_not_called()
+
+    # Verify JSON output has null issue_key (cannot backfill)
+    output = json.loads(result.stdout)
+    assert output["total"] == 1
+    worklog = output["worklogs"][0]
+    assert worklog["issue_key"] is None
+    # Epic fields should not be present (requires issue_key)
+    assert "epic_key" not in worklog
+    assert "epic_name" not in worklog

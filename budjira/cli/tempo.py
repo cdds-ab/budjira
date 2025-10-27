@@ -253,6 +253,7 @@ def tempo_list_worklogs(
             # JSON output - fetch epic information if not disabled
             worklog_dicts = []
             epic_cache: dict[str, tuple[str, str] | None] = {}  # Cache: issue_key -> (epic_key, epic_name)
+            issue_key_cache: dict[int, str | None] = {}  # Cache: issue_id -> issue_key (backfill)
 
             for worklog in worklogs:
                 # Convert seconds to hours/minutes display
@@ -260,10 +261,26 @@ def tempo_list_worklogs(
                 minutes = (worklog.timeSpentSeconds % 3600) // 60
                 time_display = f"{hours}h {minutes}m" if hours else f"{minutes}m"
 
+                # Backfill issue_key from Jira API if Tempo returned null
+                issue_key = worklog.issue.key
+                if issue_key is None and worklog.issue.id is not None:
+                    # Check cache first to minimize API calls
+                    if worklog.issue.id not in issue_key_cache:
+                        try:
+                            # Fetch issue key from Jira using numeric ID
+                            jira_issue = jira_client.client.issue(worklog.issue.id, fields="key")
+                            issue_key_cache[worklog.issue.id] = jira_issue.key
+                        except Exception:
+                            # If fetch fails, cache None to avoid retries
+                            issue_key_cache[worklog.issue.id] = None
+
+                    # Use cached value (either key or None)
+                    issue_key = issue_key_cache.get(worklog.issue.id)
+
                 # Base worklog dict
                 worklog_dict = {
                     "id": worklog.tempoWorklogId,
-                    "issue_key": worklog.issue.key,
+                    "issue_key": issue_key,
                     "time_spent_seconds": worklog.timeSpentSeconds,
                     "time_spent_display": time_display,
                     "date": worklog.startDate.isoformat(),
@@ -273,18 +290,18 @@ def tempo_list_worklogs(
                 }
 
                 # Add epic information if enabled and issue has a key
-                if not no_epic and worklog.issue.key:
-                    if worklog.issue.key not in epic_cache:
+                if not no_epic and issue_key:
+                    if issue_key not in epic_cache:
                         # Fetch epic info and cache it
                         try:
-                            epic_info = jira_client.get_issue_epic(worklog.issue.key)
-                            epic_cache[worklog.issue.key] = epic_info
+                            epic_info = jira_client.get_issue_epic(issue_key)
+                            epic_cache[issue_key] = epic_info
                         except Exception:
                             # If epic fetch fails, cache None
-                            epic_cache[worklog.issue.key] = None
+                            epic_cache[issue_key] = None
 
                     # Add epic fields
-                    epic_info = epic_cache.get(worklog.issue.key)
+                    epic_info = epic_cache.get(issue_key)
                     if epic_info:
                         worklog_dict["epic_key"] = epic_info[0]
                         worklog_dict["epic_name"] = epic_info[1]
