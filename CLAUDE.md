@@ -297,6 +297,25 @@ Use `uv run cz commit` for interactive commit creation.
 
 **If hooks fail, the commit is rejected.** Fix issues before committing.
 
+### CI/CD Pipeline Consistency
+
+**Critical:** CI and pre-commit hooks are perfectly synchronized to ensure "if pre-commit passes locally → CI passes" ✅
+
+**Implementation (v1.7.1):**
+- CI uses `pre-commit/action@v3.0.1` instead of individual tool steps
+- Single source of truth: `.pre-commit-config.yaml`
+- No hardcoded Python versions (works with matrix 3.10-3.13)
+- Same ruff version (v0.8.4) in both environments
+- Same behavior (format + check) in both environments
+
+**Benefits:**
+- ✅ No version drift between local and CI
+- ✅ Guaranteed consistency (pre-commit green → CI green)
+- ✅ Easier maintenance (update versions in one place)
+- ✅ Faster feedback (fail fast locally)
+
+**Testing:** Tests run separately in CI for proper coverage reporting to Codecov.
+
 ### Error Handling
 
 **Always provide context and actionable guidance:**

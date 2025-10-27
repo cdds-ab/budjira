@@ -514,6 +514,7 @@ budjira maintains high code quality standards:
 - ✅ **MyPy**: Strict type checking
 - ✅ **Bandit**: Security vulnerability scanning
 - ✅ **70% minimum test coverage**: Enforced by pre-commit hooks
+- ✅ **CI/Pre-commit Consistency**: Single source of truth via pre-commit action
 - ✅ **Conventional Commits**: Semantic versioning via commit messages
 
 ## 📚 Documentation

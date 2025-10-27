@@ -11,10 +11,11 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.7.0 ✅ RELEASED (2025-10-26)
+- **Current Version**: v1.7.1 ✅ RELEASED (2025-10-27)
 - **Branch**: master
-- **Status**: ✅ **All features functional, JSON output ready for automation**
+- **Status**: ✅ **All features functional, CI/pre-commit perfectly synchronized**
 - **Recent Releases**:
+  - v1.7.1 (2025-10-27): CI/pre-commit consistency fixes (#9) 🔧
   - v1.7.0 (2025-10-26): JSON output format for automation (#8) ✨
   - v1.6.7 (2025-10-26): Fix ruff formatting in test_tempo.py 🎨
   - v1.6.6 (2025-10-26): Fix Tempo worklogs filtering by issue (#7) 🐛
@@ -91,6 +92,40 @@
 - Added 2 regression tests for `tempo_enabled` persistence
 
 **Impact**: This test would have prevented Bug #4 from reaching production
+
+### 🔧 v1.7.1 - CI/Pre-commit Consistency (2025-10-27)
+**GitHub Issue**: #9 - Critical: CI and pre-commit hooks are out of sync
+
+**Problem**:
+Pre-commit hooks passed locally but CI failed, creating dangerous inconsistency and broken developer trust.
+
+**Root Causes**:
+1. **Ruff Version Mismatch**: Pre-commit had fixed v0.8.4, CI had floating version from pyproject.toml
+2. **Behavior Difference**: Pre-commit auto-formatted, CI only checked with `--check`
+3. **Python Version Issue**: Hardcoded `python3.13` in pre-commit config failed in CI matrix (3.10-3.13)
+
+**Solution Implemented**:
+- **CI Workflow**: Replace individual tool steps with single `pre-commit/action@v3.0.1`
+- **Pre-commit Config**: Remove `default_language_version: python: python3.13`
+- **Test Fix**: Add `type: ignore` for runtime deserialization test in test_config.py
+
+**Benefits**:
+- ✅ Single source of truth (`.pre-commit-config.yaml`)
+- ✅ Guaranteed consistency (if pre-commit green → CI green)
+- ✅ No version drift
+- ✅ Easier maintenance (update tools in one place)
+- ✅ Industry standard pattern
+
+**Commits**:
+- `96a889c` - ci: use pre-commit action for consistency with local hooks
+- `bdb0d5c` - fix(ci): remove hardcoded python3.13 from pre-commit config
+
+**Files Modified**:
+- `.github/workflows/ci.yml` - Replaced 4 tool steps with 1 pre-commit action
+- `.pre-commit-config.yaml` - Removed hardcoded Python version
+- `tests/models/test_config.py` - Fixed MyPy error
+
+**Impact**: Rock-solid CI/pre-commit pipeline, no more "works locally but fails CI" scenarios
 
 ### ✨ v1.7.0 - JSON Output Format for Automation (2025-10-26)
 **GitHub Issue**: #8 - Add JSON output format for automation/FoU reporting
@@ -1235,10 +1270,10 @@ docs: update installation instructions
 
 ---
 
-**Letzte Aktualisierung**: 2025-10-26 (nach Feature #8 - v1.7.0 released)
+**Letzte Aktualisierung**: 2025-10-27 (nach Issue #9 - v1.7.1 released)
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
 
-**Recent Session Summary** (2025-10-26):
+**Recent Session Summary** (2025-10-27):
 - ✅ Implemented Feature #8: JSON output format for automation (v1.7.0 ✅ RELEASED)
   - Global `--format json` flag for all list-based commands
   - OutputFormatter utility with custom JSON serializer
@@ -1246,7 +1281,12 @@ docs: update installation instructions
   - Tempo worklogs JSON output with epic_key/epic_name fields
   - In-memory epic caching to minimize API calls
   - Optional --no-epic flag for performance mode
+- ✅ Fixed Issue #9: CI/pre-commit consistency (v1.7.1 ✅ RELEASED)
+  - CI now uses `pre-commit/action@v3.0.1` for perfect sync
+  - Removed hardcoded Python 3.13 from pre-commit config
+  - Single source of truth: `.pre-commit-config.yaml`
+  - Guaranteed "pre-commit green → CI green"
 - ✅ 26 new tests (373 → 399 tests)
 - ✅ Test coverage: 81.09% (maintained >70% requirement)
-- ✅ All documentation updated (README, context.md, ai-usage-prompt.md, ai-prompt-supplements.md, CLAUDE.md)
-- 📊 Status: Production-ready, JSON output ready for FoU reporting automation
+- ✅ All documentation updated (README, CLAUDE.md, context.md, ai-usage-prompt.md)
+- 📊 Status: Production-ready, rock-solid CI/pre-commit pipeline
