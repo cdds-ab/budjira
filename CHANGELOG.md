@@ -1,6 +1,44 @@
 # CHANGELOG
 
 
+## v1.7.2 (2025-10-27)
+
+### Bug Fixes
+
+- **tempo**: Backfill null issue_key from Jira API in worklogs JSON
+  ([`479f844`](https://github.com/cdds-ab/budjira/commit/479f844a67547b698e4401e5e80e2fa0fc95e09e))
+
+Tempo API returns issue.key as null even when worklog has valid issueId. This breaks automation
+  workflows that rely on grouping worklogs by issue or epic, particularly FoU tax reporting in
+  Sweden.
+
+Solution: When issue.key is null but issue.id exists, fetch the key from
+
+Jira API and cache the result to minimize API calls. This enables epic lookup and project filtering
+  to work correctly.
+
+Fixes #10
+
+### Documentation
+
+- Update all documentation for v1.7.1 CI/pre-commit consistency
+  ([`63a6a73`](https://github.com/cdds-ab/budjira/commit/63a6a732a7a25fb750534fdc8a59848e228d3255))
+
+Updated all project documentation to reflect v1.7.1 CI improvements:
+
+README.md: - Added CI/Pre-commit Consistency to Code Quality section - Highlights single source of
+  truth via pre-commit action
+
+CLAUDE.md: - New CI/CD Pipeline Consistency section after Pre-commit Hooks - Explains v1.7.1
+  implementation details - Documents benefits and testing separation
+
+.claude/context.md: - Updated version to v1.7.1 RELEASED (2025-10-27) - Added comprehensive v1.7.1
+  section with problem/solution/impact - Updated Recent Session Summary with Issue #9 resolution -
+  Updated status line to reflect rock-solid CI/pre-commit pipeline
+
+All documentation now consistent with v1.7.1 improvements.
+
+
 ## v1.7.1 (2025-10-27)
 
 ### Bug Fixes
