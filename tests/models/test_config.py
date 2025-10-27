@@ -62,7 +62,7 @@ class TestGlobalConfig:
             "timezone": "US/Pacific",
         }
 
-        config = GlobalConfig(**data)
+        config = GlobalConfig(**data)  # type: ignore[arg-type]  # Testing runtime deserialization
 
         assert config.log_level == LogLevel.WARNING
         assert config.check_updates is False

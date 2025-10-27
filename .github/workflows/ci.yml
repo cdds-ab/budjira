@@ -33,17 +33,8 @@ jobs:
         run: |
           uv sync --all-extras
 
-      - name: Run ruff (lint)
-        run: uv run ruff check .
-
-      - name: Run ruff (format check)
-        run: uv run ruff format --check .
-
-      - name: Run mypy (type checking)
-        run: uv run mypy budjira
-
-      - name: Run bandit (security)
-        run: uv run bandit -r budjira
+      - name: Run pre-commit checks
+        uses: pre-commit/action@v3.0.1
 
       - name: Run tests with coverage
         run: |
