@@ -57,7 +57,7 @@ class TempoClient:
         endpoint: str,
         params: dict[str, Any] | None = None,
         json_data: dict[str, Any] | None = None,
-    ) -> dict[str, Any] | list[dict[str, Any]]:
+    ) -> dict[str, Any] | list[dict[str, Any]] | None:
         """Make HTTP request to Tempo API.
 
         Args:
@@ -67,7 +67,7 @@ class TempoClient:
             json_data: JSON request body
 
         Returns:
-            API response data
+            API response data, or None for 204 No Content responses
 
         Raises:
             AuthenticationError: If authentication fails (401)
@@ -86,7 +86,17 @@ class TempoClient:
                 timeout=30,
             )
             response.raise_for_status()
-            return response.json()  # type: ignore[no-any-return]
+
+            # Handle 204 No Content (successful DELETE)
+            if response.status_code == 204:
+                return None
+
+            # Parse JSON response for other success codes
+            if response.content:
+                return response.json()  # type: ignore[no-any-return]
+
+            return None
+
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 401:
                 raise AuthenticationError(
@@ -96,11 +106,20 @@ class TempoClient:
             elif e.response.status_code == 403:
                 raise PermissionError("Access denied. Your Tempo API token lacks required permissions.") from e
             elif e.response.status_code == 404:
-                error_msg = e.response.json().get("message", "Resource not found")
+                # Safely parse error message from JSON (if present)
+                try:
+                    error_data = e.response.json() if e.response.content else {}
+                    error_msg = error_data.get("message", "Resource not found")
+                except ValueError:
+                    error_msg = "Resource not found"
                 raise JiraAPIError(f"Tempo API error: {error_msg}") from e
             else:
-                error_data = e.response.json() if e.response.content else {}
-                error_msg = error_data.get("message", str(e))
+                # Safely parse error data
+                try:
+                    error_data = e.response.json() if e.response.content else {}
+                    error_msg = error_data.get("message", str(e))
+                except ValueError:
+                    error_msg = str(e)
                 raise JiraAPIError(f"Tempo API error: {error_msg}") from e
         except requests.exceptions.RequestException as e:
             raise JiraAPIError(f"Failed to connect to Tempo API: {e}") from e

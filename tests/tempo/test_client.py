@@ -198,9 +198,10 @@ def test_get_worklog_by_id(mock_request, tempo_client, mock_worklog_response):
 
 @patch("budjira.tempo.client.requests.Session.request")
 def test_delete_worklog_success(mock_request, tempo_client):
-    """Test successful worklog deletion."""
+    """Test successful worklog deletion with 204 No Content response."""
     mock_response = MagicMock()
-    mock_response.json.return_value = {}
+    mock_response.status_code = 204  # No Content
+    mock_response.content = b""  # Empty body
     mock_response.raise_for_status.return_value = None
     mock_request.return_value = mock_response
 
@@ -210,6 +211,23 @@ def test_delete_worklog_success(mock_request, tempo_client):
     call_kwargs = mock_request.call_args[1]
     assert call_kwargs["method"] == "DELETE"
     assert "/worklogs/12345" in call_kwargs["url"]
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_delete_worklog_not_found_empty_response(mock_request, tempo_client):
+    """Test delete worklog with 404 and empty response body."""
+    mock_response = MagicMock()
+    mock_response.status_code = 404
+    mock_response.content = b""  # Empty body (no JSON)
+
+    # Create HTTPError with the mock response
+    error = requests.exceptions.HTTPError(response=mock_response)
+    mock_response.raise_for_status.side_effect = error
+    mock_request.return_value = mock_response
+
+    # Should raise JiraAPIError with default message
+    with pytest.raises(JiraAPIError, match="Resource not found"):
+        tempo_client.delete_worklog(99999)
 
 
 @patch("budjira.tempo.client.requests.Session.request")
