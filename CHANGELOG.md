@@ -1,6 +1,50 @@
 # CHANGELOG
 
 
+## v1.8.1 (2025-10-28)
+
+### Bug Fixes
+
+- **tempo**: Handle 204 No Content response in delete-worklog
+  ([`8777479`](https://github.com/cdds-ab/budjira/commit/877747966abb23634354a23f6eb902669e5bbfed))
+
+Fixed error handling for Tempo API DELETE requests that return 204 No Content (empty body) instead
+  of JSON.
+
+Problem: - tempo delete-worklog reported error but successfully deleted worklog - "Expecting value:
+  line 1 column 1 (char 0)" JSON parse error - Caused by trying to parse empty 204 response as JSON
+
+Solution: - Check for 204 No Content before JSON parsing - Return None for empty responses - Safely
+  handle 404 errors with empty bodies - Update _make_request return type to include None
+
+Changes: - budjira/tempo/client.py: - _make_request: Check status_code 204, return None -
+  _make_request: Check response.content before JSON parsing - _make_request: Safe JSON parsing in
+  error handlers (try/except) - Updated return type: dict | list | None
+
+- tests/tempo/test_client.py: - test_delete_worklog_success: Mock 204 No Content response -
+  test_delete_worklog_not_found_empty_response: Test 404 with empty body
+
+Testing: - All 423 tests pass - 82% overall coverage (above 70% requirement) - New test verifies 204
+  handling - New test verifies 404 empty body handling
+
+Closes #14
+
+### Documentation
+
+- Update CLAUDE.md and context.md for v1.8.0 release
+  ([`4704559`](https://github.com/cdds-ab/budjira/commit/4704559c452a643e9213e2f1766c110d0b5a5663))
+
+Updated architecture documentation to reflect Issue #12 Phase 0 implementation:
+
+CLAUDE.md: - Added show.py to CLI module list - Updated issue.py models to include Comment and
+  Attachment - Added get_issue_details() to JiraClient core methods - Marked new components with
+  v1.8.0 version
+
+context.md: - Updated current version to v1.8.0 RELEASED - Changed Feature #12 status from pending
+  to RELEASED - Updated release date and version number - Marked all implementation steps as
+  completed - Added CI/Release success information
+
+
 ## v1.8.0 (2025-10-28)
 
 ### Documentation
