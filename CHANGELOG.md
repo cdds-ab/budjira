@@ -1,6 +1,83 @@
 # CHANGELOG
 
 
+## v1.8.0 (2025-10-28)
+
+### Documentation
+
+- Clarify Jira Cloud-only support in README
+  ([`e633781`](https://github.com/cdds-ab/budjira/commit/e633781bff5a33624a93804ccc825477d99c8266))
+
+Add explicit note that budjira supports Jira Cloud only, not Server/DC. Direct legacy users to
+  alternatives (go-jira, Cloud migration).
+
+Related to #11
+
+- Update project context to v1.7.2 and roadmap integration
+  ([`d3c17ba`](https://github.com/cdds-ab/budjira/commit/d3c17baa6b15f388c2dbc94983e492619f1b087f))
+
+Updated context.md with: - Bug #10 completion (v1.7.2 release) - Issue #11 strategic decision (Jira
+  Server wontfix) - Comprehensive roadmap integration (Issue #12) - 402 tests passing, 81.13%
+  coverage maintained - Pending: Issue #12 comment (draft ready)
+
+- Update roadmap with Issue #12 features
+  ([`e9a496f`](https://github.com/cdds-ab/budjira/commit/e9a496f3d20255c88e4425f55e956fe1ef6c09d9))
+
+Integrate all UX improvements from Issue #12 into product roadmap:
+
+Phase 0 (v1.7.3 - NEW): - Issue Detail View (budjira show ISSUE-KEY) - 8h, CRITICAL
+
+Phase 1 (v1.8.0 - EXTENDED): - Connection Auto-Detection - 12h, HIGH - Sprint Management, Quick
+  Aliases, Comments (existing)
+
+Phase 2 (v1.9.0 - EXTENDED): - Epic Detail View (--details flag) - 4h, MEDIUM - Issue Linking, Batch
+  Time Logging (existing)
+
+Phase 3 (v2.0.0 - EXTENDED): - Context Management - 8h, LOW - Standup Helper, Interactive Mode
+  (existing)
+
+Total investment increased from 100h to 132h (+32h). All features validated by real-world user
+  feedback.
+
+Related to #12
+
+### Features
+
+- **cli**: Add issue detail view command (budjira show)
+  ([`b04a801`](https://github.com/cdds-ab/budjira/commit/b04a8012f6d739937645fa680a3543652e61929a))
+
+Implements Phase 0 of Issue #12 - comprehensive issue detail view.
+
+New Features: - Extended Issue model with epic, time tracking, comments, attachments - Added
+  JiraClient.get_issue_details() for comprehensive data fetching - Created budjira show ISSUE-KEY
+  command with rich formatting - Rich output with panels, tables, Markdown rendering, time/size
+  formatters
+
+Model Extensions (budjira/models/issue.py): - Comment and Attachment Pydantic models - Epic fields
+  (epic_key, epic_name) - Time tracking fields (seconds: original_estimate, remaining, spent) -
+  Comments and attachments lists - Fixed all optional fields to use Field(default=None, ...) for
+  MyPy
+
+Core Logic (budjira/core/jira_client.py): - get_issue_details() fetches issue with fields="*all" -
+  Integrates with get_issue_epic() for parent epic information - Comprehensive error handling (404,
+  403, API errors)
+
+CLI Command (budjira/cli/show.py): - Rich Panel header with issue key and summary - Metadata table
+  (type, status, priority, assignee, reporter, epic) - Time tracking table (original estimate,
+  remaining, time spent) - Markdown-rendered description - Comments section with timestamps and
+  authors - Attachments section with sizes and MIME types - Custom formatters:
+  format_time_seconds(), format_file_size()
+
+Testing: - 4 new tests in tests/core/test_jira_client.py::TestJiraClientGetIssueDetails - 16 new
+  tests in tests/cli/test_show.py - Coverage: 94% (show.py), 88% (jira_client.py), 100% (issue.py) -
+  Total: 422 tests, 82.53% overall coverage
+
+Documentation: - README.md: Added Section 4 "View Issue Details" - AI usage prompt: Added "Viewing
+  Issue Details" section - .claude/context.md: Updated with feature status and test statistics
+
+Closes #12 (Phase 0)
+
+
 ## v1.7.2 (2025-10-27)
 
 ### Bug Fixes
