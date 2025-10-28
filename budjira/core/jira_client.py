@@ -158,6 +158,50 @@ class JiraClient:
         except Exception as e:
             raise JiraAPIError(f"Unexpected error fetching issue: {e}") from e
 
+    def get_issue_details(self, issue_key: str) -> Issue:
+        """Get a single issue with full details including epic, time tracking, comments, and attachments.
+
+        Args:
+            issue_key: Issue key (e.g., PROJ-123)
+
+        Returns:
+            Issue object with all details populated
+
+        Raises:
+            InvalidIssueError: If issue not found
+            PermissionError: If user lacks permission to view issue
+            JiraAPIError: If retrieval fails
+        """
+        try:
+            logger.info(f"Fetching detailed issue: {issue_key}")
+
+            # Fetch issue with all fields
+            jira_issue = self.client.issue(issue_key, fields="*all")
+
+            # Fetch epic information
+            epic_info = None
+            try:
+                epic_info = self.get_issue_epic(issue_key)
+            except Exception as e:
+                logger.debug(f"Could not fetch epic info for {issue_key}: {e}")
+
+            # Create Issue with epic info
+            return Issue.from_jira_issue(jira_issue, epic_info=epic_info)
+
+        except JIRAError as e:
+            if e.status_code == 404:
+                raise InvalidIssueError(
+                    f"Issue '{issue_key}' not found. Check that the issue exists and you have permission to view it."
+                ) from e
+            elif e.status_code == 403:
+                raise PermissionError(f"Permission denied accessing issue '{issue_key}'.") from e
+            else:
+                raise JiraAPIError(f"Failed to fetch issue '{issue_key}': {e.text}") from e
+        except (InvalidIssueError, PermissionError, JiraAPIError):
+            raise
+        except Exception as e:
+            raise JiraAPIError(f"Unexpected error fetching issue details: {e}") from e
+
     def create_issue(
         self,
         project_key: str,

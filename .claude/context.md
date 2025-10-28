@@ -11,10 +11,11 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.7.2 ✅ RELEASED (2025-10-27)
+- **Current Version**: v1.7.3 🚀 IN DEVELOPMENT
 - **Branch**: master
 - **Status**: ✅ **All features functional, CI/pre-commit perfectly synchronized**
 - **Recent Releases**:
+  - v1.7.3 (TBD): Issue detail view command (`budjira show`) (#12 Phase 0) ✨
   - v1.7.2 (2025-10-27): Fix Tempo null issue_key backfill (#10) 🐛
   - v1.7.1 (2025-10-27): CI/pre-commit consistency fixes (#9) 🔧
   - v1.7.0 (2025-10-26): JSON output format for automation (#8) ✨
@@ -27,6 +28,56 @@
   - v1.6.1 (2025-10-26): Fix Tempo setup persistence bug (#4) 🐛
   - v1.6.0 (2025-10-26): Tempo Timesheets Integration ✨
   - v1.5.5 (2025-10-25): Regex pattern fix in tests (RUF043)
+
+### ✨ Feature #12 - Issue Detail View Command ✅ COMPLETED
+**GitHub Issue**: #12 - [FR] Improve UX: Issue detail view, workflow shortcuts, and context awareness
+**Status**: ✅ IMPLEMENTED (Phase 0 - v1.7.3 pending release)
+**Date**: 2025-10-28
+**Scope**: Phase 0 only - Issue Detail View (`budjira show ISSUE-KEY`)
+
+**Feature**: Top-level command to display comprehensive issue information
+
+**Implementation**:
+- **CLI**: `budjira/cli/show.py` - New show command with rich output formatting
+- **Core**: `JiraClient.get_issue_details()` - Fetches issue with all fields + epic info
+- **Models**: Extended `Issue` model with:
+  - Epic info (epic_key, epic_name)
+  - Time tracking (time_original_estimate, time_remaining_estimate, time_spent - all in seconds)
+  - Comments (list of Comment objects with author, body, timestamps)
+  - Attachments (list of Attachment objects with filename, size, mime_type, author)
+- **Models**: New `Comment` and `Attachment` Pydantic models
+- **Rich Output**: Markdown rendering, time formatting, file size formatting
+
+**Output Displays**:
+- Summary and description (with Markdown rendering for DoR templates)
+- Issue type, status, priority, assignee, reporter
+- Epic information (if linked)
+- Time tracking (original/remaining estimate, time spent - formatted as "2h 30m")
+- Labels and components
+- Comments with author and timestamps
+- Attachments with file sizes (KB/MB formatting)
+- Creation and update timestamps
+
+**Testing**:
+- 4 new tests in `tests/core/test_jira_client.py::TestJiraClientGetIssueDetails`
+- 16 new tests in `tests/cli/test_show.py`
+- **Coverage**: 422 tests total, 82.53% overall
+  - `budjira/cli/show.py`: 94%
+  - `budjira/core/jira_client.py`: 88%
+  - `budjira/models/issue.py`: 100%
+
+**Documentation**:
+- README.md: Added Section 4 "View Issue Details" with examples
+- AI usage prompt: Added "Viewing Issue Details" section
+- ROADMAP.md: Marked Phase 0 as complete
+
+**Next Steps**:
+- [x] Commit with conventional commit: `feat(cli): add issue detail view command (budjira show)`
+- [ ] Push and verify CI passes
+- [ ] Close GitHub Issue #12 Phase 0
+- [ ] Release as v1.7.3 (feat: semantic-release minor bump)
+
+---
 
 ### 🐛 Bug #10 - Tempo Worklogs Null Issue Key Backfill ✅ COMPLETED
 **GitHub Issue**: #10 - Bug: Tempo worklogs return null issue_key despite valid issueId

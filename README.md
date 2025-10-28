@@ -165,7 +165,29 @@ budjira search --project PROJ --type Bug --max 100
 budjira search --connection my-connection --status Done
 ```
 
-### 4. Create Issues
+### 4. View Issue Details
+
+Get comprehensive information about a specific issue including description, comments, time tracking, attachments, and more.
+
+```bash
+# Show full issue details
+budjira show PROJ-123
+
+# Show issue from specific connection
+budjira show PROJ-456 --connection my-connection
+```
+
+**Displays:**
+- Summary and description (with Markdown rendering)
+- Issue type, status, priority, assignee, reporter
+- Epic information (if linked to an epic)
+- Time tracking (original estimate, remaining, time spent)
+- Labels and components
+- Comments with timestamps
+- Attachments with file sizes
+- Creation and update timestamps
+
+### 5. Create Issues
 
 ```bash
 # Interactive mode (default)
@@ -183,7 +205,7 @@ budjira create issue "Add feature" \
   --no-interactive
 ```
 
-### 5. Definition of Ready (DoR) Templates
+### 6. Definition of Ready (DoR) Templates
 
 budjira supports customizable templates for different issue types to ensure consistent quality.
 
@@ -231,7 +253,7 @@ So that [benefit]
 - Validation level: `strict` (block), `warn` (allow), or `off`
 - Skip validation with `--skip-dor` flag
 
-### 6. Update Issues
+### 7. Update Issues
 
 ```bash
 # Transition status
@@ -253,7 +275,7 @@ budjira issue update PROJ-123 --epic PROJ-100
 budjira issue transitions PROJ-123
 ```
 
-### 7. View Epic Progress
+### 8. View Epic Progress
 
 ```bash
 # Show epic with all child stories
@@ -297,21 +319,7 @@ The generated prompt includes:
 - Error handling guidance
 - Common use cases for AI assistants
 
-## 🔧 Configuration
-
-budjira follows the XDG Base Directory specification and stores configuration in:
-
-```
-~/.config/budjira/
-├── connections.toml      # Connection definitions
-├── credentials/          # Secure credential storage
-├── dor-templates.toml   # Definition of Ready templates
-├── cache/               # Optional issue cache
-├── logs/                # Per-context log files
-└── config.toml          # Global settings
-```
-
-### 8. Time Tracking
+## Time Tracking
 
 budjira provides comprehensive time tracking capabilities including worklog management and time estimates.
 
@@ -451,6 +459,20 @@ Epic information requires additional Jira API calls. Use `--no-epic` for faster 
 
 ```bash
 budjira --format json tempo worklogs --no-epic
+```
+
+## 🔧 Configuration
+
+budjira follows the XDG Base Directory specification and stores configuration in:
+
+```
+~/.config/budjira/
+├── connections.toml      # Connection definitions
+├── credentials/          # Secure credential storage
+├── dor-templates.toml   # Definition of Ready templates
+├── cache/               # Optional issue cache
+├── logs/                # Per-context log files
+└── config.toml          # Global settings
 ```
 
 ## 🚧 Coming Soon

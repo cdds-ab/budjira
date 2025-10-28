@@ -44,22 +44,54 @@ class User(BaseModel):
     email: str | None = Field(None, description="Email address")
 
 
+class Comment(BaseModel):
+    """Jira issue comment."""
+
+    author: str = Field(..., description="Comment author display name")
+    body: str = Field(..., description="Comment body/text")
+    created: datetime | None = Field(None, description="Comment creation timestamp")
+    updated: datetime | None = Field(None, description="Comment update timestamp")
+
+
+class Attachment(BaseModel):
+    """Jira issue attachment."""
+
+    filename: str = Field(..., description="Attachment filename")
+    size: int = Field(..., description="File size in bytes")
+    mime_type: str | None = Field(None, description="MIME type")
+    created: datetime | None = Field(None, description="Upload timestamp")
+    author: str | None = Field(None, description="Uploader display name")
+
+
 class Issue(BaseModel):
     """Jira issue model."""
 
     key: str = Field(..., description="Issue key (e.g., PROJ-123)")
     summary: str = Field(..., description="Issue summary/title")
-    description: str | None = Field(None, description="Issue description")
+    description: str | None = Field(default=None, description="Issue description")
     issue_type: str = Field(..., description="Issue type")
     status: str = Field(..., description="Current status")
-    priority: str | None = Field(None, description="Priority level")
-    assignee: str | None = Field(None, description="Assigned user display name")
-    reporter: str | None = Field(None, description="Reporter display name")
-    created: datetime | None = Field(None, description="Creation timestamp")
-    updated: datetime | None = Field(None, description="Last update timestamp")
+    priority: str | None = Field(default=None, description="Priority level")
+    assignee: str | None = Field(default=None, description="Assigned user display name")
+    reporter: str | None = Field(default=None, description="Reporter display name")
+    created: datetime | None = Field(default=None, description="Creation timestamp")
+    updated: datetime | None = Field(default=None, description="Last update timestamp")
     labels: list[str] = Field(default_factory=list, description="Issue labels")
     components: list[str] = Field(default_factory=list, description="Issue components")
     project_key: str = Field(..., description="Project key")
+
+    # Epic information
+    epic_key: str | None = Field(default=None, description="Parent epic key")
+    epic_name: str | None = Field(default=None, description="Parent epic name")
+
+    # Time tracking (all in seconds)
+    time_original_estimate: int | None = Field(default=None, description="Original time estimate in seconds")
+    time_remaining_estimate: int | None = Field(default=None, description="Remaining time estimate in seconds")
+    time_spent: int | None = Field(default=None, description="Time spent in seconds")
+
+    # Comments and attachments
+    comments: list[Comment] = Field(default_factory=list, description="Issue comments")
+    attachments: list[Attachment] = Field(default_factory=list, description="Issue attachments")
 
     @staticmethod
     def _parse_jira_datetime(datetime_str: str) -> datetime:
@@ -86,11 +118,12 @@ class Issue(BaseModel):
         return datetime.fromisoformat(normalized)
 
     @classmethod
-    def from_jira_issue(cls, jira_issue: Any) -> Issue:
+    def from_jira_issue(cls, jira_issue: Any, epic_info: tuple[str, str] | None = None) -> Issue:
         """Create Issue from jira library Issue object.
 
         Args:
             jira_issue: Issue object from jira library
+            epic_info: Optional tuple of (epic_key, epic_name)
 
         Returns:
             Issue model instance
@@ -131,6 +164,63 @@ class Issue(BaseModel):
         if hasattr(fields, "priority") and fields.priority:
             priority = fields.priority.name
 
+        # Parse epic info
+        epic_key = None
+        epic_name = None
+        if epic_info:
+            epic_key, epic_name = epic_info
+
+        # Parse time tracking
+        time_original_estimate = None
+        time_remaining_estimate = None
+        time_spent = None
+        if hasattr(fields, "timetracking") and fields.timetracking:
+            if hasattr(fields.timetracking, "originalEstimateSeconds"):
+                time_original_estimate = fields.timetracking.originalEstimateSeconds
+            if hasattr(fields.timetracking, "remainingEstimateSeconds"):
+                time_remaining_estimate = fields.timetracking.remainingEstimateSeconds
+            if hasattr(fields.timetracking, "timeSpentSeconds"):
+                time_spent = fields.timetracking.timeSpentSeconds
+
+        # Parse comments
+        comments = []
+        if hasattr(fields, "comment") and fields.comment and hasattr(fields.comment, "comments"):
+            for c in fields.comment.comments:
+                comment_created = None
+                if hasattr(c, "created") and c.created:
+                    comment_created = cls._parse_jira_datetime(c.created)
+
+                comment_updated = None
+                if hasattr(c, "updated") and c.updated:
+                    comment_updated = cls._parse_jira_datetime(c.updated)
+
+                comments.append(
+                    Comment(
+                        author=c.author.displayName if hasattr(c, "author") and c.author else "Unknown",
+                        body=c.body if hasattr(c, "body") else "",
+                        created=comment_created,
+                        updated=comment_updated,
+                    )
+                )
+
+        # Parse attachments
+        attachments = []
+        if hasattr(fields, "attachment") and fields.attachment:
+            for att in fields.attachment:
+                att_created = None
+                if hasattr(att, "created") and att.created:
+                    att_created = cls._parse_jira_datetime(att.created)
+
+                attachments.append(
+                    Attachment(
+                        filename=att.filename if hasattr(att, "filename") else "unknown",
+                        size=att.size if hasattr(att, "size") else 0,
+                        mime_type=att.mimeType if hasattr(att, "mimeType") else None,
+                        created=att_created,
+                        author=att.author.displayName if hasattr(att, "author") and att.author else None,
+                    )
+                )
+
         return cls(
             key=jira_issue.key,
             summary=fields.summary,
@@ -145,6 +235,13 @@ class Issue(BaseModel):
             labels=labels,
             components=components,
             project_key=jira_issue.key.split("-")[0],
+            epic_key=epic_key,
+            epic_name=epic_name,
+            time_original_estimate=time_original_estimate,
+            time_remaining_estimate=time_remaining_estimate,
+            time_spent=time_spent,
+            comments=comments,
+            attachments=attachments,
         )
 
 

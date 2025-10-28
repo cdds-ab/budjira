@@ -147,6 +147,44 @@ Results display as a table with:
 
 ---
 
+## Viewing Issue Details
+
+### Show Full Issue Information
+
+```bash
+budjira show ISSUE-KEY
+```
+
+**Displays comprehensive information:**
+- Summary and description (with Markdown rendering)
+- Issue type, status, priority
+- Assignee and reporter
+- Epic information (if linked to an epic)
+- Time tracking (original estimate, remaining, time spent)
+- Labels and components
+- Comments with timestamps and authors
+- Attachments with file sizes and types
+- Creation and update timestamps
+
+**Examples:**
+
+```bash
+# View issue details
+budjira show PROJ-123
+
+# View issue from specific connection
+budjira show PROJ-456 --connection my-connection
+```
+
+**Use Cases:**
+- Read full issue descriptions and acceptance criteria
+- Review comments and discussion history
+- Check time tracking and estimates
+- View attachments and related files
+- Understand issue context before making changes
+
+---
+
 ## Creating Issues
 
 ### Interactive Mode (Default)

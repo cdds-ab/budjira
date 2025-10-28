@@ -1235,3 +1235,187 @@ class TestJiraClientEdgeCases:
         client = JiraClient(connection, "test-token")
         with pytest.raises(JiraAPIError, match="Failed to fetch epic issues"):
             client.get_epic_issues("TEST-100")
+
+
+class TestJiraClientGetIssueDetails:
+    """Test get_issue_details method with full details."""
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_get_issue_details_success(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test successful retrieval of detailed issue with epic, time tracking, comments, and attachments."""
+        # Create comprehensive mock issue
+        mock_issue = MagicMock()
+        mock_issue.key = "TEST-123"
+        mock_issue.fields.summary = "Test Issue with Full Details"
+        mock_issue.fields.description = "## Description\n\nThis is a detailed issue."
+        mock_issue.fields.issuetype.name = "Story"
+        mock_issue.fields.status.name = "In Progress"
+        mock_issue.fields.priority.name = "High"
+        mock_issue.fields.assignee.displayName = "John Doe"
+        mock_issue.fields.reporter.displayName = "Jane Smith"
+        mock_issue.fields.created = "2025-01-10T10:00:00.000+0000"
+        mock_issue.fields.updated = "2025-01-11T15:30:00.000+0000"
+        mock_issue.fields.labels = ["feature", "urgent"]
+        component_mock = MagicMock()
+        component_mock.name = "Frontend"
+        mock_issue.fields.components = [component_mock]
+
+        # Add time tracking
+        mock_issue.fields.timetracking = MagicMock()
+        mock_issue.fields.timetracking.originalEstimateSeconds = 28800  # 8 hours
+        mock_issue.fields.timetracking.remainingEstimateSeconds = 14400  # 4 hours
+        mock_issue.fields.timetracking.timeSpentSeconds = 14400  # 4 hours
+
+        # Add comments
+        comment1 = MagicMock()
+        comment1.author.displayName = "Alice"
+        comment1.body = "First comment"
+        comment1.created = "2025-01-10T11:00:00.000+0000"
+        comment1.updated = "2025-01-10T11:05:00.000+0000"
+
+        comment2 = MagicMock()
+        comment2.author.displayName = "Bob"
+        comment2.body = "Second comment"
+        comment2.created = "2025-01-10T12:00:00.000+0000"
+        comment2.updated = "2025-01-10T12:00:00.000+0000"
+
+        mock_issue.fields.comment = MagicMock()
+        mock_issue.fields.comment.comments = [comment1, comment2]
+
+        # Add attachments
+        attachment1 = MagicMock()
+        attachment1.filename = "screenshot.png"
+        attachment1.size = 102400  # 100 KB
+        attachment1.mimeType = "image/png"
+        attachment1.created = "2025-01-10T13:00:00.000+0000"
+        attachment1.author.displayName = "Charlie"
+
+        attachment2 = MagicMock()
+        attachment2.filename = "document.pdf"
+        attachment2.size = 512000  # 500 KB
+        attachment2.mimeType = "application/pdf"
+        attachment2.created = "2025-01-10T14:00:00.000+0000"
+        attachment2.author.displayName = "David"
+
+        mock_issue.fields.attachment = [attachment1, attachment2]
+
+        # Add parent (epic) field
+        mock_parent = MagicMock()
+        mock_parent.key = "TEST-100"
+        mock_parent.fields.summary = "Test Epic"
+        mock_issue.fields.parent = mock_parent
+
+        # Mock epic issue for get_issue_epic call
+        mock_epic_issue = MagicMock()
+        mock_epic_issue.key = "TEST-100"
+        mock_epic_issue.fields.summary = "Test Epic"
+        mock_epic_issue.fields.parent = mock_parent
+
+        mock_jira_instance = MagicMock()
+        # Return different mocks for different calls
+        mock_jira_instance.issue.side_effect = [mock_issue, mock_epic_issue]
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        issue = client.get_issue_details("TEST-123")
+
+        # Verify basic fields
+        assert issue.key == "TEST-123"
+        assert issue.summary == "Test Issue with Full Details"
+        assert issue.description == "## Description\n\nThis is a detailed issue."
+        assert issue.issue_type == "Story"
+        assert issue.status == "In Progress"
+        assert issue.priority == "High"
+
+        # Verify epic info
+        assert issue.epic_key == "TEST-100"
+        assert issue.epic_name == "Test Epic"
+
+        # Verify time tracking
+        assert issue.time_original_estimate == 28800
+        assert issue.time_remaining_estimate == 14400
+        assert issue.time_spent == 14400
+
+        # Verify comments
+        assert len(issue.comments) == 2
+        assert issue.comments[0].author == "Alice"
+        assert issue.comments[0].body == "First comment"
+        assert issue.comments[1].author == "Bob"
+        assert issue.comments[1].body == "Second comment"
+
+        # Verify attachments
+        assert len(issue.attachments) == 2
+        assert issue.attachments[0].filename == "screenshot.png"
+        assert issue.attachments[0].size == 102400
+        assert issue.attachments[0].mime_type == "image/png"
+        assert issue.attachments[1].filename == "document.pdf"
+        assert issue.attachments[1].size == 512000
+
+        # Verify API was called (first for issue details, second for epic)
+        assert mock_jira_instance.issue.call_count == 2
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_get_issue_details_without_epic(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test detailed issue without epic link."""
+        mock_issue = MagicMock()
+        mock_issue.key = "TEST-124"
+        mock_issue.fields.summary = "Issue without Epic"
+        mock_issue.fields.description = "No epic"
+        mock_issue.fields.issuetype.name = "Task"
+        mock_issue.fields.status.name = "To Do"
+        mock_issue.fields.priority = None
+        mock_issue.fields.assignee = None
+        mock_issue.fields.reporter = None
+        mock_issue.fields.created = "2025-01-10T10:00:00.000+0000"
+        mock_issue.fields.updated = "2025-01-10T10:00:00.000+0000"
+        mock_issue.fields.labels = []
+        mock_issue.fields.components = []
+        mock_issue.fields.timetracking = None
+        mock_issue.fields.comment = None
+        mock_issue.fields.attachment = []
+        mock_issue.fields.parent = None
+
+        # Mock for get_issue_epic call (will return the same issue, with no parent)
+        mock_epic_check = MagicMock()
+        mock_epic_check.key = "TEST-124"
+        mock_epic_check.fields.parent = None
+
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.side_effect = [mock_issue, mock_epic_check]
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        issue = client.get_issue_details("TEST-124")
+
+        assert issue.key == "TEST-124"
+        assert issue.epic_key is None
+        assert issue.epic_name is None
+        assert issue.time_original_estimate is None
+        assert issue.time_remaining_estimate is None
+        assert issue.time_spent is None
+        assert len(issue.comments) == 0
+        assert len(issue.attachments) == 0
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_get_issue_details_not_found(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test detailed issue retrieval with 404 error."""
+        jira_error = JIRAError(status_code=404, text="Issue not found")
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(InvalidIssueError, match="Issue 'TEST-999' not found"):
+            client.get_issue_details("TEST-999")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_get_issue_details_permission_denied(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test detailed issue retrieval with permission error."""
+        jira_error = JIRAError(status_code=403, text="Forbidden")
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(PermissionError, match="Permission denied"):
+            client.get_issue_details("TEST-123")
