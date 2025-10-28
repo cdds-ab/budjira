@@ -11,10 +11,11 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.7.1 ✅ RELEASED (2025-10-27)
+- **Current Version**: v1.7.2 ✅ RELEASED (2025-10-27)
 - **Branch**: master
 - **Status**: ✅ **All features functional, CI/pre-commit perfectly synchronized**
 - **Recent Releases**:
+  - v1.7.2 (2025-10-27): Fix Tempo null issue_key backfill (#10) 🐛
   - v1.7.1 (2025-10-27): CI/pre-commit consistency fixes (#9) 🔧
   - v1.7.0 (2025-10-26): JSON output format for automation (#8) ✨
   - v1.6.7 (2025-10-26): Fix ruff formatting in test_tempo.py 🎨
@@ -27,9 +28,9 @@
   - v1.6.0 (2025-10-26): Tempo Timesheets Integration ✨
   - v1.5.5 (2025-10-25): Regex pattern fix in tests (RUF043)
 
-### 🐛 Bug #10 - Tempo Worklogs Null Issue Key Backfill (In Progress)
+### 🐛 Bug #10 - Tempo Worklogs Null Issue Key Backfill ✅ COMPLETED
 **GitHub Issue**: #10 - Bug: Tempo worklogs return null issue_key despite valid issueId
-**Status**: ✅ Fixed, ready for commit
+**Status**: ✅ RELEASED in v1.7.2 (2025-10-27)
 **Date**: 2025-10-27
 
 **Problem**:
@@ -1348,23 +1349,27 @@ docs: update installation instructions
 
 ---
 
-**Letzte Aktualisierung**: 2025-10-27 (nach Issue #9 - v1.7.1 released)
+**Letzte Aktualisierung**: 2025-10-28 (nach Roadmap integration - Issue #12)
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
 
-**Recent Session Summary** (2025-10-27):
-- ✅ Implemented Feature #8: JSON output format for automation (v1.7.0 ✅ RELEASED)
-  - Global `--format json` flag for all list-based commands
-  - OutputFormatter utility with custom JSON serializer
-  - JiraClient.get_issue_epic() method with modern/legacy fallback
-  - Tempo worklogs JSON output with epic_key/epic_name fields
-  - In-memory epic caching to minimize API calls
-  - Optional --no-epic flag for performance mode
-- ✅ Fixed Issue #9: CI/pre-commit consistency (v1.7.1 ✅ RELEASED)
-  - CI now uses `pre-commit/action@v3.0.1` for perfect sync
-  - Removed hardcoded Python 3.13 from pre-commit config
-  - Single source of truth: `.pre-commit-config.yaml`
-  - Guaranteed "pre-commit green → CI green"
-- ✅ 26 new tests (373 → 399 tests)
-- ✅ Test coverage: 81.09% (maintained >70% requirement)
-- ✅ All documentation updated (README, CLAUDE.md, context.md, ai-usage-prompt.md)
-- 📊 Status: Production-ready, rock-solid CI/pre-commit pipeline
+**Recent Session Summary** (2025-10-27/28):
+- ✅ Fixed Bug #10: Tempo null issue_key backfill (v1.7.2 ✅ RELEASED)
+  - Implemented issue_key backfill from Jira API with caching pattern
+  - Added 3 comprehensive tests (23 tempo tests total)
+  - Enables FoU tax reporting for Swedish companies
+  - All 402 tests pass, 81.13% coverage maintained
+- ✅ Strategic Decision Issue #11: Jira Server support (WON'T FIX)
+  - Product-owner-architect analysis completed
+  - Rationale: Tempo incompatibility, ROI negative, 15 months to EOL
+  - README updated with "Jira Cloud only" clarification
+  - Issue closed with user confirmation ("wontfix ist berechtigt")
+- ✅ Created comprehensive product roadmap (`.claude/ROADMAP.md`)
+  - Integrated all 7 features from Issue #12 (100% coverage)
+  - Added Phase 0 (v1.7.3): Issue Detail View - 8h, CRITICAL, ROI 10/10
+  - Extended Phase 1: Connection Auto-Detection - 12h
+  - Extended Phase 2: Epic Detail View (`--details` flag) - 4h
+  - Extended Phase 3: Context Management - 8h
+  - Timeline: Q4 2025 - Q3 2026, total 132h investment (+32h from user feedback)
+  - Feature Impact Matrix: All features validated against Developer/Freelancer/PM personas
+- 📊 Status: All coding complete, roadmap documented, ready for Phase 0 implementation
+- ⏸️ Pending: GitHub Issue #12 comment (draft ready, user requested pause)
