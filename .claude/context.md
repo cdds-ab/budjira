@@ -11,10 +11,11 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.8.0 ✅ RELEASED
+- **Current Version**: v1.8.1 ✅ RELEASED
 - **Branch**: master
 - **Status**: ✅ **All features functional, CI/pre-commit perfectly synchronized**
 - **Recent Releases**:
+  - v1.8.1 (2025-10-28): Fix Tempo delete-worklog 204 No Content handling (#14) 🐛
   - v1.8.0 (2025-10-28): Issue detail view command (`budjira show`) (#12 Phase 0) ✨
   - v1.7.2 (2025-10-27): Fix Tempo null issue_key backfill (#10) 🐛
   - v1.7.1 (2025-10-27): CI/pre-commit consistency fixes (#9) 🔧
@@ -76,6 +77,59 @@
 - [x] Push and verify CI passes (✅ Success - 1m4s CI, 1m19s Release)
 - [x] Released as v1.8.0 (MINOR bump: feat: commit triggered semantic-release)
 - [x] Documentation updated (CLAUDE.md, context.md)
+
+---
+
+### 🐛 Bug #14 - Tempo Delete-Worklog Error Handling ✅ FIXED
+**GitHub Issue**: #14 - Bug: tempo delete-worklog reports error but successfully deletes worklog
+**Status**: ✅ RELEASED in v1.8.1 (2025-10-28)
+**Date**: 2025-10-28
+
+**Problem**:
+When using `budjira tempo delete-worklog`, the command reported an error message but the worklog was **actually successfully deleted**:
+```bash
+$ budjira tempo delete-worklog 619 --force
+❌ Error: Failed to connect to Tempo API: Expecting value: line 1 column 1 (char 0)
+
+# But checking worklogs shows it was deleted! ✅
+```
+
+**Root Cause**:
+The Tempo API returns **HTTP 204 No Content** (empty response body) for successful DELETE operations. budjira's `TempoClient._make_request()` tried to parse this empty response as JSON, causing a JSON decode error.
+
+**Solution**:
+- Check for `status_code == 204` before attempting JSON parsing
+- Return `None` for 204 No Content responses
+- Safely handle 404 and other error responses with empty bodies
+- Updated return type: `dict | list | None`
+
+**Implementation**:
+```python
+# budjira/tempo/client.py - _make_request()
+if response.status_code == 204:
+    return None  # Success, no content
+
+if response.content:
+    return response.json()
+
+return None
+```
+
+**Testing**:
+- Added `test_delete_worklog_success` - Verifies 204 handling
+- Added `test_delete_worklog_not_found_empty_response` - Verifies 404 with empty body
+- All 423 tests pass ✅
+- 82% test coverage (above 70% requirement) ✅
+
+**Impact**: Low severity (functionality worked, just confusing error message)
+
+**Completed Steps**:
+- [x] Fixed `_make_request()` to handle 204 No Content
+- [x] Added comprehensive tests
+- [x] All tests passing (423 tests, 82% coverage)
+- [x] CI/CD successful
+- [x] Released as v1.8.1 (PATCH bump: fix: commit triggered semantic-release)
+- [x] Issue #14 automatically closed
 
 ---
 
