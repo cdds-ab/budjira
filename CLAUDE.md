@@ -74,12 +74,13 @@ budjira/
 │   ├── epic.py       # Epic management commands
 │   ├── issue.py      # Issue updates (status, fields, labels, epic linking)
 │   ├── search.py     # Issue search (JQL + filters)
+│   ├── show.py       # Issue detail view ✨ NEW v1.8.0
 │   ├── tempo.py      # Tempo Timesheets integration ✨ NEW v1.6.0
 │   ├── update.py     # Self-update commands
 │   └── worklog.py    # Worklog commands (add, list)
 ├── core/             # Core business logic
 │   ├── __init__.py
-│   └── jira_client.py    # Wrapper around jira library
+│   └── jira_client.py    # Wrapper around jira library (+ get_issue_details)
 ├── tempo/            # Tempo Timesheets integration ✨ NEW v1.6.0
 │   ├── __init__.py
 │   ├── client.py     # TempoClient - REST API integration
@@ -93,7 +94,7 @@ budjira/
 │   ├── config.py     # GlobalConfig
 │   ├── connection.py # Connection, ConnectionList (+ tempo_enabled)
 │   ├── dor.py        # DoR templates and validation
-│   └── issue.py      # Issue, WorkLog, User, Status, IssueType, Priority
+│   └── issue.py      # Issue, Comment, Attachment, WorkLog, User, Status, IssueType, Priority
 ├── utils/            # Utilities
 │   ├── __init__.py
 │   ├── banner.py     # ASCII art banner
@@ -159,6 +160,7 @@ All errors produce helpful, actionable messages in English:
 **Core Layer:**
 - `JiraClient`: High-level interface to Jira API
   - `get_issue_epic()`: Fetch epic info with modern/legacy fallback ✨ NEW v1.7.0
+  - `get_issue_details()`: Fetch comprehensive issue data (epic, time, comments, attachments) ✨ NEW v1.8.0
 - `TempoClient`: REST API client for Tempo Timesheets (v1.6.0+)
 - Connection management with multi-instance support
 

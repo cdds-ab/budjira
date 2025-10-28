@@ -11,11 +11,11 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.7.3 🚀 IN DEVELOPMENT
+- **Current Version**: v1.8.0 ✅ RELEASED
 - **Branch**: master
 - **Status**: ✅ **All features functional, CI/pre-commit perfectly synchronized**
 - **Recent Releases**:
-  - v1.7.3 (TBD): Issue detail view command (`budjira show`) (#12 Phase 0) ✨
+  - v1.8.0 (2025-10-28): Issue detail view command (`budjira show`) (#12 Phase 0) ✨
   - v1.7.2 (2025-10-27): Fix Tempo null issue_key backfill (#10) 🐛
   - v1.7.1 (2025-10-27): CI/pre-commit consistency fixes (#9) 🔧
   - v1.7.0 (2025-10-26): JSON output format for automation (#8) ✨
@@ -31,7 +31,7 @@
 
 ### ✨ Feature #12 - Issue Detail View Command ✅ COMPLETED
 **GitHub Issue**: #12 - [FR] Improve UX: Issue detail view, workflow shortcuts, and context awareness
-**Status**: ✅ IMPLEMENTED (Phase 0 - v1.7.3 pending release)
+**Status**: ✅ RELEASED (Phase 0 - v1.8.0)
 **Date**: 2025-10-28
 **Scope**: Phase 0 only - Issue Detail View (`budjira show ISSUE-KEY`)
 
@@ -71,11 +71,11 @@
 - AI usage prompt: Added "Viewing Issue Details" section
 - ROADMAP.md: Marked Phase 0 as complete
 
-**Next Steps**:
+**Completed Steps**:
 - [x] Commit with conventional commit: `feat(cli): add issue detail view command (budjira show)`
-- [ ] Push and verify CI passes
-- [ ] Close GitHub Issue #12 Phase 0
-- [ ] Release as v1.7.3 (feat: semantic-release minor bump)
+- [x] Push and verify CI passes (✅ Success - 1m4s CI, 1m19s Release)
+- [x] Released as v1.8.0 (MINOR bump: feat: commit triggered semantic-release)
+- [x] Documentation updated (CLAUDE.md, context.md)
 
 ---
 
