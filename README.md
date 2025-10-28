@@ -13,7 +13,9 @@
 
 ---
 
-**budjira** (pronounced "buddy-ra") is your CLI buddy for Jira. It provides efficient, user-friendly command-line access to Jira Cloud with features designed for both developers and AI-assisted project management.
+**budjira** (pronounced "buddy-ra") is your CLI buddy for Jira. It provides efficient, user-friendly command-line access to **Jira Cloud** with features designed for both developers and AI-assisted project management.
+
+> **Note:** budjira is designed for **Jira Cloud only** and does not support Jira Server or Data Center. For legacy on-premise installations, consider using [go-jira](https://github.com/go-jira/jira) or planning your Cloud migration.
 
 ## ✨ Features
 
