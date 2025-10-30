@@ -133,6 +133,51 @@ return None
 
 ---
 
+### 🔒 Security: Automatic Issue Data Sanitization ✅ IMPLEMENTED
+**Status**: ✅ ACTIVE (2025-10-28)
+**Date**: 2025-10-28
+
+**Problem**:
+Repository is **PUBLIC** → all issues visible to everyone. Risk of accidentally posting sensitive data in issues:
+- Email addresses (fred.thiele@cdds.se)
+- Customer names (aixacct)
+- Company URLs (cdds.atlassian.net)
+- Real Jira issue keys
+
+**Solution**:
+GitHub Action that automatically scans **every issue** (new + edited) for sensitive patterns.
+
+**Implementation**:
+- **File**: `.github/workflows/issue-sanitize.yml`
+- **Triggers**: `on: issues: types: [opened, edited]`
+- **Scans for**:
+  - Email addresses: `@*.se`, `@*.cdds`
+  - Customer names: `aixacct`
+  - Company URLs: `cdds.atlassian.net`
+  - Company names: `cdds-ab`
+  - Real names: `fred.thiele`
+
+**Automatic Actions**:
+1. Posts warning comment with suggestions
+2. Adds label: `⚠️ needs-sanitization`
+3. Recommends replacements:
+   - `user@example.com`
+   - `acme-corp`
+   - `company.atlassian.net`
+   - `john.doe`
+
+**Manual Cleanup Completed**:
+- Issue #4: Anonymized email, Jira URL, connection name
+- Issue #12: Replaced customer name `aixacct` → `acme-corp`
+- Issue #15: Replaced customer references
+
+**Result**:
+✅ All existing issues sanitized
+✅ Future issues automatically monitored
+✅ Public repository safe for sensitive project work
+
+---
+
 ### 🐛 Bug #10 - Tempo Worklogs Null Issue Key Backfill ✅ COMPLETED
 **GitHub Issue**: #10 - Bug: Tempo worklogs return null issue_key despite valid issueId
 **Status**: ✅ RELEASED in v1.7.2 (2025-10-27)

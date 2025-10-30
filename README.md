@@ -549,10 +549,22 @@ budjira maintains high code quality standards:
 
 ## 🔐 Security
 
+**⚠️ IMPORTANT: This repository is PUBLIC.**
+
+### For Users
 - Credentials are stored securely using system keyring where available
 - API tokens are never logged or displayed in output
 - Security scanning via Bandit in CI/CD pipeline
 - Regular dependency updates via Dependabot
+
+### For Contributors
+**Automatic Issue Data Sanitization** (GitHub Action):
+- All issues are automatically scanned for sensitive data (emails, customer names, URLs)
+- Warnings posted immediately if patterns detected
+- Always use dummy data in issues: `user@example.com`, `acme-corp`, `company.atlassian.net`
+- Review PR diffs before submitting to ensure no sensitive information
+
+If you find sensitive data in existing issues, please report it immediately or submit a PR to anonymize it.
 
 ## 📄 License
 

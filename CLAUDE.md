@@ -192,6 +192,52 @@ All errors produce helpful, actionable messages in English:
 - **Commits**: `commitizen` (conventional commits)
 - **Releases**: `python-semantic-release` (automated versioning)
 
+## Security & Privacy
+
+### Repository Status
+**⚠️ IMPORTANT: This repository is PUBLIC.** All issues, commits, and documentation are visible to everyone.
+
+### Automatic Issue Data Sanitization
+**Status**: ✅ ACTIVE (since v1.8.1)
+
+**Problem**: Risk of accidentally posting sensitive data (emails, customer names, credentials, URLs) in public issues.
+
+**Solution**: GitHub Action (`.github/workflows/issue-sanitize.yml`) that automatically scans **every issue** (new + edited) for sensitive patterns.
+
+**Detection Patterns:**
+- Email addresses (company domains)
+- Real names
+- Customer names and project codes
+- Company URLs (Jira, Atlassian)
+- Internal identifiers
+
+**Automatic Actions:**
+When sensitive data is detected:
+1. Posts warning comment with specific patterns found
+2. Adds label: `⚠️ needs-sanitization`
+3. Suggests anonymized replacements
+4. Tags issue author for immediate action
+
+**Anonymization Standards:**
+- Emails: `user@example.com`
+- Customers: `acme-corp`
+- URLs: `company.atlassian.net`
+- Persons: `john.doe`
+
+**Developer Guidelines:**
+- **NEVER commit real credentials** (use `.env` files, git-ignored)
+- **Always use dummy data** in issues and documentation
+- **Review PR diffs** for sensitive information before merging
+- **Check issue sanitization comments** immediately and fix
+
+**Testing & Validation:**
+All existing issues (manual cleanup completed 2025-10-28):
+- ✅ Issue #4: Anonymized email, Jira URL, connection names
+- ✅ Issue #12: Replaced customer `aixacct` → `acme-corp`
+- ✅ Issue #15: Replaced customer references
+
+**Result**: Public repository is safe for sensitive project work with automated monitoring.
+
 ## Development Guidelines
 
 ### Code Style
