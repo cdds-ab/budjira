@@ -891,8 +891,16 @@ This script automatically checks:
 - [ ] Open GitHub Issues
 - [ ] Latest release
 
-**Manual checks after running script:**
-- [ ] Review open issues: Are there feature requests?
+**IMPORTANT - GitHub Issues Review:**
+After running the session start script, **ALWAYS scan and report open GitHub issues**:
+```bash
+gh issue list --state open
+```
+
+Then:
+- [ ] **Report to user**: Summarize open issues (number, titles, labels)
+- [ ] **Ask about priorities**: "Soll ich an einem der offenen Issues arbeiten?"
+- [ ] Review if there are feature requests requiring implementation
 - [ ] Check if uncommitted changes need to be committed
 - [ ] Verify no merge conflicts or issues
 - [ ] Understand user's intent before starting work
