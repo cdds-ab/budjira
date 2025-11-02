@@ -63,6 +63,19 @@ class TempoWorklogCreate(BaseModel):
     remainingEstimateSeconds: int | None = None
 
 
+class TempoWorklogUpdate(BaseModel):
+    """Tempo worklog update request (all fields optional for partial updates)."""
+
+    issueId: int | None = None
+    timeSpentSeconds: int | None = None
+    startDate: str | None = None  # YYYY-MM-DD
+    startTime: str | None = None
+    description: str | None = None
+    authorAccountId: str | None = None
+    billableSeconds: int | None = None
+    remainingEstimateSeconds: int | None = None
+
+
 class TempoWorklogList(BaseModel):
     """Paginated list of worklogs."""
 

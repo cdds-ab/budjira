@@ -515,6 +515,189 @@ budjira issue update PROJ-789 \
 
 ---
 
+## Tempo Timesheets Integration
+
+**Note:** Tempo integration requires separate setup and API token.
+
+### Setup Tempo Integration
+
+```bash
+budjira connect tempo-setup
+```
+
+Interactive setup that:
+1. Prompts for Tempo API token (create at: Tempo → Settings → API Integration)
+2. Enables Tempo for the active connection
+3. Securely stores token separately from Jira credentials
+
+### Log Work to Tempo
+
+```bash
+budjira tempo log ISSUE-KEY TIME [OPTIONS]
+```
+
+Log time spent on an issue directly to Tempo Timesheets.
+
+**Time Formats:**
+- `1h` - 1 hour
+- `30m` - 30 minutes
+- `2h30m` - 2 hours 30 minutes
+- `1.5h` - 1.5 hours (90 minutes)
+
+**Options:**
+- `--comment TEXT`, `-c`: Add comment/description to worklog
+- `--started DATETIME`, `-s`: When work started (default: now)
+
+**Datetime Formats for --started:**
+- ISO format: `2025-10-28T14:30:00` or `2025-10-28 14:30:00`
+- Date only: `2025-10-28` (time defaults to 09:00)
+- Relative: `today` or `yesterday`
+
+**Examples:**
+
+```bash
+# Log 2 hours of work
+budjira tempo log PROJ-123 2h
+
+# Log work with comment
+budjira tempo log PROJ-123 3h --comment "Development work"
+
+# Log work started yesterday
+budjira tempo log PROJ-456 3h30m --started yesterday --comment "Client meeting"
+
+# Log work at specific datetime
+budjira tempo log PROJ-123 2h --started "2025-10-24 14:00" --comment "Code review"
+```
+
+### List Tempo Worklogs
+
+```bash
+budjira tempo worklogs [ISSUE-KEY] [OPTIONS]
+```
+
+Display worklog entries from Tempo with filtering options.
+
+**Options:**
+- `--from DATE`: Start date filter (YYYY-MM-DD)
+- `--to DATE`: End date filter (YYYY-MM-DD)
+- `--max N`, `-m`: Maximum results (default: 50)
+- `--no-epic`: Skip epic information for faster output (JSON mode only)
+
+**Examples:**
+
+```bash
+# List all worklogs for an issue
+budjira tempo worklogs PROJ-123
+
+# List worklogs for date range
+budjira tempo worklogs --from 2025-10-01 --to 2025-10-31
+
+# List recent worklogs across all issues
+budjira tempo worklogs --max 20
+
+# JSON output for automation
+budjira --format json tempo worklogs --from 2025-10-01 --to 2025-10-31
+```
+
+**Output includes:**
+- Tempo worklog ID
+- Issue key and epic information
+- Time spent (seconds and display format)
+- Start date and time
+- Author information
+- Description/comment
+
+### Update Tempo Worklog
+
+```bash
+budjira tempo update-worklog WORKLOG_ID [OPTIONS]
+```
+
+**NEW in v1.9.0** - Update existing Tempo worklog without deletion. More efficient than delete+recreate and preserves worklog ID and audit trail.
+
+**Options:**
+- `--time-spent TIME`, `-t`: Update time spent (e.g., 2h, 30m, 2h30m)
+- `--started DATETIME`, `-s`: Update start date/time
+- `--comment TEXT`, `-c`: Update worklog comment/description
+- `--force`, `-f`: Skip confirmation prompt
+
+**Features:**
+- **Partial updates**: Only specify fields you want to change
+- **Confirmation preview**: Shows before/after comparison (unless --force)
+- **Preserves worklog ID**: No need to delete and recreate
+- **Efficient**: Single API call instead of two
+
+**Examples:**
+
+```bash
+# Update only the date
+budjira tempo update-worklog 642 --started 2025-10-28
+
+# Update time and comment
+budjira tempo update-worklog 642 --time-spent 4h --comment "Revised estimate"
+
+# Update all fields with confirmation
+budjira tempo update-worklog 642 --started "2025-10-28 14:00" --time-spent 3h30m --comment "Final"
+
+# Force update without confirmation (for automation)
+budjira tempo update-worklog 642 --started yesterday --force
+
+# Update only comment
+budjira tempo update-worklog 642 --comment "Updated description"
+```
+
+**Use Cases:**
+- Correct wrong date without losing worklog ID
+- Adjust time spent after review
+- Update comment with additional details
+- Automation scripts that need to modify worklogs
+
+### Delete Tempo Worklog
+
+```bash
+budjira tempo delete-worklog WORKLOG_ID [OPTIONS]
+```
+
+Delete a worklog entry from Tempo by its ID.
+
+**Options:**
+- `--force`, `-f`: Skip confirmation prompt
+
+**Examples:**
+
+```bash
+# Delete with confirmation
+budjira tempo delete-worklog 12345
+
+# Delete without confirmation
+budjira tempo delete-worklog 12345 --force
+```
+
+### List Tempo Accounts
+
+```bash
+budjira tempo accounts [OPTIONS]
+```
+
+List Tempo Accounts for billing and project tracking.
+
+**Options:**
+- `--max N`, `-m`: Maximum results (default: 50)
+
+**Example:**
+
+```bash
+budjira tempo accounts
+```
+
+**Output includes:**
+- Account key
+- Account name
+- Status (OPEN/CLOSED)
+- Account ID
+
+---
+
 ## Update Management
 
 ### Check for Updates
@@ -741,6 +924,34 @@ budjira issue update PROJ-456 \
   --work-comment "Completed testing and documentation" \
   --remaining-estimate 0h \
   --status Done
+```
+
+### 12. Tempo Time Tracking Workflow
+
+```bash
+# 1. Setup Tempo integration (one-time)
+budjira connect tempo-setup
+
+# 2. Log work to Tempo
+budjira tempo log PROJ-123 2h --comment "Development work"
+
+# 3. Log work from yesterday
+budjira tempo log PROJ-456 3h30m --started yesterday --comment "Client meeting"
+
+# 4. Check logged time for an issue
+budjira tempo worklogs PROJ-123
+
+# 5. Correct a wrong date (without deleting)
+budjira tempo update-worklog 642 --started 2025-10-28
+
+# 6. Adjust time after review
+budjira tempo update-worklog 642 --time-spent 4h --comment "Revised after review"
+
+# 7. View worklogs for date range (automation)
+budjira --format json tempo worklogs --from 2025-10-01 --to 2025-10-31
+
+# 8. Delete incorrect worklog
+budjira tempo delete-worklog 999 --force
 ```
 
 ---

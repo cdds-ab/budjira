@@ -11,9 +11,10 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.8.1 ✅ RELEASED
+- **Current Version**: v1.8.1 ✅ RELEASED (v1.9.0 pending with Issue #16)
 - **Branch**: master
 - **Status**: ✅ **All features functional, CI/pre-commit perfectly synchronized**
+- **Pending Release**: v1.9.0 - Tempo worklog update feature (Issue #16) ✨
 - **Recent Releases**:
   - v1.8.1 (2025-10-28): Fix Tempo delete-worklog 204 No Content handling (#14) 🐛
   - v1.8.0 (2025-10-28): Issue detail view command (`budjira show`) (#12 Phase 0) ✨
@@ -910,7 +911,7 @@ budjira update --force      # Force update check (bypass cache)
 - **Keine Pre-Release-Unterstützung**: User möchte aber Pre-Releases installieren können
 
 ### 9. Tempo Timesheets Integration
-**Status**: ✅ Fully implemented (v1.6.0)
+**Status**: ✅ Fully implemented (v1.6.0, update-worklog in v1.9.0)
 
 #### CLI Commands:
 ```bash
@@ -925,6 +926,11 @@ budjira tempo log PROJ-456 3h30m --started yesterday --comment "Meeting"
 budjira tempo worklogs PROJ-123
 budjira tempo worklogs --from 2024-10-01 --to 2024-10-31
 
+# Update worklog ✨ NEW in v1.9.0
+budjira tempo update-worklog 642 --started 2025-10-28
+budjira tempo update-worklog 642 --time-spent 4h --comment "Revised"
+budjira tempo update-worklog 642 --started yesterday --force
+
 # Delete worklog
 budjira tempo delete-worklog 12345
 
@@ -934,22 +940,48 @@ budjira tempo accounts
 
 #### Features:
 - Full Tempo Cloud API v4 support
-- Worklog creation, listing, deletion
+- Worklog creation, listing, **updating** ✨ NEW, deletion
 - Tempo Accounts management
 - Secure token storage (separate from Jira)
 - Date range filtering
+- **Worklog updates with confirmation preview** ✨ NEW
 - Rich Console output
+
+#### Update Worklog (v1.9.0) - Issue #16 ✨
+**Features:**
+- Update time spent, start date/time, and comment without deletion
+- Partial updates (only specify fields to change)
+- Confirmation preview showing before/after changes
+- `--force` flag to skip confirmation
+- Preserves worklog ID and audit trail (more efficient than delete+recreate)
+
+**Usage:**
+```bash
+# Update only date
+budjira tempo update-worklog 642 --started 2025-10-28
+
+# Update multiple fields
+budjira tempo update-worklog 642 --time-spent 4h --comment "Updated comment"
+
+# Skip confirmation
+budjira tempo update-worklog 642 --started yesterday --force
+```
 
 #### Implementation:
 - `budjira/tempo/client.py`: TempoClient with REST API integration
-- `budjira/tempo/models.py`: Pydantic models (TempoWorklog, TempoAccount, etc.)
+  - `update_worklog()` method (PUT /worklogs/{id}) ✨ NEW
+  - PUT method support in `_make_request()`
+- `budjira/tempo/models.py`: Pydantic models
+  - `TempoWorklogUpdate` model for partial updates ✨ NEW
 - `budjira/cli/tempo.py`: CLI commands
+  - `tempo update-worklog` command with confirmation preview ✨ NEW
 - Extended Connection model with `tempo_enabled` flag
 
 #### Test Coverage:
-- `tests/tempo/test_models.py`: 10 tests (100% coverage)
-- `tests/tempo/test_client.py`: 12 tests (96% coverage)
-- `tests/cli/test_tempo.py`: 12 tests (75% coverage)
+- `tests/tempo/test_models.py`: 15 tests (100% coverage) - 4 new tests for TempoWorklogUpdate ✨
+- `tests/tempo/test_client.py`: 18 tests (90% coverage) - 5 new tests for update_worklog() ✨
+- `tests/cli/test_tempo.py`: 39 tests (80% coverage) - 8 new tests for update-worklog command ✨
+- **Total: 73 tempo tests passing** ✅
 
 ### 10. AI Integration (`budjira ai usage-prompt`)
 **Status**: ✅ Fully implemented with auto-generation

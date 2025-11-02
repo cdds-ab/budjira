@@ -13,6 +13,7 @@ from budjira.tempo.models import (
     TempoWorklog,
     TempoWorklogCreate,
     TempoWorklogList,
+    TempoWorklogUpdate,
 )
 from budjira.utils.errors import AuthenticationError, JiraAPIError, PermissionError
 
@@ -61,7 +62,7 @@ class TempoClient:
         """Make HTTP request to Tempo API.
 
         Args:
-            method: HTTP method (GET, POST, DELETE)
+            method: HTTP method (GET, POST, PUT, DELETE)
             endpoint: API endpoint (e.g., /worklogs)
             params: Query parameters
             json_data: JSON request body
@@ -258,6 +259,56 @@ class TempoClient:
             method="DELETE",
             endpoint=f"/worklogs/{worklog_id}",
         )
+
+    def update_worklog(
+        self,
+        worklog_id: int,
+        issue_id: int | None = None,
+        time_spent_seconds: int | None = None,
+        start_date: str | None = None,
+        start_time: str | None = None,
+        description: str | None = None,
+        author_account_id: str | None = None,
+        billable_seconds: int | None = None,
+        remaining_estimate_seconds: int | None = None,
+    ) -> TempoWorklog:
+        """Update an existing worklog entry.
+
+        Args:
+            worklog_id: Tempo worklog ID to update
+            issue_id: Numeric Jira issue ID (e.g., 12345, NOT "PROJ-123")
+            time_spent_seconds: Time spent in seconds
+            start_date: Start date (YYYY-MM-DD)
+            start_time: Start time (HH:MM:SS)
+            description: Worklog comment/description
+            author_account_id: Jira account ID of the author
+            billable_seconds: Billable time in seconds
+            remaining_estimate_seconds: Remaining estimate after logging work
+
+        Returns:
+            Updated worklog entry
+
+        Raises:
+            JiraAPIError: If worklog update fails
+        """
+        worklog_data = TempoWorklogUpdate(
+            issueId=issue_id,
+            timeSpentSeconds=time_spent_seconds,
+            startDate=start_date,
+            startTime=start_time,
+            description=description,
+            authorAccountId=author_account_id,
+            billableSeconds=billable_seconds,
+            remainingEstimateSeconds=remaining_estimate_seconds,
+        )
+
+        logger.info(f"Updating Tempo worklog {worklog_id}")
+        response = self._make_request(
+            method="PUT",
+            endpoint=f"/worklogs/{worklog_id}",
+            json_data=worklog_data.model_dump(exclude_none=True),
+        )
+        return TempoWorklog(**response)  # type: ignore[arg-type]
 
     def get_accounts(
         self,

@@ -414,6 +414,170 @@ def tempo_delete_worklog(
         raise typer.Exit(1)  # noqa: B904
 
 
+@app.command(name="update-worklog")
+def tempo_update_worklog(
+    worklog_id: Annotated[
+        int,
+        typer.Argument(help="Tempo worklog ID to update"),
+    ],
+    time_spent: Annotated[
+        str | None,
+        typer.Option("--time-spent", "-t", help="Update time spent (e.g., 2h, 30m, 2h30m)"),
+    ] = None,
+    started: Annotated[
+        str | None,
+        typer.Option(
+            "--started",
+            "-s",
+            help="Update when work started (YYYY-MM-DD HH:MM, YYYY-MM-DD, today, yesterday)",
+        ),
+    ] = None,
+    comment: Annotated[
+        str | None,
+        typer.Option("--comment", "-c", help="Update worklog comment/description"),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Skip confirmation prompt"),
+    ] = False,
+    connection_name: Annotated[
+        str | None,
+        typer.Option(
+            "--connection",
+            help="Connection to use (overrides default)",
+            envvar="BUDJIRA_CONNECTION",
+        ),
+    ] = None,
+) -> None:
+    """Update an existing Tempo worklog entry.
+
+    Modify time, date, or comment without deleting and recreating.
+    Preserves worklog ID and audit trail.
+
+    Examples:
+
+        # Update only the date
+        budjira tempo update-worklog 642 --started 2025-10-28
+
+        # Update time and comment
+        budjira tempo update-worklog 642 --time-spent 4h --comment "Revised estimate"
+
+        # Update all fields
+        budjira tempo update-worklog 642 --started "2025-10-28 14:00" --time-spent 3h30m --comment "Final"
+
+        # Force update (no confirmation)
+        budjira tempo update-worklog 642 --started yesterday --force
+    """
+    try:
+        # Check if at least one field is being updated
+        if not any([time_spent, started, comment is not None]):
+            console.print(
+                "[yellow]No updates specified. Use --time-spent, --started, or --comment to update fields.[/yellow]"
+            )
+            raise typer.Exit(1)
+
+        # Get Tempo client
+        tempo_client = get_tempo_client(connection_name)
+
+        # Fetch current worklog to get existing values
+        current_worklog = tempo_client.get_worklog(worklog_id)
+
+        # Prepare update data (only changed fields)
+        update_data: dict[str, str | int] = {}
+
+        # Parse and prepare time_spent if provided
+        if time_spent is not None:
+            time_spent_minutes = parse_time_string(time_spent)
+            time_spent_seconds = time_spent_minutes * 60
+            update_data["time_spent_seconds"] = time_spent_seconds
+        else:
+            time_spent_seconds = current_worklog.timeSpentSeconds
+
+        # Parse and prepare started datetime if provided
+        if started is not None:
+            started_dt = parse_datetime_string(started)
+            update_data["start_date"] = started_dt.strftime("%Y-%m-%d")
+            update_data["start_time"] = started_dt.strftime("%H:%M:%S")
+        else:
+            # Preserve existing values
+            update_data["start_date"] = current_worklog.startDate.strftime("%Y-%m-%d")
+            update_data["start_time"] = current_worklog.startTime or "09:00:00"
+            started_dt = datetime.combine(
+                current_worklog.startDate,
+                datetime.strptime(current_worklog.startTime or "09:00:00", "%H:%M:%S").time(),
+            )
+
+        # Prepare comment if provided
+        if comment is not None:
+            update_data["description"] = comment
+        else:
+            # Preserve existing description
+            if current_worklog.description:
+                update_data["description"] = current_worklog.description
+
+        # Show confirmation unless --force is used
+        if not force:
+            console.print("\n[bold]Worklog Update Preview:[/bold]")
+            console.print(f"  Worklog ID: {worklog_id}")
+            console.print(f"  Issue: {current_worklog.issue.key}")
+
+            # Show what's changing
+            if time_spent is not None:
+                old_hours = current_worklog.timeSpentSeconds / 3600
+                new_hours = time_spent_seconds / 3600
+                console.print(f"  Time: {old_hours:.2f}h → [cyan]{new_hours:.2f}h[/cyan]")
+            else:
+                hours = current_worklog.timeSpentSeconds / 3600
+                console.print(f"  Time: {hours:.2f}h (unchanged)")
+
+            if started is not None:
+                console.print(
+                    f"  Started: {current_worklog.startDate} {current_worklog.startTime} → "
+                    f"[cyan]{started_dt.strftime('%Y-%m-%d %H:%M:%S')}[/cyan]"
+                )
+            else:
+                console.print(f"  Started: {current_worklog.startDate} {current_worklog.startTime} (unchanged)")
+
+            if comment is not None:
+                old_comment = current_worklog.description or "(none)"
+                console.print(f"  Comment: {old_comment} → [cyan]{comment}[/cyan]")
+            elif current_worklog.description:
+                console.print(f"  Comment: {current_worklog.description} (unchanged)")
+
+            console.print()
+            confirm = typer.confirm("Update this worklog?")
+            if not confirm:
+                console.print("[yellow]Update cancelled[/yellow]")
+                return
+
+        # Perform update (always preserve issueId and authorAccountId)
+        updated_worklog = tempo_client.update_worklog(
+            worklog_id=worklog_id,
+            issue_id=current_worklog.issue.id,
+            author_account_id=current_worklog.author.accountId,
+            **update_data,  # type: ignore[arg-type]
+        )
+
+        # Success message
+        console.print(f"✅ [green]Updated Tempo worklog {worklog_id}[/green]")
+        console.print(f"   Issue: {updated_worklog.issue.key}")
+        console.print(f"   Time: {updated_worklog.timeSpentSeconds / 3600:.2f}h")
+        console.print(f"   Started: {updated_worklog.startDate} {updated_worklog.startTime}")
+        if updated_worklog.description:
+            console.print(f"   Comment: {updated_worklog.description}")
+
+    except (ConnectionError, AuthenticationError, PermissionError, ValidationError) as e:
+        console.print(f"❌ [red]Error:[/red] {e}")
+        raise typer.Exit(1)  # noqa: B904
+    except BudjiraError as e:
+        console.print(f"❌ [red]Error:[/red] {e}")
+        raise typer.Exit(1)  # noqa: B904
+    except Exception as e:
+        console.print(f"❌ [red]Unexpected error:[/red] {e}")
+        console.print("[yellow]Run with --debug for more details[/yellow]")
+        raise typer.Exit(1)  # noqa: B904
+
+
 @app.command(name="accounts")
 def tempo_list_accounts(
     max_results: Annotated[

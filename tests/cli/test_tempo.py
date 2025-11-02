@@ -745,3 +745,196 @@ def test_tempo_worklogs_json_no_issue_id(mock_tempo_connection, mock_tempo_clien
     # Epic fields should not be present (requires issue_key)
     assert "epic_key" not in worklog
     assert "epic_name" not in worklog
+
+
+def test_tempo_update_worklog_success(mock_tempo_connection, mock_tempo_client):
+    """Test successful worklog update with all fields."""
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    # Mock current worklog
+    current_worklog = TempoWorklog(
+        self="https://api.tempo.io/worklogs/642",
+        tempoWorklogId=642,
+        issue=TempoIssue(self="https://api.tempo.io/issues/123", key="TEST-123", id=123),
+        timeSpentSeconds=7200,  # 2h
+        startDate=date(2025, 11, 2),
+        startTime="09:00:00",
+        description="Original comment",
+        createdAt=datetime(2025, 11, 2, 9, 0),
+        updatedAt=datetime(2025, 11, 2, 9, 0),
+        author=TempoAuthor(self="https://api.tempo.io/users/1", accountId="557058:abc123"),
+    )
+
+    # Mock updated worklog
+    updated_worklog = TempoWorklog(
+        self="https://api.tempo.io/worklogs/642",
+        tempoWorklogId=642,
+        issue=TempoIssue(self="https://api.tempo.io/issues/123", key="TEST-123", id=123),
+        timeSpentSeconds=14400,  # 4h
+        startDate=date(2025, 10, 28),
+        startTime="14:00:00",
+        description="Updated comment",
+        createdAt=datetime(2025, 11, 2, 9, 0),
+        updatedAt=datetime(2025, 11, 2, 10, 0),
+        author=TempoAuthor(self="https://api.tempo.io/users/1", accountId="557058:abc123"),
+    )
+
+    mock_tempo_client.get_worklog.return_value = current_worklog
+    mock_tempo_client.update_worklog.return_value = updated_worklog
+
+    # Run command with --force to skip confirmation
+    result = runner.invoke(
+        app,
+        [
+            "tempo",
+            "update-worklog",
+            "642",
+            "--time-spent",
+            "4h",
+            "--started",
+            "2025-10-28 14:00",
+            "--comment",
+            "Updated comment",
+            "--force",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Updated Tempo worklog 642" in result.stdout
+    assert "TEST-123" in result.stdout
+    assert "4.00h" in result.stdout
+    assert "Updated comment" in result.stdout
+
+    # Verify API calls
+    mock_tempo_client.get_worklog.assert_called_once_with(642)
+    mock_tempo_client.update_worklog.assert_called_once()
+
+
+def test_tempo_update_worklog_partial(mock_tempo_connection, mock_tempo_client):
+    """Test partial worklog update (only date)."""
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    current_worklog = TempoWorklog(
+        self="https://api.tempo.io/worklogs/642",
+        tempoWorklogId=642,
+        issue=TempoIssue(self="https://api.tempo.io/issues/123", key="TEST-123", id=123),
+        timeSpentSeconds=7200,
+        startDate=date(2025, 11, 2),
+        startTime="09:00:00",
+        description="Test work",
+        createdAt=datetime(2025, 11, 2, 9, 0),
+        updatedAt=datetime(2025, 11, 2, 9, 0),
+        author=TempoAuthor(self="https://api.tempo.io/users/1", accountId="557058:abc123"),
+    )
+
+    updated_worklog = current_worklog.model_copy(update={"startDate": date(2025, 10, 28)})
+
+    mock_tempo_client.get_worklog.return_value = current_worklog
+    mock_tempo_client.update_worklog.return_value = updated_worklog
+
+    result = runner.invoke(app, ["tempo", "update-worklog", "642", "--started", "2025-10-28", "--force"])
+
+    assert result.exit_code == 0
+    assert "Updated Tempo worklog 642" in result.stdout
+    mock_tempo_client.update_worklog.assert_called_once()
+
+
+def test_tempo_update_worklog_with_confirmation(mock_tempo_connection, mock_tempo_client, monkeypatch):
+    """Test worklog update with confirmation prompt."""
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    current_worklog = TempoWorklog(
+        self="https://api.tempo.io/worklogs/642",
+        tempoWorklogId=642,
+        issue=TempoIssue(self="https://api.tempo.io/issues/123", key="TEST-123", id=123),
+        timeSpentSeconds=7200,
+        startDate=date(2025, 11, 2),
+        startTime="09:00:00",
+        description="Test work",
+        createdAt=datetime(2025, 11, 2, 9, 0),
+        updatedAt=datetime(2025, 11, 2, 9, 0),
+        author=TempoAuthor(self="https://api.tempo.io/users/1", accountId="557058:abc123"),
+    )
+
+    updated_worklog = current_worklog.model_copy(update={"timeSpentSeconds": 3600})
+
+    mock_tempo_client.get_worklog.return_value = current_worklog
+    mock_tempo_client.update_worklog.return_value = updated_worklog
+
+    # Simulate user confirming
+    result = runner.invoke(app, ["tempo", "update-worklog", "642", "--time-spent", "1h"], input="y\n")
+
+    assert result.exit_code == 0
+    assert "Worklog Update Preview" in result.stdout
+    assert "2.00h → 1.00h" in result.stdout  # Show change
+    assert "Updated Tempo worklog 642" in result.stdout
+    mock_tempo_client.update_worklog.assert_called_once()
+
+
+def test_tempo_update_worklog_cancelled(mock_tempo_connection, mock_tempo_client):
+    """Test worklog update cancelled by user."""
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    current_worklog = TempoWorklog(
+        self="https://api.tempo.io/worklogs/642",
+        tempoWorklogId=642,
+        issue=TempoIssue(self="https://api.tempo.io/issues/123", key="TEST-123", id=123),
+        timeSpentSeconds=7200,
+        startDate=date(2025, 11, 2),
+        startTime="09:00:00",
+        createdAt=datetime(2025, 11, 2, 9, 0),
+        updatedAt=datetime(2025, 11, 2, 9, 0),
+        author=TempoAuthor(self="https://api.tempo.io/users/1", accountId="557058:abc123"),
+    )
+
+    mock_tempo_client.get_worklog.return_value = current_worklog
+
+    # User declines confirmation
+    result = runner.invoke(app, ["tempo", "update-worklog", "642", "--time-spent", "3h"], input="n\n")
+
+    assert result.exit_code == 0
+    assert "Update cancelled" in result.stdout
+    mock_tempo_client.update_worklog.assert_not_called()
+
+
+def test_tempo_update_worklog_no_fields(mock_tempo_connection):
+    """Test worklog update with no fields specified."""
+    result = runner.invoke(app, ["tempo", "update-worklog", "642"])
+
+    assert result.exit_code == 1
+    assert "No updates specified" in result.stdout
+
+
+def test_tempo_update_worklog_not_found(mock_tempo_connection, mock_tempo_client):
+    """Test worklog update with non-existent worklog ID."""
+    from budjira.utils.errors import JiraAPIError
+
+    mock_tempo_client.get_worklog.side_effect = JiraAPIError("Worklog 99999 not found")
+
+    result = runner.invoke(app, ["tempo", "update-worklog", "99999", "--time-spent", "2h", "--force"])
+
+    assert result.exit_code == 1
+    assert "Worklog 99999 not found" in result.stdout
+
+
+def test_tempo_update_worklog_tempo_not_enabled(mock_connection):
+    """Test worklog update when Tempo is not enabled."""
+    # Use regular connection (without Tempo)
+    mock_connection.tempo_enabled = False  # Explicitly disable Tempo
+    with patch("budjira.cli.tempo.get_active_connection", return_value=mock_connection):
+        result = runner.invoke(app, ["tempo", "update-worklog", "642", "--time-spent", "2h", "--force"])
+
+        assert result.exit_code == 1
+        assert "Tempo is not enabled" in result.stdout
+
+
+def test_tempo_update_worklog_authentication_error(mock_tempo_connection, mock_tempo_client):
+    """Test worklog update with authentication error."""
+    from budjira.utils.errors import AuthenticationError
+
+    mock_tempo_client.get_worklog.side_effect = AuthenticationError("Tempo authentication failed")
+
+    result = runner.invoke(app, ["tempo", "update-worklog", "642", "--time-spent", "2h", "--force"])
+
+    assert result.exit_code == 1
+    assert "Tempo authentication failed" in result.stdout

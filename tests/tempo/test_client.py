@@ -285,3 +285,105 @@ def test_404_error_with_message(mock_request, tempo_client):
 
     with pytest.raises(JiraAPIError, match="Worklog not found"):
         tempo_client.get_worklog(99999)
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_update_worklog_success(mock_request, tempo_client, mock_worklog_response):
+    """Test successful worklog update."""
+    # Prepare updated response
+    updated_response = mock_worklog_response.copy()
+    updated_response["timeSpentSeconds"] = 10800  # 3h
+    updated_response["startDate"] = "2025-10-28"
+    updated_response["description"] = "Updated comment"
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = updated_response
+    mock_response.raise_for_status.return_value = None
+    mock_request.return_value = mock_response
+
+    worklog = tempo_client.update_worklog(
+        worklog_id=12345,
+        time_spent_seconds=10800,
+        start_date="2025-10-28",
+        description="Updated comment",
+    )
+
+    assert isinstance(worklog, TempoWorklog)
+    assert worklog.tempoWorklogId == 12345
+    assert worklog.timeSpentSeconds == 10800
+    assert worklog.startDate.isoformat() == "2025-10-28"
+    assert worklog.description == "Updated comment"
+
+    # Verify API call
+    mock_request.assert_called_once()
+    call_kwargs = mock_request.call_args[1]
+    assert call_kwargs["method"] == "PUT"
+    assert "/worklogs/12345" in call_kwargs["url"]
+    assert call_kwargs["json"]["timeSpentSeconds"] == 10800
+    assert call_kwargs["json"]["startDate"] == "2025-10-28"
+    assert call_kwargs["json"]["description"] == "Updated comment"
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_update_worklog_partial(mock_request, tempo_client, mock_worklog_response):
+    """Test partial worklog update (only some fields)."""
+    updated_response = mock_worklog_response.copy()
+    updated_response["startDate"] = "2025-10-29"
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = updated_response
+    mock_response.raise_for_status.return_value = None
+    mock_request.return_value = mock_response
+
+    worklog = tempo_client.update_worklog(
+        worklog_id=12345,
+        start_date="2025-10-29",
+    )
+
+    assert isinstance(worklog, TempoWorklog)
+    assert worklog.startDate.isoformat() == "2025-10-29"
+
+    # Verify only startDate was sent in request
+    call_kwargs = mock_request.call_args[1]
+    assert call_kwargs["method"] == "PUT"
+    assert "startDate" in call_kwargs["json"]
+    assert "timeSpentSeconds" not in call_kwargs["json"]
+    assert "description" not in call_kwargs["json"]
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_update_worklog_authentication_error(mock_request, tempo_client):
+    """Test worklog update with authentication error."""
+    mock_response = MagicMock()
+    mock_response.status_code = 401
+    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(response=mock_response)
+    mock_request.return_value = mock_response
+
+    with pytest.raises(AuthenticationError, match="Tempo authentication failed"):
+        tempo_client.update_worklog(worklog_id=12345, time_spent_seconds=3600)
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_update_worklog_permission_error(mock_request, tempo_client):
+    """Test worklog update with permission error."""
+    mock_response = MagicMock()
+    mock_response.status_code = 403
+    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(response=mock_response)
+    mock_request.return_value = mock_response
+
+    with pytest.raises(PermissionError, match="Access denied"):
+        tempo_client.update_worklog(worklog_id=12345, description="New comment")
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_update_worklog_not_found(mock_request, tempo_client):
+    """Test worklog update with 404 error."""
+    mock_response = MagicMock()
+    mock_response.status_code = 404
+    mock_response.json.return_value = {"message": "Worklog 99999 not found"}
+    mock_response.content = b'{"message": "Worklog 99999 not found"}'
+    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(response=mock_response)
+    mock_request.return_value = mock_response
+
+    with pytest.raises(JiraAPIError, match="Worklog 99999 not found"):
+        tempo_client.update_worklog(worklog_id=99999, time_spent_seconds=3600)

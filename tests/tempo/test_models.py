@@ -9,6 +9,7 @@ from budjira.tempo.models import (
     TempoIssue,
     TempoWorklog,
     TempoWorklogCreate,
+    TempoWorklogUpdate,
 )
 from pydantic import ValidationError
 
@@ -169,3 +170,58 @@ def test_tempo_worklog_create_model_dump():
     assert "billableSeconds" not in dumped
     assert "remainingEstimateSeconds" not in dumped
     assert "description" in dumped
+
+
+def test_tempo_worklog_update_valid():
+    """Test TempoWorklogUpdate model with all fields."""
+    update_data = TempoWorklogUpdate(
+        issueId=12345,
+        timeSpentSeconds=7200,
+        startDate="2025-10-28",
+        startTime="14:00:00",
+        description="Updated comment",
+        authorAccountId="557058:abc123",
+        billableSeconds=7200,
+        remainingEstimateSeconds=3600,
+    )
+    assert update_data.issueId == 12345
+    assert update_data.timeSpentSeconds == 7200
+    assert update_data.startDate == "2025-10-28"
+    assert update_data.description == "Updated comment"
+
+
+def test_tempo_worklog_update_partial():
+    """Test TempoWorklogUpdate with only some fields (partial update)."""
+    update_data = TempoWorklogUpdate(
+        timeSpentSeconds=3600,
+        startDate="2025-10-29",
+    )
+    assert update_data.timeSpentSeconds == 3600
+    assert update_data.startDate == "2025-10-29"
+    assert update_data.description is None
+    assert update_data.issueId is None
+
+
+def test_tempo_worklog_update_empty():
+    """Test TempoWorklogUpdate with no fields (all optional)."""
+    update_data = TempoWorklogUpdate()
+    assert update_data.issueId is None
+    assert update_data.timeSpentSeconds is None
+    assert update_data.startDate is None
+    assert update_data.description is None
+
+
+def test_tempo_worklog_update_model_dump():
+    """Test TempoWorklogUpdate model_dump excludes None values."""
+    update_data = TempoWorklogUpdate(
+        timeSpentSeconds=7200,
+        description="Partial update",
+    )
+    dumped = update_data.model_dump(exclude_none=True)
+    assert dumped == {
+        "timeSpentSeconds": 7200,
+        "description": "Partial update",
+    }
+    assert "issueId" not in dumped
+    assert "startDate" not in dumped
+    assert "billableSeconds" not in dumped
