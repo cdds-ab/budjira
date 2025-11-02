@@ -1,6 +1,72 @@
 # CHANGELOG
 
 
+## v1.9.0 (2025-11-02)
+
+### Documentation
+
+- Add GitHub issues scan requirement to session start checklist
+  ([`64c8fbd`](https://github.com/cdds-ab/budjira/commit/64c8fbd20ea7684a4c37ff64309b4ad32ecc8976))
+
+Added explicit instruction for Claude to scan and report open GitHub issues at the start of each
+  session using 'gh issue list --state open'.
+
+This ensures proactive issue management and allows user to prioritize work on existing issues versus
+  new requests.
+
+- Document automatic issue data sanitization system
+  ([`46a8a67`](https://github.com/cdds-ab/budjira/commit/46a8a677cc470b3925da30f1295cedc99e8f4909))
+
+Added comprehensive documentation for the GitHub Action-based issue sanitization system that
+  automatically scans for sensitive data.
+
+Updates: - CLAUDE.md: New Security & Privacy section with detection patterns, anonymization
+  standards, and developer guidelines - context.md: Updated with implementation status and manual
+  cleanup history - README.md: Expanded Security section with public repository warning and
+  contributor guidelines for data sanitization
+
+Related workflow: .github/workflows/issue-sanitize.yml
+
+- Update context.md for v1.8.1 bugfix release
+  ([`4b0841f`](https://github.com/cdds-ab/budjira/commit/4b0841f7d3af360689ee1f5cb4deacd97261de2c))
+
+Updated project context to reflect Bug #14 fix:
+
+context.md: - Updated current version to v1.8.1 - Added v1.8.1 to Recent Releases - Added Bug #14
+  section with detailed documentation: - Problem description (204 No Content error) - Root cause
+  analysis - Solution implementation - Testing results (423 tests, 82% coverage) - Completed steps
+  checklist
+
+No updates needed for: - CLAUDE.md: No architectural changes (bugfix only) - README.md: No
+  user-facing command changes - AI prompt: No CLI syntax changes
+
+### Features
+
+- **tempo**: Add worklog update command
+  ([`0119604`](https://github.com/cdds-ab/budjira/commit/01196049967bf5165d79ef5884d89da909760c3b))
+
+Implement tempo update-worklog to edit existing Tempo worklogs without deletion. Supports updating
+  time spent, start date/time, and comment with confirmation preview. More efficient than
+  delete+recreate workflow and preserves worklog ID and audit trail.
+
+Features: - Partial updates (only specify fields to change) - Confirmation preview showing
+  before/after changes - --force flag to skip confirmation for automation - Preserves issueId and
+  authorAccountId automatically - Single PUT API call instead of DELETE + POST
+
+Implementation: - Add TempoWorklogUpdate Pydantic model for partial updates - Add update_worklog()
+  method to TempoClient (PUT /worklogs/{id}) - Add PUT method support to _make_request() - Add tempo
+  update-worklog CLI command with rich preview
+
+Tests: - 4 new model tests for TempoWorklogUpdate (100% coverage) - 5 new client tests for
+  update_worklog() (90% coverage) - 8 new CLI tests for update-worklog command (80% coverage) -
+  Total: 73 tempo tests passing
+
+Documentation: - Updated context.md with feature details - Added Tempo section to AI usage prompt
+  template - Updated AI prompt workflows
+
+Closes #16
+
+
 ## v1.8.1 (2025-10-28)
 
 ### Bug Fixes
