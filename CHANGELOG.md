@@ -1,6 +1,33 @@
 # CHANGELOG
 
 
+## v1.10.0 (2025-11-04)
+
+### Features
+
+- **cli**: Add comment command for posting comments without time logging
+  ([`a68228c`](https://github.com/cdds-ab/budjira/commit/a68228c4db77edc20a2966e120b0feff0752aff1))
+
+Implements direct comment posting to Jira issues without worklog integration, addressing issue #18.
+
+**New Features:** - `budjira comment add ISSUE-KEY [TEXT]` - Post comments to issues - Automatic
+  editor mode when TEXT is omitted - Multi-line comment support via $EDITOR - Markdown formatting
+  support - `--editor` flag for enhanced editing experience - `--connection` flag for multi-instance
+  workflows
+
+**Implementation:** - Added `JiraClient.add_comment()` method wrapping jira.add_comment() - New CLI
+  module: `budjira/cli/comment.py` - Comprehensive error handling (404, 403, API errors) - Rich
+  console output with comment preview
+
+**Testing:** - 16 new tests (9 CLI + 7 core) - Total: 456 tests (↑ from 440) - Coverage: 83%
+  (maintained above 70% requirement)
+
+**Documentation:** - README.md: New section 8 "Add Comments" - AI usage prompt: New "Adding
+  Comments" section - Feature list updated with Comment Management
+
+Closes #18
+
+
 ## v1.9.0 (2025-11-02)
 
 ### Documentation
