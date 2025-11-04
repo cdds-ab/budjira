@@ -29,6 +29,7 @@
 - 📋 **Definition of Ready**: Customizable templates for Story, Bug, Task with validation
 - 🔄 **Update Issues**: Transition status, update fields, manage labels
 - 🎯 **Epic Management**: Link stories to epics and view epic progress
+- 💬 **Comment Management**: Add comments to issues without time tracking
 - ⏱️ **Time Tracking**: Comprehensive worklog management and time estimates
 - 🎼 **Tempo Integration**: Full support for Tempo Timesheets API for enterprise time tracking
 - 📊 **JSON Output**: Machine-readable JSON format for automation and integration with other tools
@@ -357,6 +358,36 @@ budjira issue update PROJ-123 --log-work 2h --work-comment "Implemented API endp
 - ISO format: `2024-10-25T14:30:00`, `2024-10-25 14:30`
 - Date only: `2024-10-25` (time defaults to 00:00)
 - Relative: `today`, `yesterday`
+
+### 8. Add Comments
+
+Add comments to Jira issues without logging time (unlike worklogs which combine comments with time tracking).
+
+```bash
+# Quick single-line comment
+budjira comment add PROJ-123 "Deployed to production"
+
+# Multi-line comment via editor
+budjira comment add PROJ-123 --editor
+
+# Editor opens automatically if no text provided
+budjira comment add PROJ-123
+
+# Use specific connection
+budjira comment add PROJ-123 "Comment text" --connection my-connection
+```
+
+**Use Cases:**
+- Status updates without time tracking
+- Analysis results and findings
+- Documentation links
+- Deployment notifications
+- Code review feedback
+
+**Editor Support:**
+- Opens your preferred editor (from `$EDITOR` environment variable, defaults to vim)
+- Supports markdown formatting
+- Multi-line content for detailed updates
 
 ### 9. Tempo Timesheets Integration
 

@@ -1419,3 +1419,117 @@ class TestJiraClientGetIssueDetails:
         client = JiraClient(connection, "test-token")
         with pytest.raises(PermissionError, match="Permission denied"):
             client.get_issue_details("TEST-123")
+
+
+class TestJiraClientAddComment:
+    """Test add_comment method."""
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_add_comment_success(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test adding a comment successfully."""
+        mock_jira_instance = MagicMock()
+        mock_comment = MagicMock()
+        mock_comment.id = "12345"
+        mock_comment.author.displayName = "John Doe"
+        mock_comment.body = "This is a test comment"
+        mock_comment.created = "2025-11-04T10:00:00.000+0000"
+        mock_jira_instance.add_comment.return_value = mock_comment
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        result = client.add_comment("TEST-123", "This is a test comment")
+
+        # Verify API call
+        mock_jira_instance.add_comment.assert_called_once_with("TEST-123", "This is a test comment")
+
+        # Verify result
+        assert result["id"] == "12345"
+        assert result["author"] == "John Doe"
+        assert result["body"] == "This is a test comment"
+        assert result["created"] == "2025-11-04T10:00:00.000+0000"
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_add_comment_multiline(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test adding a multi-line comment."""
+        mock_jira_instance = MagicMock()
+        mock_comment = MagicMock()
+        mock_comment.id = "12346"
+        mock_comment.author.displayName = "Jane Smith"
+        multiline_body = "Line 1\nLine 2\nLine 3"
+        mock_comment.body = multiline_body
+        mock_comment.created = "2025-11-04T11:00:00.000+0000"
+        mock_jira_instance.add_comment.return_value = mock_comment
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        result = client.add_comment("TEST-456", multiline_body)
+
+        # Verify multiline content preserved
+        assert result["body"] == multiline_body
+        mock_jira_instance.add_comment.assert_called_once_with("TEST-456", multiline_body)
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_add_comment_markdown(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test adding a markdown-formatted comment."""
+        mock_jira_instance = MagicMock()
+        mock_comment = MagicMock()
+        mock_comment.id = "12347"
+        mock_comment.author.displayName = "Bob Builder"
+        markdown_body = "# Heading\n\n* List item 1\n* List item 2\n\n[Link](https://example.com)"
+        mock_comment.body = markdown_body
+        mock_comment.created = "2025-11-04T12:00:00.000+0000"
+        mock_jira_instance.add_comment.return_value = mock_comment
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        result = client.add_comment("TEST-789", markdown_body)
+
+        # Verify markdown content preserved
+        assert result["body"] == markdown_body
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_add_comment_issue_not_found(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test adding comment to non-existent issue."""
+        mock_jira_instance = MagicMock()
+        jira_error = JIRAError(status_code=404, text="Not Found")
+        mock_jira_instance.add_comment.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(InvalidIssueError, match="Issue 'TEST-999' not found"):
+            client.add_comment("TEST-999", "Comment text")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_add_comment_permission_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test adding comment without permission."""
+        mock_jira_instance = MagicMock()
+        jira_error = JIRAError(status_code=403, text="Forbidden")
+        mock_jira_instance.add_comment.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(PermissionError, match="You don't have permission to comment"):
+            client.add_comment("TEST-123", "Comment text")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_add_comment_api_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test adding comment with API error."""
+        mock_jira_instance = MagicMock()
+        jira_error = JIRAError(status_code=500, text="Internal Server Error")
+        mock_jira_instance.add_comment.side_effect = jira_error
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Failed to add comment"):
+            client.add_comment("TEST-123", "Comment text")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_add_comment_unexpected_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        """Test adding comment with unexpected error."""
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.add_comment.side_effect = RuntimeError("Unexpected error")
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        with pytest.raises(JiraAPIError, match="Unexpected error adding comment"):
+            client.add_comment("TEST-123", "Comment text")

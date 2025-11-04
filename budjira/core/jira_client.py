@@ -380,6 +380,48 @@ class JiraClient:
         except Exception as e:
             raise JiraAPIError(f"Unexpected error fetching worklogs: {e}") from e
 
+    def add_comment(self, issue_key: str, body: str) -> dict[str, Any]:
+        """Add a comment to an issue.
+
+        Args:
+            issue_key: Issue key (e.g., PROJ-123)
+            body: Comment text (can be markdown or plain text)
+
+        Returns:
+            Dictionary with comment details (id, author, body, created)
+
+        Raises:
+            InvalidIssueError: If issue not found
+            PermissionError: If user lacks permission to comment
+            JiraAPIError: If comment creation fails
+        """
+        try:
+            logger.info(f"Adding comment to {issue_key}")
+            comment = self.client.add_comment(issue_key, body)
+
+            # Return comment details
+            return {
+                "id": comment.id,
+                "author": comment.author.displayName if hasattr(comment, "author") else "Unknown",
+                "body": comment.body,
+                "created": comment.created if hasattr(comment, "created") else None,
+            }
+
+        except JIRAError as e:
+            if e.status_code == 404:
+                raise InvalidIssueError(
+                    f"Issue '{issue_key}' not found. Check that the issue exists and you have permission to view it."
+                ) from e
+            elif e.status_code == 403:
+                raise PermissionError(
+                    f"You don't have permission to comment on '{issue_key}'. "
+                    f"Check your Jira permissions or contact your administrator."
+                ) from e
+            else:
+                raise JiraAPIError(f"Failed to add comment: {e.text}") from e
+        except Exception as e:
+            raise JiraAPIError(f"Unexpected error adding comment: {e}") from e
+
     def get_projects(self) -> list[dict[str, str]]:
         """Get list of accessible projects.
 

@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 
 from budjira import __version__
-from budjira.cli import ai, connect, create, dor, epic, issue, search, show, tempo, update, worklog
+from budjira.cli import ai, comment, connect, create, dor, epic, issue, search, show, tempo, update, worklog
 from budjira.utils.banner import print_header
 
 # Show header early for --help (which bypasses callback)
@@ -26,6 +26,7 @@ console = Console()
 
 # Register subcommands
 app.add_typer(ai.app, name="ai")
+app.add_typer(comment.app, name="comment")
 app.add_typer(connect.app, name="connect")
 app.add_typer(create.app, name="create")
 app.add_typer(dor.app, name="dor")

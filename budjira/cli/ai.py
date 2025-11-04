@@ -418,6 +418,61 @@ budjira epic show PROJ-100
 
 ---
 
+## Adding Comments
+
+### Add Comment to Issue
+
+```bash
+budjira comment add ISSUE-KEY [TEXT] [OPTIONS]
+```
+
+Add comments to Jira issues without logging time (unlike worklogs which combine comments with time tracking).
+
+**Options:**
+- `--editor`, `-e`: Open editor for multi-line comment
+- `--connection NAME`, `-c`: Use specific connection
+
+**Behavior:**
+- If TEXT is omitted, editor opens automatically
+- If TEXT is provided with `--editor`, editor opens with TEXT as initial content
+- Supports markdown formatting
+- Comments are posted immediately without time tracking
+
+**Examples:**
+
+```bash
+# Quick single-line comment
+budjira comment add PROJ-123 "Deployed to production environment"
+
+# Multi-line comment via editor
+budjira comment add PROJ-123 --editor
+
+# Editor opens automatically if no text provided
+budjira comment add PROJ-123
+
+# Edit initial text in editor
+budjira comment add PROJ-456 "Initial text" --editor
+
+# Use specific connection
+budjira comment add PROJ-789 "Status update" --connection prod-jira
+```
+
+**Use Cases:**
+- Status updates without time tracking
+- Analysis results and findings
+- Documentation links
+- Deployment notifications
+- Code review feedback
+- VM provisioning completion details
+
+**Editor Support:**
+- Opens `$EDITOR` environment variable (defaults to vim)
+- Supports markdown formatting for rich text
+- Multi-line content for detailed updates
+- Empty content (whitespace only) aborts comment creation
+
+---
+
 ## Time Tracking
 
 ### Add Worklog Entry
