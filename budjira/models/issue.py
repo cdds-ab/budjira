@@ -118,29 +118,55 @@ class Issue(BaseModel):
         return datetime.fromisoformat(normalized)
 
     @classmethod
-    def from_jira_issue(cls, jira_issue: Any, epic_info: tuple[str, str] | None = None) -> Issue:
-        """Create Issue from jira library Issue object.
+    def _parse_basic_fields(cls, jira_issue: Any, fields: Any) -> dict[str, Any]:
+        """Extract basic issue fields (key, summary, description, type, status).
 
         Args:
             jira_issue: Issue object from jira library
-            epic_info: Optional tuple of (epic_key, epic_name)
+            fields: Issue fields object
 
         Returns:
-            Issue model instance
+            Dictionary with basic field values
         """
-        fields = jira_issue.fields
+        return {
+            "key": jira_issue.key,
+            "summary": fields.summary,
+            "description": fields.description if hasattr(fields, "description") else None,
+            "issue_type": fields.issuetype.name,
+            "status": fields.status.name,
+            "project_key": jira_issue.key.split("-")[0],
+        }
 
-        # Parse assignee
+    @classmethod
+    def _parse_user_fields(cls, fields: Any) -> dict[str, Any]:
+        """Extract user-related fields (assignee, reporter).
+
+        Args:
+            fields: Issue fields object
+
+        Returns:
+            Dictionary with user field values
+        """
         assignee = None
         if hasattr(fields, "assignee") and fields.assignee:
             assignee = fields.assignee.displayName
 
-        # Parse reporter
         reporter = None
         if hasattr(fields, "reporter") and fields.reporter:
             reporter = fields.reporter.displayName
 
-        # Parse timestamps
+        return {"assignee": assignee, "reporter": reporter}
+
+    @classmethod
+    def _parse_timestamp_fields(cls, fields: Any) -> dict[str, Any]:
+        """Extract timestamp fields (created, updated).
+
+        Args:
+            fields: Issue fields object
+
+        Returns:
+            Dictionary with timestamp values
+        """
         created = None
         if hasattr(fields, "created") and fields.created:
             created = cls._parse_jira_datetime(fields.created)
@@ -149,31 +175,63 @@ class Issue(BaseModel):
         if hasattr(fields, "updated") and fields.updated:
             updated = cls._parse_jira_datetime(fields.updated)
 
-        # Parse labels
-        labels = []
-        if hasattr(fields, "labels") and fields.labels:
-            labels = list(fields.labels)
+        return {"created": created, "updated": updated}
 
-        # Parse components
-        components = []
-        if hasattr(fields, "components") and fields.components:
-            components = [comp.name for comp in fields.components]
+    @classmethod
+    def _parse_metadata_fields(cls, fields: Any) -> dict[str, Any]:
+        """Extract metadata fields (priority, labels, components).
 
-        # Parse priority
+        Args:
+            fields: Issue fields object
+
+        Returns:
+            Dictionary with metadata values
+        """
         priority = None
         if hasattr(fields, "priority") and fields.priority:
             priority = fields.priority.name
 
-        # Parse epic info
+        labels = []
+        if hasattr(fields, "labels") and fields.labels:
+            labels = list(fields.labels)
+
+        components = []
+        if hasattr(fields, "components") and fields.components:
+            components = [comp.name for comp in fields.components]
+
+        return {"priority": priority, "labels": labels, "components": components}
+
+    @classmethod
+    def _parse_epic_fields(cls, epic_info: tuple[str, str] | None) -> dict[str, Any]:
+        """Extract epic information.
+
+        Args:
+            epic_info: Optional tuple of (epic_key, epic_name)
+
+        Returns:
+            Dictionary with epic values
+        """
         epic_key = None
         epic_name = None
         if epic_info:
             epic_key, epic_name = epic_info
 
-        # Parse time tracking
+        return {"epic_key": epic_key, "epic_name": epic_name}
+
+    @classmethod
+    def _parse_time_tracking_fields(cls, fields: Any) -> dict[str, Any]:
+        """Extract time tracking fields.
+
+        Args:
+            fields: Issue fields object
+
+        Returns:
+            Dictionary with time tracking values
+        """
         time_original_estimate = None
         time_remaining_estimate = None
         time_spent = None
+
         if hasattr(fields, "timetracking") and fields.timetracking:
             if hasattr(fields.timetracking, "originalEstimateSeconds"):
                 time_original_estimate = fields.timetracking.originalEstimateSeconds
@@ -182,7 +240,22 @@ class Issue(BaseModel):
             if hasattr(fields.timetracking, "timeSpentSeconds"):
                 time_spent = fields.timetracking.timeSpentSeconds
 
-        # Parse comments
+        return {
+            "time_original_estimate": time_original_estimate,
+            "time_remaining_estimate": time_remaining_estimate,
+            "time_spent": time_spent,
+        }
+
+    @classmethod
+    def _parse_comments(cls, fields: Any) -> list[Comment]:
+        """Extract and parse comments.
+
+        Args:
+            fields: Issue fields object
+
+        Returns:
+            List of Comment objects
+        """
         comments = []
         if hasattr(fields, "comment") and fields.comment and hasattr(fields.comment, "comments"):
             for c in fields.comment.comments:
@@ -203,7 +276,18 @@ class Issue(BaseModel):
                     )
                 )
 
-        # Parse attachments
+        return comments
+
+    @classmethod
+    def _parse_attachments(cls, fields: Any) -> list[Attachment]:
+        """Extract and parse attachments.
+
+        Args:
+            fields: Issue fields object
+
+        Returns:
+            List of Attachment objects
+        """
         attachments = []
         if hasattr(fields, "attachment") and fields.attachment:
             for att in fields.attachment:
@@ -221,25 +305,42 @@ class Issue(BaseModel):
                     )
                 )
 
+        return attachments
+
+    @classmethod
+    def from_jira_issue(cls, jira_issue: Any, epic_info: tuple[str, str] | None = None) -> Issue:
+        """Create Issue from jira library Issue object.
+
+        This method orchestrates parsing of all Jira fields by delegating
+        to specialized parser methods. Each parser handles a specific domain.
+
+        Args:
+            jira_issue: Issue object from jira library
+            epic_info: Optional tuple of (epic_key, epic_name)
+
+        Returns:
+            Issue model instance
+        """
+        fields = jira_issue.fields
+
+        # Parse all field groups using specialized parsers
+        basic = cls._parse_basic_fields(jira_issue, fields)
+        users = cls._parse_user_fields(fields)
+        timestamps = cls._parse_timestamp_fields(fields)
+        metadata = cls._parse_metadata_fields(fields)
+        epic = cls._parse_epic_fields(epic_info)
+        time_tracking = cls._parse_time_tracking_fields(fields)
+        comments = cls._parse_comments(fields)
+        attachments = cls._parse_attachments(fields)
+
+        # Combine all parsed data
         return cls(
-            key=jira_issue.key,
-            summary=fields.summary,
-            description=fields.description if hasattr(fields, "description") else None,
-            issue_type=fields.issuetype.name,
-            status=fields.status.name,
-            priority=priority,
-            assignee=assignee,
-            reporter=reporter,
-            created=created,
-            updated=updated,
-            labels=labels,
-            components=components,
-            project_key=jira_issue.key.split("-")[0],
-            epic_key=epic_key,
-            epic_name=epic_name,
-            time_original_estimate=time_original_estimate,
-            time_remaining_estimate=time_remaining_estimate,
-            time_spent=time_spent,
+            **basic,
+            **users,
+            **timestamps,
+            **metadata,
+            **epic,
+            **time_tracking,
             comments=comments,
             attachments=attachments,
         )
