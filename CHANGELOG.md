@@ -1,6 +1,42 @@
 # CHANGELOG
 
 
+## v1.12.1 (2025-11-27)
+
+### Bug Fixes
+
+- **banner**: Calculate bottom line width dynamically using console.measure()
+  ([`05950f3`](https://github.com/cdds-ab/budjira/commit/05950f3eeb45113274869d8acc78dd54d3f00e28))
+
+The bottom line was hardcoded to 45 characters, which caused misalignment with the dynamic top line
+  (version string and emoji width vary). Now uses Rich's console.measure() for accurate visual width
+  calculation.
+
+Fixes banner display across all version numbers.
+
+### Documentation
+
+- Add GITHUB_TOKEN setup instructions for update rate limit errors
+  ([`cb38225`](https://github.com/cdds-ab/budjira/commit/cb38225864f81aea2eea3642f4bcd8bdaedae060))
+
+Documents how to set GITHUB_TOKEN or GH_TOKEN environment variables to avoid GitHub API rate
+  limiting when checking for updates.
+
+Unauthenticated API calls are limited to 60/hour, causing 403 errors for frequent updaters or users
+  behind shared IPs.
+
+### Performance Improvements
+
+- Add radon code complexity monitoring to CI pipeline
+  ([`1d1fbbf`](https://github.com/cdds-ab/budjira/commit/1d1fbbf854090cb091befcedb63b35b2518acd5c))
+
+Adds non-blocking Radon analysis to CI workflow for monitoring code complexity metrics (Cyclomatic
+  Complexity and Maintainability Index).
+
+Reports are informational only and never fail builds. Provides baseline metrics for identifying
+  refactoring opportunities.
+
+
 ## v1.12.0 (2025-11-27)
 
 ### Features
