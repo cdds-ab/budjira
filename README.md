@@ -368,6 +368,26 @@ budjira update
 budjira update --check --force
 ```
 
+**Troubleshooting: GitHub API Rate Limits**
+
+If you see `403 Client Error: rate limit exceeded` when checking for updates, you need to authenticate with GitHub:
+
+```bash
+# Option 1: Set GitHub Personal Access Token (no scopes needed)
+export GITHUB_TOKEN=ghp_your_token_here
+
+# Option 2: Use GitHub CLI token (if gh is installed)
+export GH_TOKEN=$(gh auth token)
+
+# Make it permanent (add to ~/.bashrc or ~/.zshrc)
+echo 'export GITHUB_TOKEN=ghp_your_token_here' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Create a token**: Go to https://github.com/settings/tokens (no scopes required for public repos)
+
+**Why?** Unauthenticated requests are limited to 60/hour. Authenticated requests get 5,000/hour.
+
 ### 10. AI Integration
 
 Generate comprehensive usage guides for AI assistants.
