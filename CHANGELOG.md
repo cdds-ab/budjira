@@ -1,6 +1,35 @@
 # CHANGELOG
 
 
+## v1.11.0 (2025-11-27)
+
+### Features
+
+- **epic**: Add JSON output format for epic show command
+  ([`4347f76`](https://github.com/cdds-ab/budjira/commit/4347f76d2501ef6e961f20e98aa004fa0b4e0bb5))
+
+Implements --format json flag for epic show command to enable programmatic access to epic and story
+  data including time tracking.
+
+Features: - JSON output with epic data (key, summary, status, assignee, etc.) - Time tracking
+  information (original estimate, time spent, remaining) - Story data with full details and time
+  tracking - Progress metrics (total, done, in_progress, todo, percent) - Fallback handling for
+  missing time tracking data - Error messages in JSON format when JSON mode active
+
+Implementation: - Extended epic show command to support Typer context format flag - Added
+  _format_time_seconds helper for human-readable time display - Proper URL formatting (strip
+  trailing slash from connection URL) - Type-safe dict definitions for mypy strict mode compliance
+
+Testing: - 9 comprehensive tests (6 new for JSON output) - Test coverage: 88% for epic.py - Tests
+  cover: time tracking, empty results, error handling, regression - Total: 462 tests passing, 84.44%
+  overall coverage
+
+Documentation: - README.md updated with JSON output examples and use cases - Docstrings updated with
+  JSON examples
+
+Resolves: #57
+
+
 ## v1.10.0 (2025-11-04)
 
 ### Features
