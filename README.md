@@ -279,9 +279,65 @@ budjira issue transitions PROJ-123
 ### 8. View Epic Progress
 
 ```bash
-# Show epic with all child stories
+# Show epic with all child stories (table format)
 budjira epic show PROJ-100
+
+# JSON output with time tracking for automation/reporting
+budjira --format json epic show PROJ-100
 ```
+
+**JSON Output Example:**
+```json
+{
+  "epic": {
+    "key": "PROJ-100",
+    "summary": "Project Infrastructure",
+    "status": "In Progress",
+    "assignee": "John Doe",
+    "priority": "High",
+    "issue_type": "Epic",
+    "url": "https://your-company.atlassian.net/browse/PROJ-100",
+    "timetracking": {
+      "originalEstimateSeconds": 72000,
+      "remainingEstimateSeconds": 36000,
+      "timeSpentSeconds": 36000,
+      "originalEstimate": "20h",
+      "remainingEstimate": "10h",
+      "timeSpent": "10h"
+    }
+  },
+  "stories": [
+    {
+      "key": "PROJ-101",
+      "summary": "Setup CI/CD Pipeline",
+      "status": "Done",
+      "assignee": "Jane Smith",
+      "issue_type": "Story",
+      "priority": "High",
+      "url": "https://your-company.atlassian.net/browse/PROJ-101",
+      "timetracking": {
+        "originalEstimateSeconds": 14400,
+        "timeSpentSeconds": 14400,
+        "originalEstimate": "4h",
+        "timeSpent": "4h"
+      }
+    }
+  ],
+  "progress": {
+    "total_issues": 5,
+    "done_issues": 2,
+    "in_progress_issues": 1,
+    "todo_issues": 3,
+    "progress_percent": 40
+  }
+}
+```
+
+**Use Cases:**
+- **Project Reporting**: Generate HTML/PDF reports with epic progress
+- **Dashboard Integration**: Feed data into custom dashboards
+- **Time Analysis**: Analyze time tracking data for effort estimation
+- **Automation**: Use in CI/CD pipelines or scripts
 
 ### 9. Check for Updates
 
