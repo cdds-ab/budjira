@@ -47,6 +47,7 @@ dev = [
     "commitizen>=4.9.1",
     "pre-commit>=4.0.1",
     "python-semantic-release>=10.4.1",
+    "radon>=6.0.1",
 ]
 
 [project.urls]

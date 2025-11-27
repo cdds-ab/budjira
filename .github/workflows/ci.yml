@@ -36,6 +36,20 @@ jobs:
       - name: Run pre-commit checks
         uses: pre-commit/action@v3.0.1
 
+      - name: Run code complexity analysis (informational)
+        continue-on-error: true
+        run: |
+          echo "📊 Code Complexity Analysis"
+          echo "================================================"
+          echo ""
+          echo "Cyclomatic Complexity (CC):"
+          uv run radon cc budjira -a --total-average || true
+          echo ""
+          echo "Maintainability Index (MI):"
+          uv run radon mi budjira --min B --show || true
+          echo ""
+          echo "✅ Complexity analysis complete (non-blocking)"
+
       - name: Run tests with coverage
         run: |
           uv run pytest --cov=budjira --cov-report=xml --cov-report=term-missing --cov-fail-under=70
