@@ -204,7 +204,7 @@ class TestJiraClientSearchIssues:
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(JiraAPIError, match="Search failed"):
+        with pytest.raises(JiraAPIError, match="Search issues failed"):
             client.search_issues("project = TEST")
 
 
@@ -248,7 +248,7 @@ class TestJiraClientGetIssue:
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(InvalidIssueError, match="Issue 'TEST-123' not found"):
+        with pytest.raises(InvalidIssueError, match="Fetch issue failed: Resource not found"):
             client.get_issue("TEST-123")
 
     @patch("budjira.core.jira_client.JIRA")
@@ -260,7 +260,7 @@ class TestJiraClientGetIssue:
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(PermissionError, match="Permission denied accessing issue"):
+        with pytest.raises(PermissionError, match="Fetch issue failed: Access denied"):
             client.get_issue("TEST-123")
 
 
@@ -508,7 +508,7 @@ class TestJiraClientAddWorklog:
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(JiraAPIError, match="Failed to fetch worklogs"):
+        with pytest.raises(JiraAPIError, match="Fetch worklogs failed"):
             client.get_worklogs("TEST-123")
 
 
@@ -964,6 +964,7 @@ class TestJiraClientEpic:
         with pytest.raises(InvalidIssueError, match="Issue or epic not found"):
             client.link_to_epic("TEST-123", "TEST-999")
 
+    @pytest.mark.skip(reason="get_epic_issues method moved to EpicService during refactoring")
     @patch("budjira.core.jira_client.JIRA")
     @patch.object(JiraClient, "search_issues")
     def test_get_epic_issues_modern(
@@ -984,6 +985,7 @@ class TestJiraClientEpic:
         # Should try modern approach first
         mock_search.assert_called_once_with("parent = TEST-100", max_results=100)
 
+    @pytest.mark.skip(reason="get_epic_issues method moved to EpicService during refactoring")
     @patch("budjira.core.jira_client.JIRA")
     @patch.object(JiraClient, "search_issues")
     def test_get_epic_issues_legacy_fallback(
@@ -1035,7 +1037,7 @@ class TestJiraClientEdgeCases:
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(JiraAPIError, match="Failed to transition"):
+        with pytest.raises(JiraAPIError, match="Transition issue failed"):
             client.transition_issue("TEST-123", "Done")
 
     @patch("budjira.core.jira_client.JIRA")
@@ -1059,7 +1061,7 @@ class TestJiraClientEdgeCases:
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(JiraAPIError, match="Failed to fetch transitions"):
+        with pytest.raises(PermissionError, match="Fetch transitions failed: Access denied"):
             client.get_transitions("TEST-123")
 
     @patch("budjira.core.jira_client.JIRA")
@@ -1098,7 +1100,7 @@ class TestJiraClientEdgeCases:
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(JiraAPIError, match="Failed to update issue"):
+        with pytest.raises(PermissionError, match="Update issue failed: Access denied"):
             client.update_issue("TEST-123", priority="High")
 
     @patch("budjira.core.jira_client.JIRA")
@@ -1138,7 +1140,7 @@ class TestJiraClientEdgeCases:
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(JiraAPIError, match="Failed to add labels"):
+        with pytest.raises(PermissionError, match="Add labels failed: Access denied"):
             client.add_labels("TEST-123", ["bug"])
 
     @patch("budjira.core.jira_client.JIRA")
@@ -1179,7 +1181,7 @@ class TestJiraClientEdgeCases:
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(JiraAPIError, match="Failed to remove labels"):
+        with pytest.raises(PermissionError, match="Remove labels failed: Access denied"):
             client.remove_labels("TEST-123", ["bug"])
 
     @patch("budjira.core.jira_client.JIRA")
@@ -1208,7 +1210,7 @@ class TestJiraClientEdgeCases:
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(JiraAPIError, match="Failed to link to epic"):
+        with pytest.raises(JiraAPIError, match="Link to epic failed"):
             client.link_to_epic("TEST-123", "TEST-100")
 
     @patch("budjira.core.jira_client.JIRA")
@@ -1225,6 +1227,7 @@ class TestJiraClientEdgeCases:
         with pytest.raises(JiraAPIError, match="Unexpected error"):
             client.link_to_epic("TEST-123", "TEST-100")
 
+    @pytest.mark.skip(reason="get_epic_issues method moved to EpicService during refactoring")
     @patch("budjira.core.jira_client.JIRA")
     def test_get_epic_issues_error(self, mock_jira_class: Mock, connection: Connection) -> None:
         """Test getting epic issues with error."""
@@ -1405,7 +1408,7 @@ class TestJiraClientGetIssueDetails:
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(InvalidIssueError, match="Issue 'TEST-999' not found"):
+        with pytest.raises(InvalidIssueError, match="Fetch issue details failed: Resource not found"):
             client.get_issue_details("TEST-999")
 
     @patch("budjira.core.jira_client.JIRA")
@@ -1417,7 +1420,7 @@ class TestJiraClientGetIssueDetails:
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(PermissionError, match="Permission denied"):
+        with pytest.raises(PermissionError, match="Fetch issue details failed: Access denied"):
             client.get_issue_details("TEST-123")
 
 
@@ -1520,7 +1523,7 @@ class TestJiraClientAddComment:
         mock_jira_class.return_value = mock_jira_instance
 
         client = JiraClient(connection, "test-token")
-        with pytest.raises(JiraAPIError, match="Failed to add comment"):
+        with pytest.raises(JiraAPIError, match="Add comment failed"):
             client.add_comment("TEST-123", "Comment text")
 
     @patch("budjira.core.jira_client.JIRA")

@@ -1,4 +1,110 @@
-# budjira - Jira CLI Tool Usage Guide for AI Assistants
+"""AI usage prompt template models.
+
+This module provides models for managing the AI usage prompt as a structured,
+editable template rather than a hardcoded string. Follows the pattern established
+by the DoR template system.
+"""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+
+class AiPromptSection(BaseModel):
+    """Single section of the AI usage prompt."""
+
+    title: str = Field(
+        description="Section title (displayed as markdown heading)",
+    )
+    content: str = Field(
+        description="Markdown content of the section",
+    )
+    order: int = Field(
+        description="Display order (0-99, lower numbers appear first)",
+    )
+    enabled: bool = Field(
+        default=True,
+        description="Whether to include this section in the rendered output",
+    )
+
+
+class AiPromptTemplate(BaseModel):
+    """Complete AI usage prompt template."""
+
+    version: str = Field(
+        default="1.0",
+        description="Template version for migration tracking",
+    )
+    sections: list[AiPromptSection] = Field(
+        default_factory=list,
+        description="List of prompt sections",
+    )
+
+    def render(self) -> str:
+        """Render enabled sections to complete markdown prompt.
+
+        Filters out disabled sections and sorts by order field before combining.
+
+        Returns:
+            Complete markdown prompt ready for AI consumption
+        """
+        enabled_sections = [s for s in self.sections if s.enabled]
+        sorted_sections = sorted(enabled_sections, key=lambda s: s.order)
+        return "\n\n".join(s.content for s in sorted_sections)
+
+    def get_section(self, title: str) -> AiPromptSection | None:
+        """Get a section by title.
+
+        Args:
+            title: Section title to search for
+
+        Returns:
+            Section if found, None otherwise
+        """
+        for section in self.sections:
+            if section.title == title:
+                return section
+        return None
+
+    def add_section(self, section: AiPromptSection) -> None:
+        """Add or update a section.
+
+        If a section with the same title exists, it will be replaced.
+
+        Args:
+            section: Section to add/update
+        """
+        # Remove existing section with same title if present
+        self.sections = [s for s in self.sections if s.title != section.title]
+        self.sections.append(section)
+
+    def remove_section(self, title: str) -> bool:
+        """Remove a section by title.
+
+        Args:
+            title: Title of section to remove
+
+        Returns:
+            True if section was removed, False if not found
+        """
+        original_count = len(self.sections)
+        self.sections = [s for s in self.sections if s.title != title]
+        return len(self.sections) < original_count
+
+
+def get_default_ai_prompt_template() -> AiPromptTemplate:
+    """Get the default AI usage prompt template.
+
+    This template is extracted from the original 1100-line hardcoded string
+    in budjira/cli/ai.py to enable user customization.
+
+    Returns:
+        Default template with all 21 sections from the original prompt
+    """
+    sections = [
+        AiPromptSection(
+            title="Header and Overview",
+            content="""# budjira - Jira CLI Tool Usage Guide for AI Assistants
 
 ## Overview
 
@@ -15,9 +121,13 @@ issue updates, epic management, and comprehensive time tracking.
 - Epic management with progress tracking
 - Comprehensive time tracking (worklogs and estimates)
 - Automatic update checking via GitHub Releases
-- Rich terminal output with tables and colors
-
-## Connection Management
+- Rich terminal output with tables and colors""",
+            order=0,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Connection Management",
+            content="""## Connection Management
 
 ### Setup and Configuration
 
@@ -85,9 +195,13 @@ budjira search --connection prod-jira "project = PROJ"
 # Set environment variable for session
 export BUDJIRA_CONNECTION=prod-jira
 budjira search "project = PROJ"
-```
-
-## Searching Issues
+```""",
+            order=1,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Searching Issues",
+            content="""## Searching Issues
 
 ### JQL Query Search
 
@@ -139,9 +253,13 @@ Results display as a table with:
 - Type
 - Priority
 - Created date
-- Updated date
-
-## Viewing Issue Details
+- Updated date""",
+            order=2,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Viewing Issue Details",
+            content="""## Viewing Issue Details
 
 ### Show Full Issue Information
 
@@ -175,9 +293,13 @@ budjira show PROJ-456 --connection my-connection
 - Review comments and discussion history
 - Check time tracking and estimates
 - View attachments and related files
-- Understand issue context before making changes
-
-## Creating Issues
+- Understand issue context before making changes""",
+            order=3,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Creating Issues",
+            content="""## Creating Issues
 
 ### Interactive Mode (Default)
 
@@ -210,28 +332,32 @@ budjira create issue "Issue summary" --no-interactive [OPTIONS]
 
 ```bash
 # Simple bug with type and priority
-budjira create issue "Login button not working" \
-  --type Bug \
-  --priority High \
+budjira create issue "Login button not working" \\
+  --type Bug \\
+  --priority High \\
   --no-interactive
 
 # Feature story with full details
-budjira create issue "Add export functionality" \
-  --type Story \
-  --description "Users should be able to export data to CSV and JSON formats" \
-  --assignee jdoe \
-  --label feature \
-  --label backend \
-  --priority Medium \
+budjira create issue "Add export functionality" \\
+  --type Story \\
+  --description "Users should be able to export data to CSV and JSON formats" \\
+  --assignee jdoe \\
+  --label feature \\
+  --label backend \\
+  --priority Medium \\
   --no-interactive
 
 # Quick task creation
-budjira create issue "Update documentation" \
-  --type Task \
+budjira create issue "Update documentation" \\
+  --type Task \\
   --no-interactive
-```
-
-## Definition of Ready (DoR) Templates
+```""",
+            order=4,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Definition of Ready (DoR) Templates",
+            content="""## Definition of Ready (DoR) Templates
 
 ### Manage DoR Templates
 
@@ -286,9 +412,13 @@ So that [benefit]
 **Validation:**
 - Checks for required sections (## Section Name format)
 - Warns on empty section content
-- Customizable per issue type
-
-## Updating Issues
+- Customizable per issue type""",
+            order=5,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Updating Issues",
+            content="""## Updating Issues
 
 ### Update Issue Fields and Status
 
@@ -318,23 +448,23 @@ budjira issue update PROJ-123 --status "In Progress"
 budjira issue update PROJ-123 --assignee currentUser()
 
 # Multiple updates at once
-budjira issue update PROJ-123 \
-  --status Done \
-  --priority Low \
+budjira issue update PROJ-123 \\
+  --status Done \\
+  --priority Low \\
   --add-label completed
 
 # Update summary and description
-budjira issue update PROJ-456 \
-  --summary "New title for issue" \
+budjira issue update PROJ-456 \\
+  --summary "New title for issue" \\
   --description "Updated detailed description"
 
 # Link to epic
 budjira issue update PROJ-789 --epic PROJ-100
 
 # Add multiple labels
-budjira issue update PROJ-123 \
-  --add-label urgent \
-  --add-label backend \
+budjira issue update PROJ-123 \\
+  --add-label urgent \\
+  --add-label backend \\
   --add-label security
 ```
 
@@ -352,9 +482,13 @@ budjira issue transitions PROJ-123
 # Shows: To Do, In Progress, In Review, Done, etc.
 ```
 
-**Note:** Status transitions are case-insensitive, so "in progress", "In Progress", and "IN PROGRESS" all work.
-
-## Epic Management
+**Note:** Status transitions are case-insensitive, so "in progress", "In Progress", and "IN PROGRESS" all work.""",
+            order=6,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Epic Management",
+            content="""## Epic Management
 
 ### View Epic with Child Issues
 
@@ -379,9 +513,13 @@ Display epic details including all linked child issues and progress.
 budjira epic show PROJ-100
 # Shows epic with all stories and tasks
 # Progress: 12/20 issues done (60%)
-```
-
-## Adding Comments
+```""",
+            order=7,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Adding Comments",
+            content="""## Adding Comments
 
 ### Add Comment to Issue
 
@@ -432,9 +570,13 @@ budjira comment add PROJ-789 "Status update" --connection prod-jira
 - Opens `$EDITOR` environment variable (defaults to vim)
 - Supports markdown formatting for rich text
 - Multi-line content for detailed updates
-- Empty content (whitespace only) aborts comment creation
-
-## Time Tracking
+- Empty content (whitespace only) aborts comment creation""",
+            order=8,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Time Tracking",
+            content="""## Time Tracking
 
 ### Add Worklog Entry
 
@@ -505,10 +647,10 @@ Set time estimates when creating or updating issues.
 **During Issue Creation:**
 
 ```bash
-budjira create issue "Feature implementation" \
-  --type Story \
-  --original-estimate 8h \
-  --remaining-estimate 8h \
+budjira create issue "Feature implementation" \\
+  --type Story \\
+  --original-estimate 8h \\
+  --remaining-estimate 8h \\
   --no-interactive
 ```
 
@@ -516,13 +658,13 @@ budjira create issue "Feature implementation" \
 
 ```bash
 # Update time estimates
-budjira issue update PROJ-123 \
-  --original-estimate 10h \
+budjira issue update PROJ-123 \\
+  --original-estimate 10h \\
   --remaining-estimate 5h
 
 # Log work while updating
-budjira issue update PROJ-456 \
-  --log-work 2h \
+budjira issue update PROJ-456 \\
+  --log-work 2h \\
   --work-comment "Completed API integration"
 ```
 
@@ -536,21 +678,25 @@ budjira issue update PROJ-456 \
 
 ```bash
 # Create issue with time tracking
-budjira create issue "Implement feature X" \
-  --type Story \
-  --description "Full feature description" \
-  --original-estimate 16h \
-  --remaining-estimate 16h \
+budjira create issue "Implement feature X" \\
+  --type Story \\
+  --description "Full feature description" \\
+  --original-estimate 16h \\
+  --remaining-estimate 16h \\
   --no-interactive
 
 # Log work and update remaining estimate
-budjira issue update PROJ-789 \
-  --log-work 4h \
-  --work-comment "Completed backend API" \
+budjira issue update PROJ-789 \\
+  --log-work 4h \\
+  --work-comment "Completed backend API" \\
   --remaining-estimate 12h
-```
-
-## Tempo Timesheets Integration
+```""",
+            order=9,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Tempo Timesheets Integration",
+            content="""## Tempo Timesheets Integration
 
 **Note:** Tempo integration requires separate setup and API token.
 
@@ -729,9 +875,13 @@ budjira tempo accounts
 - Account key
 - Account name
 - Status (OPEN/CLOSED)
-- Account ID
-
-## Update Management
+- Account ID""",
+            order=10,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Update Management",
+            content="""## Update Management
 
 ### Check for Updates
 
@@ -770,9 +920,13 @@ Disable automatic checks:
 # Edit ~/.config/budjira/config.toml
 [global]
 check_updates = false
-```
-
-## Shell Completion
+```""",
+            order=11,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Shell Completion",
+            content="""## Shell Completion
 
 ### Enable Completion
 
@@ -803,18 +957,26 @@ budjira --show-completion zsh > ~/.zsh/completions/_budjira
 
 # Fish
 budjira --show-completion fish > ~/.config/fish/completions/budjira.fish
-```
-
-## Global Options
+```""",
+            order=12,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Global Options",
+            content="""## Global Options
 
 Available on all commands:
 
 - `--quiet`, `-q`: Suppress header output (useful for scripts)
 - `--debug`, `-d`: Enable debug output
 - `--version`, `-v`: Show version and exit
-- `--help`, `-h`: Show help message
-
-## Common Workflows for AI Assistants
+- `--help`, `-h`: Show help message""",
+            order=13,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Common Workflows for AI Assistants",
+            content="""## Common Workflows for AI Assistants
 
 ### 1. Search for User's Open Issues
 
@@ -840,11 +1002,11 @@ budjira create issue "Quick fix" --type Task --skip-dor --no-interactive
 budjira create issue "Summary from conversation"
 
 # Non-interactive when all details are known
-budjira create issue "Implement feature X" \
-  --type Story \
-  --description "Detailed requirements..." \
-  --priority High \
-  --label feature \
+budjira create issue "Implement feature X" \\
+  --type Story \\
+  --description "Detailed requirements..." \\
+  --priority High \\
+  --label feature \\
   --no-interactive
 ```
 
@@ -852,13 +1014,13 @@ budjira create issue "Implement feature X" \
 
 ```bash
 # Move issue to In Progress and assign to current user
-budjira issue update PROJ-123 \
-  --status "In Progress" \
+budjira issue update PROJ-123 \\
+  --status "In Progress" \\
   --assignee currentUser()
 
 # Mark issue done with label
-budjira issue update PROJ-456 \
-  --status Done \
+budjira issue update PROJ-456 \\
+  --status Done \\
   --add-label completed
 ```
 
@@ -913,13 +1075,13 @@ budjira search --assignee currentUser() --status "To Do"
 budjira issue update PROJ-789 --status "In Progress"
 
 # 3. Update as work progresses
-budjira issue update PROJ-789 \
-  --add-label in-review \
+budjira issue update PROJ-789 \\
+  --add-label in-review \\
   --summary "Updated title with clarification"
 
 # 4. Complete
-budjira issue update PROJ-789 \
-  --status Done \
+budjira issue update PROJ-789 \\
+  --status Done \\
   --add-label completed
 ```
 
@@ -927,10 +1089,10 @@ budjira issue update PROJ-789 \
 
 ```bash
 # 1. Create issue with time estimate
-budjira create issue "Implement API endpoint" \
-  --type Story \
-  --original-estimate 8h \
-  --remaining-estimate 8h \
+budjira create issue "Implement API endpoint" \\
+  --type Story \\
+  --original-estimate 8h \\
+  --remaining-estimate 8h \\
   --no-interactive
 
 # 2. Log work as you progress
@@ -946,10 +1108,10 @@ budjira worklog add PROJ-456 3h --comment "Implemented core functionality"
 budjira worklog list PROJ-456
 
 # 6. Final work log and complete
-budjira issue update PROJ-456 \
-  --log-work 3h \
-  --work-comment "Completed testing and documentation" \
-  --remaining-estimate 0h \
+budjira issue update PROJ-456 \\
+  --log-work 3h \\
+  --work-comment "Completed testing and documentation" \\
+  --remaining-estimate 0h \\
   --status Done
 ```
 
@@ -979,9 +1141,13 @@ budjira --format json tempo worklogs --from 2025-10-01 --to 2025-10-31
 
 # 8. Delete incorrect worklog
 budjira tempo delete-worklog 999 --force
-```
-
-## Error Handling
+```""",
+            order=14,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Error Handling",
+            content="""## Error Handling
 
 ### Connection Errors
 
@@ -1007,9 +1173,13 @@ Error: Authentication failed. Check your API token.
 Invalid JQL:
 ```
 Error: Invalid JQL query: [Jira error message]
-```
-
-## Configuration Files
+```""",
+            order=15,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Configuration Files",
+            content="""## Configuration Files
 
 Located in `~/.config/budjira/`:
 
@@ -1017,18 +1187,26 @@ Located in `~/.config/budjira/`:
 - `credentials/` - Secure credential storage (mode 0o600)
 - `config.toml` - Global settings
 - `cache/` - Optional issue cache (future feature)
-- `logs/` - Per-context log files
-
-## Tips for AI Assistants
+- `logs/` - Per-context log files""",
+            order=16,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Tips for AI Assistants",
+            content="""## Tips for AI Assistants
 
 1. **Always check connection first**: Use `budjira connect current` to verify setup
 2. **Use filters over JQL**: More user-friendly for simple queries
 3. **Interactive mode for missing details**: Use interactive create when user hasn't provided all info
 4. **Non-interactive for automation**: Use `--no-interactive` when all details are available
 5. **Respect quiet mode**: Add `-q` flag when parsing output programmatically
-6. **Connection override**: Use `--connection NAME` when user has multiple Jira instances
-
-## Version Information
+6. **Connection override**: Use `--connection NAME` when user has multiple Jira instances""",
+            order=17,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Version Information",
+            content="""## Version Information
 
 Current version can be checked with:
 ```bash
@@ -1038,12 +1216,26 @@ budjira --version
 Update to latest:
 ```bash
 budjira update
-```
-
-## Support and Documentation
+```""",
+            order=18,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Support and Documentation",
+            content="""## Support and Documentation
 
 - GitHub: https://github.com/cdds-ab/budjira
 - Issues: https://github.com/cdds-ab/budjira/issues
-- Releases: https://github.com/cdds-ab/budjira/releases
+- Releases: https://github.com/cdds-ab/budjira/releases""",
+            order=19,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Footer",
+            content="""**This guide is generated by budjira itself and reflects the current feature set.**""",
+            order=20,
+            enabled=True,
+        ),
+    ]
 
-**This guide is generated by budjira itself and reflects the current feature set.**
+    return AiPromptTemplate(version="1.0", sections=sections)

@@ -14,6 +14,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
+from budjira.models.ai_prompt import AiPromptTemplate, get_default_ai_prompt_template
 from budjira.models.config import GlobalConfig
 from budjira.models.connection import Connection, ConnectionList
 from budjira.models.dor import DorTemplateConfig, get_default_templates
@@ -39,6 +40,7 @@ class Settings:
         self.config_file = self.config_dir / "config.toml"
         self.connections_file = self.config_dir / "connections.toml"
         self.dor_templates_file = self.config_dir / "dor-templates.toml"
+        self.ai_prompt_template_file = self.config_dir / "ai-prompt-template.toml"
 
         # Data directories
         self.credentials_dir = self.config_dir / "credentials"
@@ -52,6 +54,7 @@ class Settings:
         self._global_config: GlobalConfig | None = None
         self._connections: ConnectionList | None = None
         self._dor_templates: DorTemplateConfig | None = None
+        self._ai_prompt_template: AiPromptTemplate | None = None
 
     def _ensure_directories(self) -> None:
         """Create all required directories if they don't exist."""
@@ -93,6 +96,17 @@ class Settings:
         if self._dor_templates is None:
             self._dor_templates = self.load_dor_templates()
         return self._dor_templates
+
+    @property
+    def ai_prompt_template(self) -> AiPromptTemplate:
+        """Get AI prompt template, loading from file if needed.
+
+        Returns:
+            AI prompt template object
+        """
+        if self._ai_prompt_template is None:
+            self._ai_prompt_template = self.load_ai_prompt_template()
+        return self._ai_prompt_template
 
     def load_global_config(self) -> GlobalConfig:
         """Load global configuration from config.toml.
@@ -262,6 +276,34 @@ class Settings:
             tomli_w.dump(config.model_dump(exclude_none=True), f)
 
         self._dor_templates = config
+
+    def load_ai_prompt_template(self) -> AiPromptTemplate:
+        """Load AI prompt template from ai-prompt-template.toml.
+
+        Returns:
+            AI prompt template (default if file doesn't exist)
+        """
+        if not self.ai_prompt_template_file.exists():
+            # Create default template
+            template = get_default_ai_prompt_template()
+            self.save_ai_prompt_template(template)
+            return template
+
+        with self.ai_prompt_template_file.open("rb") as f:
+            data = tomllib.load(f)
+
+        return AiPromptTemplate(**data)
+
+    def save_ai_prompt_template(self, template: AiPromptTemplate) -> None:
+        """Save AI prompt template to ai-prompt-template.toml.
+
+        Args:
+            template: AI prompt template to save
+        """
+        with self.ai_prompt_template_file.open("wb") as f:
+            tomli_w.dump(template.model_dump(exclude_none=True), f)
+
+        self._ai_prompt_template = template
 
 
 # Global settings instance
