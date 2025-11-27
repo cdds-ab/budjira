@@ -224,7 +224,7 @@ allowed_tags = [
     "test",
 ]
 minor_tags = ["feat"]
-patch_tags = ["fix", "perf", "style"]
+patch_tags = ["fix", "perf", "style", "refactor"]
 
 [tool.semantic_release.changelog]
 exclude_commit_patterns = [
