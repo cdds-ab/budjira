@@ -88,6 +88,12 @@ def issue(
         "--remaining-estimate",
         help="Remaining time estimate (e.g., 2h, 30m, 2h30m)",
     ),
+    epic: str = typer.Option(
+        None,
+        "--epic",
+        "-e",
+        help="Epic key to link this issue to (e.g., PROJ-100)",
+    ),
 ) -> None:
     """Create a new Jira issue.
 
@@ -104,6 +110,13 @@ def issue(
 
         # With description and labels
         budjira create issue "Add feature" --type Story --description "Detailed desc" --label feature --label frontend
+
+        # Link to epic during creation
+        budjira create issue "User authentication" --type Story --epic PROJ-100
+
+        # Create multiple stories for same epic
+        budjira create issue "Story 1" --type Story --epic PROJ-100 --no-interactive
+        budjira create issue "Story 2" --type Story --epic PROJ-100 --no-interactive
     """
     try:
         # Get settings for DoR templates
@@ -161,6 +174,9 @@ def issue(
             if not labels and Confirm.ask("Add labels?", default=False):
                 labels_input = Prompt.ask("Labels (comma-separated)")
                 labels = [label.strip() for label in labels_input.split(",") if label.strip()]
+
+            if epic is None and Confirm.ask("Link to an epic?", default=False):
+                epic = Prompt.ask("Epic key (e.g., PROJ-100)")
 
         # Validate required fields
         if not summary:
@@ -221,6 +237,21 @@ def issue(
             **extra_fields,
         )
 
+        # Link to epic if specified
+        epic_name = None
+        if epic:
+            try:
+                console.print(f"[dim]Linking to epic {epic}...[/dim]")
+                client.link_to_epic(created_issue.key, epic)
+
+                # Fetch epic name for display
+                epic_issue = client.get_issue(epic)
+                epic_name = epic_issue.summary
+                console.print(f"[green]✓[/green] Linked to epic: {epic} ({epic_name})", style="green")
+            except BudjiraError as e:
+                console.print(f"[yellow]⚠[/yellow] Warning: Failed to link to epic {epic}: {e}", style="yellow")
+                console.print("[dim]Issue was created successfully but epic link failed[/dim]")
+
         # Display created issue
         console.print("\n[green]✓[/green] Issue created successfully!", style="green")
 
@@ -250,10 +281,14 @@ def issue(
         if created_issue.labels:
             table.add_row("Labels", ", ".join(created_issue.labels))
 
+        if epic and epic_name:
+            table.add_row("Epic", f"{epic} ({epic_name})")
+
         console.print(table)
 
         # Show Jira URL
-        issue_url = f"{active_connection.url}/browse/{created_issue.key}"
+        base_url = str(active_connection.url).rstrip("/")
+        issue_url = f"{base_url}/browse/{created_issue.key}"
         console.print(f"\n[dim]View in Jira: {issue_url}[/dim]")
 
     except BudjiraError as e:

@@ -204,7 +204,21 @@ budjira create issue "Add feature" \
   --assignee jdoe \
   --label feature --label frontend \
   --no-interactive
+
+# Link to epic during creation (one-step workflow)
+budjira create issue "User authentication" --type Story --epic PROJ-100
+
+# Create multiple stories for same epic (efficient bulk creation)
+budjira create issue "Story 1" --type Story --epic PROJ-100 --no-interactive
+budjira create issue "Story 2" --type Story --epic PROJ-100 --no-interactive
+budjira create issue "Story 3" --type Story --epic PROJ-100 --no-interactive
 ```
+
+**Epic Linking:**
+- Use `--epic PROJ-100` to link issue to epic during creation
+- Eliminates need for separate update step
+- Perfect for creating multiple stories for same epic
+- Works in both interactive and non-interactive modes
 
 ### 6. Definition of Ready (DoR) Templates
 

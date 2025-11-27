@@ -243,8 +243,9 @@ class TestCreateCommand:
             "High",  # priority
             "jdoe",  # assignee
             "bug, urgent",  # labels
+            "TEST-100",  # epic
         ]
-        mock_confirm.ask.return_value = True  # Yes to all optional fields
+        mock_confirm.ask.return_value = True  # Yes to all optional fields (including epic)
 
         # Run command
         result = runner.invoke(app, [])
@@ -383,7 +384,8 @@ class TestCreateCommand:
 
         # Verify
         assert result.exit_code == 0
-        assert f"{mock_connection.url}/browse/TEST-456" in result.stdout
+        # URL should not have double slashes
+        assert "https://test.atlassian.net/browse/TEST-456" in result.stdout
 
 
 class TestCreateWithDoR:
@@ -837,3 +839,199 @@ So that I can access my account
         # Verify timetracking field was NOT passed
         call_kwargs = mock_client.create_issue.call_args.kwargs
         assert "timetracking" not in call_kwargs
+
+
+class TestCreateWithEpic:
+    """Test create command with epic linking."""
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_with_epic_flag_success(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test creating issue with --epic flag successfully links to epic."""
+        mock_get_conn.return_value = mock_connection
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
+
+        # Mock epic issue
+        epic_issue = Issue(
+            key="TEST-100",
+            summary="Epic Title",
+            issue_type="Epic",
+            status="In Progress",
+            project_key="TEST",
+        )
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_client.get_issue.return_value = epic_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            [
+                "New story",
+                "--type",
+                "Story",
+                "--epic",
+                "TEST-100",
+                "--no-interactive",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Issue created successfully" in result.stdout
+        assert "Linked to epic: TEST-100 (Epic Title)" in result.stdout
+        assert "Epic" in result.stdout
+        assert "TEST-100" in result.stdout
+
+        # Verify link_to_epic was called
+        mock_client.link_to_epic.assert_called_once_with("TEST-456", "TEST-100")
+        mock_client.get_issue.assert_called_once_with("TEST-100")
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_with_epic_flag_link_fails(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test creating issue when epic link fails but issue creation succeeds."""
+        mock_get_conn.return_value = mock_connection
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_client.link_to_epic.side_effect = JiraAPIError("Epic not found")
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            [
+                "New story",
+                "--type",
+                "Story",
+                "--epic",
+                "TEST-999",
+                "--no-interactive",
+            ],
+        )
+
+        # Should succeed with warning
+        assert result.exit_code == 0
+        assert "Issue created successfully" in result.stdout
+        assert "Warning: Failed to link to epic TEST-999" in result.stdout
+        assert "Issue was created successfully but epic link failed" in result.stdout
+
+        # Verify issue was created
+        mock_client.create_issue.assert_called_once()
+        # Verify link attempt was made
+        mock_client.link_to_epic.assert_called_once_with("TEST-456", "TEST-999")
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_without_epic_flag(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test creating issue without --epic flag does not attempt linking."""
+        mock_get_conn.return_value = mock_connection
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["New story", "--type", "Story", "--no-interactive"],
+        )
+
+        assert result.exit_code == 0
+        assert "Issue created successfully" in result.stdout
+
+        # Verify link_to_epic was NOT called
+        mock_client.link_to_epic.assert_not_called()
+        mock_client.get_issue.assert_not_called()
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_with_epic_and_other_fields(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test creating issue with --epic and other fields."""
+        mock_get_conn.return_value = mock_connection
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
+
+        epic_issue = Issue(
+            key="TEST-100",
+            summary="Epic Title",
+            issue_type="Epic",
+            status="In Progress",
+            project_key="TEST",
+        )
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_client.get_issue.return_value = epic_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            [
+                "New story",
+                "--type",
+                "Story",
+                "--epic",
+                "TEST-100",
+                "--priority",
+                "High",
+                "--label",
+                "feature",
+                "--original-estimate",
+                "2h",
+                "--no-interactive",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Issue created successfully" in result.stdout
+        assert "Linked to epic: TEST-100" in result.stdout
+
+        # Verify both create_issue and link_to_epic were called
+        mock_client.create_issue.assert_called_once()
+        call_kwargs = mock_client.create_issue.call_args.kwargs
+        assert call_kwargs["priority"] == "High"
+        assert call_kwargs["labels"] == ["feature"]
+        assert "timetracking" in call_kwargs
+
+        mock_client.link_to_epic.assert_called_once_with("TEST-456", "TEST-100")
