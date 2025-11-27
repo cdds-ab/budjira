@@ -1,6 +1,39 @@
 # CHANGELOG
 
 
+## v1.12.0 (2025-11-27)
+
+### Features
+
+- **create**: Add --epic flag for direct epic linking during issue creation
+  ([`50accc2`](https://github.com/cdds-ab/budjira/commit/50accc2221688beb9f4e8e5d3d0df9a63b99b3c7))
+
+Implements --epic flag that eliminates the need for a separate update step when linking issues to
+  epics. This provides a streamlined one-command workflow for creating stories and immediately
+  assigning them to epics.
+
+Features: - --epic/-e flag to specify epic key during issue creation - Interactive mode prompt for
+  epic assignment - Automatic epic linking after issue creation - Epic name display in creation
+  confirmation table - Graceful error handling (issue created even if link fails) - Works with all
+  existing flags (type, priority, labels, estimates)
+
+Implementation: - Uses existing link_to_epic() method for robust modern/legacy support - Fetches
+  epic name for user-friendly confirmation message - URL formatting fix (strip trailing slashes from
+  connection URL) - Non-blocking: Issue creation succeeds even if epic link fails
+
+Testing: - 4 new comprehensive tests for epic linking scenarios - Test coverage: Success, failure,
+  no epic, combined with other fields - Fixed existing tests for URL format and interactive mode
+  with epic prompt - Total: 466 tests passing, 84.57% overall coverage
+
+Documentation: - README.md updated with epic flag examples and bulk creation workflows - Docstrings
+  updated with epic flag examples - AI usage prompt regenerated
+
+Use Cases: - Create multiple stories for same epic efficiently - Scripted story creation with epic
+  assignment - Automation-friendly single-command workflow
+
+Resolves: #58
+
+
 ## v1.11.0 (2025-11-27)
 
 ### Features
