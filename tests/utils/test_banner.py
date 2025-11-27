@@ -42,3 +42,20 @@ def test_header_contains_version() -> None:
     header = str(get_header())
     assert f"v{__version__}" in header
     assert "Your CLI Pal for Jira" in header
+
+
+def test_banner_lines_same_width() -> None:
+    """Test that top and bottom banner lines have equal visual width."""
+    console = Console()
+    header = get_header()
+
+    lines = str(header).split("\n")
+    assert len(lines) >= 2
+
+    # Measure both lines
+    top_measurement = console.measure(lines[0])
+    bottom_measurement = console.measure(lines[1])
+
+    assert (
+        top_measurement.maximum == bottom_measurement.maximum
+    ), f"Banner lines must have equal width: top={top_measurement.maximum}, bottom={bottom_measurement.maximum}"

@@ -11,23 +11,31 @@ def get_header() -> Text:
 
     This is shown by default on every command unless -q/--quiet is used.
     """
-    # Build header line by line for exact width control
-    header = Text()
+    # Create temporary console for measurement
+    temp_console = Console()
 
-    # Top line
-    header.append("╭─ ", style="bright_cyan")
-    header.append("🦖", style="bright_blue")
-    header.append(" ", style="")
-    header.append("budjira", style="bold bright_magenta")
-    header.append(f" v{__version__} ", style="dim")
-    header.append("─ ", style="bright_cyan")
-    header.append("Your CLI Pal for Jira", style="dim italic")
-    header.append(" ─╮", style="bright_cyan")
+    # Build top line as Text object for measurement
+    top_line = Text()
+    top_line.append("╭─ ", style="bright_cyan")
+    top_line.append("🦖", style="bright_blue")
+    top_line.append(" ", style="")
+    top_line.append("budjira", style="bold bright_magenta")
+    top_line.append(f" v{__version__} ", style="dim")
+    top_line.append("─ ", style="bright_cyan")
+    top_line.append("Your CLI Pal for Jira", style="dim italic")
+    top_line.append(" ─╮", style="bright_cyan")
+
+    # Measure visual width (accounts for emoji = 2 cells, ANSI = 0 cells)
+    top_width = temp_console.measure(top_line).maximum
+
+    # Build final header
+    header = Text()
+    header.append(top_line)
     header.append("\n")
 
-    # Bottom line - match the visual width (emoji is 2 wide)
+    # Bottom line - dynamically sized to match top
     header.append("╰", style="bright_cyan")
-    header.append("─" * 45, style="bright_cyan")
+    header.append("─" * (top_width - 2), style="bright_cyan")  # -2 for corners
     header.append("╯", style="bright_cyan")
 
     return header
