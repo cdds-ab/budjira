@@ -1,6 +1,51 @@
 # CHANGELOG
 
 
+## v1.12.2 (2025-11-27)
+
+### Refactoring
+
+- Decompose monolithic classes for maintainability
+  ([`0b25f67`](https://github.com/cdds-ab/budjira/commit/0b25f67913563d8dcdb1aeda8b92f8061328205f))
+
+Addresses issues #19 (AI prompt templates) and #32 (service layer).
+
+Issue #19 - AI Prompt Template System: - Extract 1100-line hardcoded string to TOML-based template
+  system - Add Pydantic models (AiPromptSection, AiPromptTemplate) for type safety - Reduce
+  budjira/cli/ai.py from 1156 to 56 lines (1100-line reduction) - Enable user customization via
+  ~/.config/budjira/ai-prompt-template.toml
+
+Issue #32 - Service Layer Refactoring: - Decompose 834-line JiraClient into focused service classes
+  - Create BaseJiraService with standardized error handling - Add 7 domain services (IssueService,
+  WorklogService, EpicService, TransitionService, LabelService, CommentService, MetadataService) -
+  Refactor JiraClient to facade pattern maintaining backwards compatibility - Reduce
+  budjira/core/jira_client.py from 834 to 318 lines (516-line reduction)
+
+All tests passing (487 passed, 4 skipped). Coverage: 84.30%.
+
+- Eliminate F-rated functions to reduce cyclomatic complexity
+  ([`74a7df7`](https://github.com/cdds-ab/budjira/commit/74a7df7640ab1ec2209e6038cdd7bfda8f779fd4))
+
+Resolves #60 - Refactor F-rated Functions to Reduce Cyclomatic Complexity Partially addresses #59 -
+  Success Criterion 2 now fulfilled
+
+Issue.from_jira_issue (F-44 → A-1): - Extract 8 specialized field parsers (_parse_basic_fields,
+  _parse_user_fields, _parse_timestamp_fields, _parse_metadata_fields, _parse_epic_fields,
+  _parse_time_tracking_fields, _parse_comments, _parse_attachments) - Main method now orchestrates
+  parsing delegation (36 lines vs. 125 original) - Each parser has single responsibility and
+  complexity A/B/C
+
+cli/create.py:issue (F-53 → A-4): - Extract 11 input/validation/display helper functions - Main
+  function reduced from 300 to 47 lines (orchestration only) - Helpers: _get_*_input, _validate_*,
+  _prepare_time_tracking, _link_to_epic_if_specified, _display_created_issue
+
+Impact: - F-rated functions: 2 → 0 (eliminated) - Average complexity: 4.66 → 4.30 (improved) - All
+  tests passing: 488 passed, 3 skipped - Coverage: 84.04% (maintained)
+
+Remaining complexity hotspots (out of scope for #60): - tempo_list_worklogs: E (33) - show_issue: E
+  (32)
+
+
 ## v1.12.1 (2025-11-27)
 
 ### Bug Fixes
