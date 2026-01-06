@@ -1,6 +1,35 @@
 # CHANGELOG
 
 
+## v1.12.3 (2026-01-06)
+
+### Bug Fixes
+
+- **tempo**: Apply issue_key backfill to table output
+  ([#61](https://github.com/cdds-ab/budjira/pull/61),
+  [`fdae77f`](https://github.com/cdds-ab/budjira/commit/fdae77f84843e2daf11493d97a402bbe7737b85b))
+
+Apply the same issue_key backfill logic from JSON output to table output. When Tempo API returns
+  null issue.key but valid issue.id, fetch the key from Jira API to display in the worklogs table.
+
+- Always initialize JiraClient for worklogs command (needed for backfill) - Add issue_key_cache
+  before output format branching (shared by both) - Implement backfill in table output loop with
+  caching - Convert issue.id to string for mypy compatibility - Add regression test for Bug #61
+  table output backfill - Update existing tests to include mock_jira_client fixture
+
+Closes #61
+
+### Documentation
+
+- Update project context to v1.12.x
+  ([`032be38`](https://github.com/cdds-ab/budjira/commit/032be38af723182c7b97b59f00ee60fa0fdea8cc))
+
+- Document new features: v1.9.0-v1.12.0 (tempo update, comment, epic JSON, --epic flag) - Add new
+  services/ module architecture from JiraClient decomposition - Update test statistics: 488 tests,
+  84.11% coverage - Document Bug #61 and 29 refactoring issues in backlog - Update module structure
+  with all new files
+
+
 ## v1.12.2 (2025-11-27)
 
 ### Refactoring
