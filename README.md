@@ -420,7 +420,7 @@ budjira worklog add PROJ-123 2h --comment "Fixed authentication bug"
 budjira worklog add PROJ-123 1h30m --comment "Code review"
 
 # Log work with specific start time
-budjira worklog add PROJ-123 3h --started "2024-10-24 14:00" --comment "Implemented feature"
+budjira worklog add PROJ-123 3h --started "2025-10-24 14:00" --comment "Implemented feature"
 budjira worklog add PROJ-123 2h --started "yesterday" --comment "Bug fixing"
 
 # List all worklogs for an issue
@@ -445,11 +445,11 @@ budjira issue update PROJ-123 --log-work 2h --work-comment "Implemented API endp
 - Combined: `2h30m`, `1h45m`
 
 **Supported Datetime Formats (for --started):**
-- ISO format: `2024-10-25T14:30:00`, `2024-10-25 14:30`
-- Date only: `2024-10-25` (time defaults to 00:00)
+- ISO format: `2025-10-25T14:30:00`, `2025-10-25 14:30`
+- Date only: `2025-10-25` (time defaults to 00:00)
 - Relative: `today`, `yesterday`
 
-### 8. Add Comments
+### Add Comments
 
 Add comments to Jira issues without logging time (unlike worklogs which combine comments with time tracking).
 
@@ -479,7 +479,7 @@ budjira comment add PROJ-123 "Comment text" --connection my-connection
 - Supports markdown formatting
 - Multi-line content for detailed updates
 
-### 9. Tempo Timesheets Integration
+### Tempo Timesheets Integration
 
 For enterprise teams using [Tempo Timesheets](https://www.tempo.io/), budjira provides full API integration for advanced time tracking and billing.
 
@@ -500,12 +500,17 @@ budjira tempo log PROJ-123 2h --comment "Sizing analysis"
 budjira tempo log PROJ-456 3h30m --started "yesterday" --comment "Client meeting"
 
 # Log work with specific datetime
-budjira tempo log PROJ-123 2h --started "2024-10-24 14:00" --comment "Development"
+budjira tempo log PROJ-123 2h --started "2025-10-24 14:00" --comment "Development"
 
 # List Tempo worklogs
 budjira tempo worklogs PROJ-123                    # For specific issue
-budjira tempo worklogs --from 2024-10-01 --to 2024-10-31  # Date range
+budjira tempo worklogs --from 2025-10-01 --to 2025-10-31  # Date range
 budjira tempo worklogs --max 50                    # Limit results
+
+# Update existing worklog (preserve ID and audit trail)
+budjira tempo update-worklog 12345 --time-spent 3h
+budjira tempo update-worklog 12345 --started "2025-10-28" --comment "Updated"
+budjira tempo update-worklog 12345 --force        # Skip confirmation
 
 # Delete worklog entry
 budjira tempo delete-worklog 12345
@@ -519,6 +524,7 @@ budjira tempo accounts
 - ✅ Full Tempo Cloud API support
 - ✅ Worklog creation with time tracking
 - ✅ Worklog listing with filters
+- ✅ Worklog updates (time, date, comment)
 - ✅ Worklog deletion
 - ✅ Tempo Accounts listing for billing
 - ✅ Automatic connection detection
@@ -529,7 +535,7 @@ budjira tempo accounts
 - Use `budjira worklog` commands for standard Jira time tracking
 - Tempo integration is optional and requires a separate API token
 
-### 10. JSON Output Format
+### JSON Output Format
 
 budjira supports JSON output for automation and integration with other tools (e.g., reporting systems, data analysis).
 
@@ -602,12 +608,10 @@ The following features are currently in development:
 
 ### Additional Planned Features
 
-- **Issue Transitions**: Move issues between workflow states
-- **Comment Management**: Add and view comments on issues
+- **Comment Management**: List, edit, and delete comments (add already available)
 - **Attachment Support**: Upload and download attachments
 - **Sprint Management**: View and manage sprints
 - **Dashboard Commands**: View personalized dashboards
-- **View Logs**: Access and filter application logs
 
 ## 🎯 Use Cases
 
@@ -723,7 +727,7 @@ Found a bug? Have a feature request?
 ### Planned 📋
 - [ ] E2E Testing with Atlassian Developer Cloud (see [#6](https://github.com/cdds-ab/budjira/issues/6))
 - [ ] Smart caching with dirty detection
-- [ ] Comment management
+- [ ] Comment list/edit/delete (add already available)
 - [ ] Attachment upload/download
 - [ ] Offline mode
 - [ ] Sprint management
