@@ -260,7 +260,7 @@ def test_tempo_worklogs_success(mock_tempo_connection, mock_tempo_client, mock_j
     assert "issue_key" not in call_kwargs
 
 
-def test_tempo_worklogs_with_date_range(mock_tempo_connection, mock_tempo_client):
+def test_tempo_worklogs_with_date_range(mock_tempo_connection, mock_tempo_client, mock_jira_client):
     """Test worklog listing with date range filter."""
     mock_tempo_client.get_worklogs.return_value = []
 
@@ -276,7 +276,7 @@ def test_tempo_worklogs_with_date_range(mock_tempo_connection, mock_tempo_client
     assert call_kwargs["to_date"] == date(2025, 10, 31)
 
 
-def test_tempo_worklogs_empty_results(mock_tempo_connection, mock_tempo_client):
+def test_tempo_worklogs_empty_results(mock_tempo_connection, mock_tempo_client, mock_jira_client):
     """Test worklog listing with no results."""
     mock_tempo_client.get_worklogs.return_value = []
 
@@ -286,7 +286,7 @@ def test_tempo_worklogs_empty_results(mock_tempo_connection, mock_tempo_client):
     assert "No worklogs found" in result.stdout
 
 
-def test_tempo_worklogs_without_issue_key(mock_tempo_connection, mock_tempo_client):
+def test_tempo_worklogs_without_issue_key(mock_tempo_connection, mock_tempo_client, mock_jira_client):
     """Test worklog listing handles worklogs without issue key."""
     from datetime import date, datetime
 
@@ -314,6 +314,58 @@ def test_tempo_worklogs_without_issue_key(mock_tempo_connection, mock_tempo_clie
     assert result.exit_code == 0
     assert "999" in result.stdout  # Worklog ID shown
     assert "N/A" in result.stdout or "n/a" in result.stdout.lower()  # No issue key
+
+
+def test_tempo_worklogs_table_issue_key_backfill(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test issue_key backfill in table output when Tempo API returns null key (Bug #61).
+
+    Regression test for Bug #61: tempo worklogs table output shows N/A for issue
+    even when the worklog has a valid issue.id that can be resolved via Jira API.
+    """
+    from datetime import date, datetime
+
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    # Create worklog with null issue_key but valid issue_id (Bug #61 scenario)
+    worklog_null_key = TempoWorklog(
+        self="https://api.tempo.io/worklogs/729",
+        tempoWorklogId=729,
+        issue=TempoIssue(
+            self="https://api.tempo.io/issues/10428",
+            key=None,  # Tempo returns null
+            id=10428,  # But has valid ID
+        ),
+        timeSpentSeconds=7200,
+        startDate=date(2025, 10, 25),
+        startTime="09:00:00",
+        createdAt=datetime(2025, 10, 25, 9, 0),
+        updatedAt=datetime(2025, 10, 25, 9, 0),
+        author=TempoAuthor(
+            self="https://api.tempo.io/users/123",
+            accountId="557058:test",
+            displayName="Test User",
+        ),
+    )
+    mock_tempo_client.get_worklogs.return_value = [worklog_null_key]
+
+    # Mock Jira API issue() call for backfill - returns the resolved key
+    mock_issue = MagicMock()
+    mock_issue.key = "PROJ-456"
+    mock_jira_client.from_connection.return_value.client.issue.return_value = mock_issue
+
+    result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 0
+
+    # CRITICAL: Verify Jira API was called to backfill issue_key (as string)
+    mock_jira_client.from_connection.return_value.client.issue.assert_called_once_with("10428", fields="key")
+
+    # CRITICAL: Verify table output shows the resolved issue key, NOT "N/A"
+    assert "PROJ-456" in result.stdout, (
+        "Table output should show backfilled issue_key from Jira API, not N/A. "
+        "Bug #61: Tempo API returns null key but valid issue.id"
+    )
+    assert "N/A" not in result.stdout, "N/A should not appear when issue_key can be backfilled from Jira API"
 
 
 def test_tempo_worklogs_uses_issue_id_not_key(mock_tempo_connection, mock_tempo_client, mock_jira_client):
@@ -632,8 +684,8 @@ def test_tempo_worklogs_json_issue_key_backfill(mock_tempo_connection, mock_temp
 
     assert result.exit_code == 0
 
-    # CRITICAL 1: Verify Jira API was called to backfill issue_key
-    mock_jira_client.from_connection.return_value.client.issue.assert_called_once_with(12345, fields="key")
+    # CRITICAL 1: Verify Jira API was called to backfill issue_key (as string for mypy compatibility)
+    mock_jira_client.from_connection.return_value.client.issue.assert_called_once_with("12345", fields="key")
 
     # CRITICAL 2: Verify JSON output has backfilled issue_key
     output = json.loads(result.stdout)

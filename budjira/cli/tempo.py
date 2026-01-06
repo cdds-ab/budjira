@@ -222,15 +222,16 @@ def tempo_list_worklogs(
         # Get format from context
         output_format = ctx.obj.get("format", "table") if ctx.obj else "table"
 
-        # Get Jira client only if needed (for issue_id conversion or JSON epic fetching)
-        jira_client = None
-        if issue_key or OutputFormatter.is_json_format(output_format):
-            connection = get_active_connection(connection_name)
-            jira_client = JiraClient.from_connection(connection)
+        # Get Jira client - needed for:
+        # 1. issue_id conversion when filtering by issue_key
+        # 2. JSON epic fetching
+        # 3. Table output issue_key backfill (Tempo API often returns null issue.key)
+        connection = get_active_connection(connection_name)
+        jira_client = JiraClient.from_connection(connection)
 
         # Convert issue_key to issue_id if provided (Tempo API requires numeric ID)
         issue_id = None
-        if issue_key and jira_client:
+        if issue_key:
             issue = jira_client.client.issue(issue_key)
             issue_id = int(issue.id)
 
@@ -249,11 +250,14 @@ def tempo_list_worklogs(
                 console.print("[yellow]No worklogs found matching the criteria[/yellow]")
             return
 
-        if OutputFormatter.is_json_format(output_format) and jira_client:
+        # Cache for issue_key backfill (Tempo API often returns null issue.key)
+        # Used by both JSON and table output
+        issue_key_cache: dict[int, str | None] = {}  # Cache: issue_id -> issue_key
+
+        if OutputFormatter.is_json_format(output_format):
             # JSON output - fetch epic information if not disabled
             worklog_dicts = []
             epic_cache: dict[str, tuple[str, str] | None] = {}  # Cache: issue_key -> (epic_key, epic_name)
-            issue_key_cache: dict[int, str | None] = {}  # Cache: issue_id -> issue_key (backfill)
 
             for worklog in worklogs:
                 # Convert seconds to hours/minutes display
@@ -267,8 +271,8 @@ def tempo_list_worklogs(
                     # Check cache first to minimize API calls
                     if worklog.issue.id not in issue_key_cache:
                         try:
-                            # Fetch issue key from Jira using numeric ID
-                            jira_issue = jira_client.client.issue(worklog.issue.id, fields="key")
+                            # Fetch issue key from Jira using numeric ID (as string)
+                            jira_issue = jira_client.client.issue(str(worklog.issue.id), fields="key")
                             issue_key_cache[worklog.issue.id] = jira_issue.key
                         except Exception:
                             # If fetch fails, cache None to avoid retries
@@ -316,7 +320,7 @@ def tempo_list_worklogs(
             OutputFormatter.output_json(output)
 
         else:
-            # Table output (existing behavior)
+            # Table output - with issue_key backfill from Jira API
             table = Table(title=f"Tempo Worklogs ({len(worklogs)} entries)")
             table.add_column("ID", style="cyan")
             table.add_column("Issue", style="magenta")
@@ -331,9 +335,25 @@ def tempo_list_worklogs(
                 minutes = (worklog.timeSpentSeconds % 3600) // 60
                 time_display = f"{hours}h {minutes}m" if hours else f"{minutes}m"
 
+                # Backfill issue_key from Jira API if Tempo returned null
+                display_issue_key = worklog.issue.key
+                if display_issue_key is None and worklog.issue.id is not None:
+                    # Check cache first to minimize API calls
+                    if worklog.issue.id not in issue_key_cache:
+                        try:
+                            # Fetch issue key from Jira using numeric ID (as string)
+                            jira_issue = jira_client.client.issue(str(worklog.issue.id), fields="key")
+                            issue_key_cache[worklog.issue.id] = jira_issue.key
+                        except Exception:
+                            # If fetch fails, cache None to avoid retries
+                            issue_key_cache[worklog.issue.id] = None
+
+                    # Use cached value (either key or None)
+                    display_issue_key = issue_key_cache.get(worklog.issue.id)
+
                 table.add_row(
                     str(worklog.tempoWorklogId),
-                    worklog.issue.key or "[dim]N/A[/dim]",
+                    display_issue_key or "[dim]N/A[/dim]",
                     time_display,
                     worklog.startDate.strftime("%Y-%m-%d"),
                     worklog.author.displayName or worklog.author.accountId[:8],
