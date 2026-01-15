@@ -19,11 +19,15 @@ class EpicService(BaseJiraService):
     def get_epic_issues(self, epic_key: str) -> list[Issue]:
         """Get all issues linked to an epic.
 
+        Queries both modern (parent field) and legacy (Epic Link) approaches
+        to support hybrid Jira environments where issues may be linked via
+        either method.
+
         Args:
             epic_key: Epic key (e.g., PROJ-100)
 
         Returns:
-            List of Issue objects
+            List of Issue objects (deduplicated by key)
 
         Raises:
             InvalidIssueError: If epic not found
@@ -32,28 +36,38 @@ class EpicService(BaseJiraService):
         try:
             self._log_operation("Fetch epic issues", epic_key=epic_key)
 
-            # Try modern approach first (parent field - Jira Cloud team-managed projects)
-            try:
-                jql_modern = f"parent = {epic_key}"
-                # Import IssueService to avoid circular dependency
-                from budjira.services.issues import IssueService
-
-                issue_service = IssueService(self.client)
-                issues = issue_service.search(jql_modern, max_results=100)
-                if issues:
-                    self._logger.debug(f"Found {len(issues)} issues using parent field")
-                    return issues
-            except Exception as e:
-                self._logger.debug(f"Modern parent query failed, trying legacy: {e}")
-
-            # Fallback to legacy Epic Link custom field (company-managed projects)
+            # Import IssueService to avoid circular dependency
             from budjira.services.issues import IssueService
 
             issue_service = IssueService(self.client)
-            jql_legacy = f'"Epic Link" = {epic_key}'
-            issues = issue_service.search(jql_legacy, max_results=100)
-            self._logger.debug(f"Found {len(issues)} issues using Epic Link field")
-            return issues
+
+            # Collect issues from both query methods
+            all_issues: dict[str, Issue] = {}
+
+            # Try modern approach (parent field - Jira Cloud team-managed projects)
+            try:
+                jql_modern = f"parent = {epic_key}"
+                modern_issues = issue_service.search(jql_modern, max_results=100)
+                for issue in modern_issues:
+                    all_issues[issue.key] = issue
+                self._logger.debug(f"Found {len(modern_issues)} issues using parent field")
+            except Exception as e:
+                self._logger.debug(f"Modern parent query failed: {e}")
+
+            # Also try legacy Epic Link custom field (company-managed projects)
+            try:
+                jql_legacy = f'"Epic Link" = {epic_key}'
+                legacy_issues = issue_service.search(jql_legacy, max_results=100)
+                for issue in legacy_issues:
+                    if issue.key not in all_issues:
+                        all_issues[issue.key] = issue
+                self._logger.debug(f"Found {len(legacy_issues)} issues using Epic Link field")
+            except Exception as e:
+                self._logger.debug(f"Legacy Epic Link query failed: {e}")
+
+            result = list(all_issues.values())
+            self._logger.debug(f"Total unique issues linked to epic: {len(result)}")
+            return result
 
         except Exception as e:
             raise JiraAPIError(f"Failed to fetch epic issues: {e}") from e
