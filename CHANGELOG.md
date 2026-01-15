@@ -1,6 +1,33 @@
 # CHANGELOG
 
 
+## v1.12.4 (2026-01-15)
+
+### Bug Fixes
+
+- **epic**: Query both parent and Epic Link fields for child issues
+  ([#62](https://github.com/cdds-ab/budjira/pull/62),
+  [`4581713`](https://github.com/cdds-ab/budjira/commit/45817138c6767f7ff62fe39aff98edc1c72d1a76))
+
+Previously get_epic_issues() used an either-or approach: it would return early if the modern parent
+  field query found results, skipping the legacy Epic Link query. In hybrid Jira environments where
+  issues can be linked via either method, this caused some child issues to be missing from the
+  output.
+
+Now both queries are executed and results are combined with deduplication by issue key, ensuring all
+  linked issues are returned regardless of how they were linked to the epic.
+
+### Documentation
+
+- Update README for accuracy and completeness
+  ([`170fd97`](https://github.com/cdds-ab/budjira/commit/170fd974d079132589a0c0212cd20c34b1cde424))
+
+- Add tempo update-worklog command documentation - Fix duplicate section numbering (8, 9, 10
+  appeared twice) - Update 'Coming Soon' section (clarify comment management scope) - Update Roadmap
+  (comment list/edit/delete still planned) - Standardize example dates to 2025 - Add worklog updates
+  to Tempo features list
+
+
 ## v1.12.3 (2026-01-06)
 
 ### Bug Fixes
