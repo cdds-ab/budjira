@@ -11,16 +11,18 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.12.1 (Latest: v1.12.2)
+- **Current Version**: v1.12.4
 - **Branch**: master
 - **Status**: Clean working tree
-- **Last Update**: 2025-11-27
+- **Last Update**: 2026-01-16
 
 ### Recent Releases (seit v1.8.1)
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
-| **v1.12.2** | 2025-11-27 | refactor | Code complexity reduction (F-rated functions eliminated) |
+| **v1.12.4** | 2026-01-15 | fix | Epic show: query both parent and Epic Link fields (#62) |
+| **v1.12.3** | 2025-11-27 | fix | Tempo issue_key backfill for table output (Issue #61) |
+| v1.12.2 | 2025-11-27 | refactor | Code complexity reduction (F-rated functions eliminated) |
 | **v1.12.1** | 2025-11-27 | fix | Banner width calculation, Radon CI integration |
 | **v1.12.0** | 2025-11-27 | feat | `--epic` flag for issue creation (Issue #58) |
 | **v1.11.0** | 2025-11-27 | feat | Epic JSON output format (Issue #57) |
@@ -130,10 +132,10 @@ budjira/services/
 
 | Metrik | Wert |
 |--------|------|
-| **Total Tests** | 488 |
+| **Total Tests** | 497 |
 | **Skipped Tests** | 3 |
-| **Coverage** | 84.11% |
-| **Test Duration** | ~6.8s |
+| **Coverage** | 84.63% |
+| **Test Duration** | ~7.5s |
 
 ### Coverage by Module (Top)
 ```
@@ -150,25 +152,17 @@ budjira/tempo/client.py        90%
 ```
 
 ### Coverage Improvements Since v1.8.1
-- Total: 82% → 84% (+2%)
-- New tests: 423 → 488 (+65 tests)
+- Total: 82% → 84.63% (+2.6%)
+- New tests: 423 → 497 (+74 tests)
 
 ---
 
 ## Offene GitHub Issues
 
-### Bug (Aktiv)
-| # | Titel | Status |
-|---|-------|--------|
-| **#61** | Tempo worklogs show N/A for issue despite being correctly linked | Open |
+### Bugs
+Keine aktiven Bugs. Bug #62 wurde in v1.12.4 gefixt.
 
-**Bug #61 Details:**
-- Tempo API returns `issue.key` as `None` but `issue.id` is present
-- JSON output already has backfill logic (lines 264-278)
-- Table output missing the same backfill
-- **Workaround**: Use `--format json`
-
-### Refactoring-Backlog (29 Issues)
+### Refactoring-Backlog (39 Issues)
 
 **Priority High (3):**
 - #50 - No Security Scanning in CI
@@ -192,7 +186,7 @@ budjira/tempo/client.py        90%
 
 ```
 budjira/
-├── __init__.py              # Version: 1.12.1
+├── __init__.py              # Version: 1.12.4
 ├── __main__.py              # Entry point
 ├── cli/                     # Command-line interface
 │   ├── main.py             # Main CLI app, global flags (--format, --quiet)
@@ -287,7 +281,7 @@ budjira/
 ## Nächste Schritte
 
 ### Immediate
-- [ ] **Bug #61**: Apply issue_key backfill to table output in tempo worklogs
+- [x] ~~**Bug #62**: Epic show missing child issues~~ (Fixed in v1.12.4)
 - [ ] Review remaining refactoring issues
 
 ### Short-term
@@ -324,5 +318,5 @@ budjira/
 
 ---
 
-**Letzte Aktualisierung**: 2026-01-06
+**Letzte Aktualisierung**: 2026-01-16
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
