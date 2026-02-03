@@ -11,15 +11,16 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.12.4
+- **Current Version**: v1.13.0
 - **Branch**: master
 - **Status**: Clean working tree
-- **Last Update**: 2026-01-16
+- **Last Update**: 2026-02-03
 
 ### Recent Releases (seit v1.8.1)
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.13.0** | 2026-02-03 | feat | Custom fields (#64) + Connection-specific AI prompts (#63) |
 | **v1.12.4** | 2026-01-15 | fix | Epic show: query both parent and Epic Link fields (#62) |
 | **v1.12.3** | 2025-11-27 | fix | Tempo issue_key backfill for table output (Issue #61) |
 | v1.12.2 | 2025-11-27 | refactor | Code complexity reduction (F-rated functions eliminated) |
@@ -34,6 +35,72 @@
 ---
 
 ## Neue Features seit v1.8.1
+
+### v1.13.0: Custom Fields + Connection-specific AI Prompts (#63, #64)
+
+**Custom Fields (Issue #64)**:
+Connections können jetzt custom field configurations definieren, die beim Issue-Erstellen verwendet werden.
+
+**Command**: `budjira create issue "Title" --custom name=value`
+
+**Features:**
+- Connection-level custom field configuration in TOML
+- Supported field types: text, select, multi_select, user, date, number
+- Automatic value formatting for Jira API
+- Validation against configured options
+- Interactive prompts for required fields
+- Multiple fields via repeated `--custom` flags
+
+**TOML Configuration:**
+```toml
+[[connections]]
+name = "my-project"
+# ...
+
+[connections.custom_fields.affected_system]
+field_id = "customfield_10001"
+type = "select"
+required = true
+options = ["Infrastructure", "Application", "Database"]
+label = "Affected System"
+```
+
+**Usage:**
+```bash
+budjira create issue "Fix bug" --custom affected_system=Infrastructure
+budjira create issue "New task" --custom env=Prod --custom priority_level=High
+```
+
+---
+
+**Connection-specific AI Prompts (Issue #63)**:
+Connections können jetzt project-specific AI prompts definieren, die an den generierten Usage-Prompt angehängt werden.
+
+**Command**: `budjira ai usage-prompt --connection my-project`
+
+**Features:**
+- `ai_prompt` field in connection configuration
+- Multiline string support in TOML
+- Automatic append to generated usage prompt
+- `--connection` flag for usage-prompt command
+
+**TOML Configuration:**
+```toml
+[[connections]]
+name = "my-project"
+ai_prompt = """
+## Project Workflow
+- Issue Types: Change, Service Request
+- Required fields: Affected System, Environment
+"""
+```
+
+**Usage:**
+```bash
+budjira ai usage-prompt --connection my-project --plain > .claude/ai-usage-prompt.md
+```
+
+---
 
 ### v1.12.0: --epic Flag für Issue Creation (Issue #58)
 **Command**: `budjira create issue "Title" --epic EPIC-KEY`
@@ -132,10 +199,10 @@ budjira/services/
 
 | Metrik | Wert |
 |--------|------|
-| **Total Tests** | 497 |
+| **Total Tests** | 549 |
 | **Skipped Tests** | 3 |
-| **Coverage** | 84.63% |
-| **Test Duration** | ~7.5s |
+| **Coverage** | 85.36% |
+| **Test Duration** | ~8s |
 
 ### Coverage by Module (Top)
 ```
@@ -152,8 +219,8 @@ budjira/tempo/client.py        90%
 ```
 
 ### Coverage Improvements Since v1.8.1
-- Total: 82% → 84.63% (+2.6%)
-- New tests: 423 → 497 (+74 tests)
+- Total: 82% → 85.36% (+3.4%)
+- New tests: 423 → 549 (+126 tests)
 
 ---
 
@@ -186,14 +253,14 @@ Keine aktiven Bugs. Bug #62 wurde in v1.12.4 gefixt.
 
 ```
 budjira/
-├── __init__.py              # Version: 1.12.4
+├── __init__.py              # Version: 1.13.0
 ├── __main__.py              # Entry point
 ├── cli/                     # Command-line interface
 │   ├── main.py             # Main CLI app, global flags (--format, --quiet)
-│   ├── ai.py               # AI usage prompt generation
-│   ├── comment.py          # Comment commands ✨ NEW v1.10.0
+│   ├── ai.py               # AI usage prompt generation (+ --connection flag) ✨ UPDATED v1.13.0
+│   ├── comment.py          # Comment commands
 │   ├── connect.py          # Connection management (+ tempo-setup)
-│   ├── create.py           # Issue creation (+ --epic flag) ✨ UPDATED v1.12.0
+│   ├── create.py           # Issue creation (+ --epic, --custom flags) ✨ UPDATED v1.13.0
 │   ├── dor.py              # Definition of Ready templates
 │   ├── epic.py             # Epic management (+ JSON output) ✨ UPDATED v1.11.0
 │   ├── issue.py            # Issue updates
@@ -217,9 +284,10 @@ budjira/
 │   ├── client.py           # TempoClient - REST API
 │   └── models.py           # Pydantic models
 ├── models/                  # Pydantic data models
-│   ├── ai_prompt.py        # ✨ NEW - AI prompt models
+│   ├── ai_prompt.py        # AI prompt models
 │   ├── config.py           # GlobalConfig
-│   ├── connection.py       # Connection, ConnectionList
+│   ├── connection.py       # Connection, ConnectionList (+ custom_fields, ai_prompt) ✨ UPDATED v1.13.0
+│   ├── custom_field.py     # ✨ NEW v1.13.0 - CustomFieldConfig model
 │   ├── dor.py              # DoR templates
 │   └── issue.py            # Issue, Comment, Attachment, WorkLog
 ├── config/                  # Configuration management
@@ -258,6 +326,8 @@ budjira/
 | Comment Command | v1.10.0 | `budjira comment add` |
 | Epic JSON Output | v1.11.0 | `budjira --format json epic show` |
 | Epic Flag for Create | v1.12.0 | `budjira create issue --epic` |
+| Custom Fields | v1.13.0 | `budjira create issue --custom` |
+| Connection AI Prompts | v1.13.0 | `budjira ai usage-prompt --connection` |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---
@@ -318,5 +388,5 @@ budjira/
 
 ---
 
-**Letzte Aktualisierung**: 2026-01-16
+**Letzte Aktualisierung**: 2026-02-03
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
