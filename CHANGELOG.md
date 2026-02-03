@@ -1,6 +1,35 @@
 # CHANGELOG
 
 
+## v1.13.0 (2026-02-03)
+
+### Documentation
+
+- Update project context to v1.12.4
+  ([`d17df31`](https://github.com/cdds-ab/budjira/commit/d17df319b857607eb7b8792f70a38f7504d97f7e))
+
+### Features
+
+- **create**: Add custom fields and connection-specific AI prompts (#63, #64)
+  ([`73dfd1a`](https://github.com/cdds-ab/budjira/commit/73dfd1aa7f9147600255a84a6133bb4e9b995ffa))
+
+Add support for connection-level custom field configuration and project-specific AI prompts:
+
+Custom Fields (#64): - New CustomFieldConfig model with type validation (text, select, multi_select,
+  user, date, number) - Field ID validation (pattern: customfield_\d+) - format_value() for Jira API
+  formatting - validate_value() for input validation - --custom flag for create command (name=value
+  syntax) - Interactive prompts for required custom fields - TOML serialization for nested
+  custom_fields structure
+
+AI Prompts (#63): - New ai_prompt field on Connection model - --connection flag on 'ai usage-prompt'
+  command - Appends project-specific prompt with header
+
+Also removes --cov-report=html from pytest addopts to fix pre-commit hook conflicts (HTML reports
+  can still be generated manually).
+
+Closes #63, closes #64
+
+
 ## v1.12.4 (2026-01-15)
 
 ### Bug Fixes
