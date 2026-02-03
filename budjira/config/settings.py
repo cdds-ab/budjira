@@ -17,6 +17,7 @@ else:
 from budjira.models.ai_prompt import AiPromptTemplate, get_default_ai_prompt_template
 from budjira.models.config import GlobalConfig
 from budjira.models.connection import Connection, ConnectionList
+from budjira.models.custom_field import CustomFieldConfig
 from budjira.models.dor import DorTemplateConfig, get_default_templates
 
 
@@ -149,7 +150,15 @@ class Settings:
             data = tomllib.load(f)
 
         # Convert connection dicts to Connection objects
-        connections = [Connection(**conn) for conn in data.get("connections", [])]
+        connections = []
+        for conn_data in data.get("connections", []):
+            # Parse custom_fields nested dicts into CustomFieldConfig objects
+            if conn_data.get("custom_fields"):
+                custom_fields_data = conn_data["custom_fields"]
+                conn_data["custom_fields"] = {
+                    name: CustomFieldConfig(**cfg) for name, cfg in custom_fields_data.items()
+                }
+            connections.append(Connection(**conn_data))
         return ConnectionList(connections=connections)
 
     def save_connections(self, connections: ConnectionList) -> None:
@@ -159,26 +168,70 @@ class Settings:
             connections: Connection list to save
         """
         # Convert to dict format for TOML
-        data = {
-            "connections": [
-                {
-                    "name": conn.name,
-                    "url": str(conn.url),
-                    "email": conn.email,
-                    "project_key": conn.project_key,
-                    "is_active": conn.is_active,
-                    "cache_enabled": conn.cache_enabled,
-                    "cache_ttl_hours": conn.cache_ttl_hours,
-                    "tempo_enabled": conn.tempo_enabled,
-                }
-                for conn in connections.connections
-            ]
-        }
+        data = {"connections": [self._serialize_connection(conn) for conn in connections.connections]}
 
         with self.connections_file.open("wb") as f:
             tomli_w.dump(data, f)
 
         self._connections = connections
+
+    def _serialize_connection(self, conn: Connection) -> dict[str, object]:
+        """Serialize a Connection object to a dict for TOML.
+
+        Args:
+            conn: Connection to serialize
+
+        Returns:
+            Dictionary suitable for TOML serialization
+        """
+        result: dict[str, object] = {
+            "name": conn.name,
+            "url": str(conn.url),
+            "email": conn.email,
+            "project_key": conn.project_key,
+            "is_active": conn.is_active,
+            "cache_enabled": conn.cache_enabled,
+            "cache_ttl_hours": conn.cache_ttl_hours,
+            "tempo_enabled": conn.tempo_enabled,
+        }
+
+        # Add ai_prompt if set
+        if conn.ai_prompt is not None:
+            result["ai_prompt"] = conn.ai_prompt
+
+        # Add custom_fields if any
+        if conn.custom_fields:
+            result["custom_fields"] = {
+                name: self._serialize_custom_field(cfg) for name, cfg in conn.custom_fields.items()
+            }
+
+        return result
+
+    def _serialize_custom_field(self, cfg: CustomFieldConfig) -> dict[str, object]:
+        """Serialize a CustomFieldConfig to a dict for TOML.
+
+        Args:
+            cfg: CustomFieldConfig to serialize
+
+        Returns:
+            Dictionary suitable for TOML serialization
+        """
+        result: dict[str, object] = {
+            "field_id": cfg.field_id,
+            "type": cfg.type.value,
+        }
+
+        # Only include non-default values
+        if cfg.required:
+            result["required"] = cfg.required
+        if cfg.default is not None:
+            result["default"] = cfg.default
+        if cfg.options is not None:
+            result["options"] = cfg.options
+        if cfg.label is not None:
+            result["label"] = cfg.label
+
+        return result
 
     def add_connection(self, connection: Connection) -> None:
         """Add a new connection.

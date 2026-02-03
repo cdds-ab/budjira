@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
+from budjira.models.custom_field import CustomFieldConfig  # noqa: TC001 - needed at runtime for Pydantic
+
 
 class Connection(BaseModel):
     """Represents a Jira connection configuration.
@@ -49,6 +51,14 @@ class Connection(BaseModel):
     tempo_enabled: bool = Field(
         default=False,
         description="Whether Tempo Timesheets integration is enabled for this connection",
+    )
+    custom_fields: dict[str, CustomFieldConfig] = Field(
+        default_factory=dict,
+        description="Custom field configurations mapped by friendly name",
+    )
+    ai_prompt: str | None = Field(
+        default=None,
+        description="Project-specific AI prompt to append to generated usage prompts",
     )
 
     @field_validator("project_key")

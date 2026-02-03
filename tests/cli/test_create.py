@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from budjira.cli.create import app
 from budjira.models.connection import Connection
+from budjira.models.custom_field import CustomFieldConfig, CustomFieldType
 from budjira.models.issue import Issue
 from budjira.utils.errors import JiraAPIError, PermissionError
 from typer.testing import CliRunner
@@ -1035,3 +1036,373 @@ class TestCreateWithEpic:
         assert "timetracking" in call_kwargs
 
         mock_client.link_to_epic.assert_called_once_with("TEST-456", "TEST-100")
+
+
+class TestCreateWithCustomFields:
+    """Test create command with custom fields."""
+
+    @pytest.fixture
+    def mock_connection_with_custom_fields(self) -> Connection:
+        """Create mock connection with custom fields configured."""
+        custom_fields = {
+            "affected_system": CustomFieldConfig(
+                field_id="customfield_10001",
+                type=CustomFieldType.SELECT,
+                required=True,
+                options=["Infrastructure", "Application", "Database"],
+                label="Affected System",
+            ),
+            "environment": CustomFieldConfig(
+                field_id="customfield_10002",
+                type=CustomFieldType.TEXT,
+                required=False,
+                default="Production",
+            ),
+            "severity": CustomFieldConfig(
+                field_id="customfield_10003",
+                type=CustomFieldType.NUMBER,
+                required=False,
+            ),
+        }
+        return Connection(
+            name="test-connection",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+            custom_fields=custom_fields,
+        )
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_with_custom_field_flag(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection_with_custom_fields: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test creating issue with --custom flag."""
+        mock_get_conn.return_value = mock_connection_with_custom_fields
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            [
+                "New bug",
+                "--type",
+                "Bug",
+                "--custom",
+                "affected_system=Infrastructure",
+                "--no-interactive",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Issue created successfully" in result.stdout
+
+        # Verify custom field was passed with correct Jira field ID
+        call_kwargs = mock_client.create_issue.call_args.kwargs
+        assert "customfield_10001" in call_kwargs
+        assert call_kwargs["customfield_10001"] == {"value": "Infrastructure"}
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_with_multiple_custom_fields(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection_with_custom_fields: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test creating issue with multiple --custom flags."""
+        mock_get_conn.return_value = mock_connection_with_custom_fields
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            [
+                "New bug",
+                "--type",
+                "Bug",
+                "--custom",
+                "affected_system=Database",
+                "--custom",
+                "environment=Staging",
+                "--custom",
+                "severity=5",
+                "--no-interactive",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Issue created successfully" in result.stdout
+
+        call_kwargs = mock_client.create_issue.call_args.kwargs
+        assert call_kwargs["customfield_10001"] == {"value": "Database"}
+        assert call_kwargs["customfield_10002"] == "Staging"
+        assert call_kwargs["customfield_10003"] == 5
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_custom_field_invalid_name(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection_with_custom_fields: Connection,
+    ) -> None:
+        """Test create with unknown custom field name."""
+        mock_get_conn.return_value = mock_connection_with_custom_fields
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
+
+        result = runner.invoke(
+            app,
+            [
+                "New bug",
+                "--type",
+                "Bug",
+                "--custom",
+                "unknown_field=value",
+                "--no-interactive",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "Unknown custom field" in result.stdout
+        assert "unknown_field" in result.stdout
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_custom_field_invalid_format(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection_with_custom_fields: Connection,
+    ) -> None:
+        """Test create with invalid custom field format (no equals sign)."""
+        mock_get_conn.return_value = mock_connection_with_custom_fields
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
+
+        result = runner.invoke(
+            app,
+            [
+                "New bug",
+                "--type",
+                "Bug",
+                "--custom",
+                "invalid-format",
+                "--no-interactive",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "Invalid custom field format" in result.stdout
+        assert "name=value" in result.stdout
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_custom_field_invalid_select_option(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection_with_custom_fields: Connection,
+    ) -> None:
+        """Test create with invalid option for select field."""
+        mock_get_conn.return_value = mock_connection_with_custom_fields
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
+
+        result = runner.invoke(
+            app,
+            [
+                "New bug",
+                "--type",
+                "Bug",
+                "--custom",
+                "affected_system=InvalidOption",
+                "--no-interactive",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "Invalid" in result.stdout
+        assert "InvalidOption" in result.stdout
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_missing_required_custom_field(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection_with_custom_fields: Connection,
+    ) -> None:
+        """Test create without required custom field in non-interactive mode."""
+        mock_get_conn.return_value = mock_connection_with_custom_fields
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
+
+        result = runner.invoke(
+            app,
+            [
+                "New bug",
+                "--type",
+                "Bug",
+                "--no-interactive",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "Missing required custom field" in result.stdout
+        assert "Affected System" in result.stdout
+
+    @patch("budjira.cli.create.Prompt")
+    @patch("budjira.cli.create.Confirm")
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_custom_field_interactive_prompt(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_confirm: MagicMock,
+        mock_prompt: MagicMock,
+        mock_connection_with_custom_fields: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test that required custom fields are prompted in interactive mode."""
+        mock_get_conn.return_value = mock_connection_with_custom_fields
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        # Mock prompts
+        mock_prompt.ask.side_effect = [
+            "New bug",  # summary
+            "Bug",  # issue_type
+            "Infrastructure",  # affected_system (required custom field)
+        ]
+        mock_confirm.ask.return_value = False  # No to all optional prompts
+
+        result = runner.invoke(app, [])
+
+        assert result.exit_code == 0
+        assert "Issue created successfully" in result.stdout
+
+        # Verify custom field was passed
+        call_kwargs = mock_client.create_issue.call_args.kwargs
+        assert "customfield_10001" in call_kwargs
+        assert call_kwargs["customfield_10001"] == {"value": "Infrastructure"}
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_no_custom_fields_configured(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test create with --custom flag but no custom fields configured."""
+        mock_get_conn.return_value = mock_connection  # Has no custom_fields
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
+
+        result = runner.invoke(
+            app,
+            [
+                "New bug",
+                "--type",
+                "Bug",
+                "--custom",
+                "some_field=value",
+                "--no-interactive",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "Unknown custom field" in result.stdout
+
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_with_custom_field_and_other_options(
+        self,
+        mock_get_conn: MagicMock,
+        mock_jira_client_class: MagicMock,
+        mock_get_settings: MagicMock,
+        mock_connection_with_custom_fields: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test creating issue with custom fields combined with other options."""
+        mock_get_conn.return_value = mock_connection_with_custom_fields
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = False
+        mock_get_settings.return_value = mock_settings
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            [
+                "New bug",
+                "--type",
+                "Bug",
+                "--priority",
+                "High",
+                "--label",
+                "urgent",
+                "--custom",
+                "affected_system=Infrastructure",
+                "--original-estimate",
+                "2h",
+                "--no-interactive",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Issue created successfully" in result.stdout
+
+        call_kwargs = mock_client.create_issue.call_args.kwargs
+        assert call_kwargs["priority"] == "High"
+        assert call_kwargs["labels"] == ["urgent"]
+        assert call_kwargs["customfield_10001"] == {"value": "Infrastructure"}
+        assert "timetracking" in call_kwargs

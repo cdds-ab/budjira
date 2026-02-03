@@ -10,6 +10,7 @@ import pytest
 from budjira.config.settings import Settings
 from budjira.models.config import GlobalConfig, LogLevel
 from budjira.models.connection import Connection
+from budjira.models.custom_field import CustomFieldConfig, CustomFieldType
 
 
 @pytest.fixture
@@ -237,3 +238,148 @@ class TestSettings:
         assert len(loaded.connections) == 1
         loaded_conn = loaded.connections[0]
         assert loaded_conn.tempo_enabled is False, "tempo_enabled should default to False"
+
+    def test_custom_fields_persistence(self, temp_settings: Settings) -> None:
+        """Test that custom_fields are correctly saved and loaded."""
+        custom_fields = {
+            "affected_system": CustomFieldConfig(
+                field_id="customfield_10001",
+                type=CustomFieldType.SELECT,
+                required=True,
+                default="Infrastructure",
+                options=["Infrastructure", "Application", "Database"],
+                label="Affected System",
+            ),
+            "environment": CustomFieldConfig(
+                field_id="customfield_10002",
+                type=CustomFieldType.TEXT,
+                required=False,
+            ),
+        }
+
+        connection = Connection(
+            name="Test Custom Fields",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+            custom_fields=custom_fields,
+        )
+
+        temp_settings.add_connection(connection)
+        loaded = temp_settings.load_connections()
+
+        assert len(loaded.connections) == 1
+        loaded_conn = loaded.connections[0]
+
+        assert len(loaded_conn.custom_fields) == 2
+
+        # Check affected_system field
+        assert "affected_system" in loaded_conn.custom_fields
+        af = loaded_conn.custom_fields["affected_system"]
+        assert af.field_id == "customfield_10001"
+        assert af.type == CustomFieldType.SELECT
+        assert af.required is True
+        assert af.default == "Infrastructure"
+        assert af.options == ["Infrastructure", "Application", "Database"]
+        assert af.label == "Affected System"
+
+        # Check environment field
+        assert "environment" in loaded_conn.custom_fields
+        env = loaded_conn.custom_fields["environment"]
+        assert env.field_id == "customfield_10002"
+        assert env.type == CustomFieldType.TEXT
+        assert env.required is False
+
+    def test_custom_fields_empty_by_default(self, temp_settings: Settings) -> None:
+        """Test that custom_fields defaults to empty dict when not specified."""
+        connection = Connection(
+            name="Test No Custom Fields",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+        )
+
+        temp_settings.add_connection(connection)
+        loaded = temp_settings.load_connections()
+
+        assert len(loaded.connections) == 1
+        loaded_conn = loaded.connections[0]
+        assert loaded_conn.custom_fields == {}
+
+    def test_ai_prompt_persistence(self, temp_settings: Settings) -> None:
+        """Test that ai_prompt is correctly saved and loaded."""
+        ai_prompt = """## Project Workflow
+
+This project uses specific issue types:
+- Change: For production changes
+- Service Request: For service requests
+
+Always include the affected system field when creating issues.
+"""
+
+        connection = Connection(
+            name="Test AI Prompt",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+            ai_prompt=ai_prompt,
+        )
+
+        temp_settings.add_connection(connection)
+        loaded = temp_settings.load_connections()
+
+        assert len(loaded.connections) == 1
+        loaded_conn = loaded.connections[0]
+        assert loaded_conn.ai_prompt == ai_prompt
+        assert "Change" in loaded_conn.ai_prompt
+        assert "Service Request" in loaded_conn.ai_prompt
+
+    def test_ai_prompt_none_by_default(self, temp_settings: Settings) -> None:
+        """Test that ai_prompt defaults to None when not specified."""
+        connection = Connection(
+            name="Test No AI Prompt",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+        )
+
+        temp_settings.add_connection(connection)
+        loaded = temp_settings.load_connections()
+
+        assert len(loaded.connections) == 1
+        loaded_conn = loaded.connections[0]
+        assert loaded_conn.ai_prompt is None
+
+    def test_both_custom_fields_and_ai_prompt(self, temp_settings: Settings) -> None:
+        """Test that both custom_fields and ai_prompt work together."""
+        custom_fields = {
+            "priority_level": CustomFieldConfig(
+                field_id="customfield_10003",
+                type=CustomFieldType.SELECT,
+                options=["P1", "P2", "P3"],
+            ),
+        }
+        ai_prompt = "Use priority_level for all issues."
+
+        connection = Connection(
+            name="Test Both Features",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+            custom_fields=custom_fields,
+            ai_prompt=ai_prompt,
+        )
+
+        temp_settings.add_connection(connection)
+        loaded = temp_settings.load_connections()
+
+        assert len(loaded.connections) == 1
+        loaded_conn = loaded.connections[0]
+
+        # Check custom_fields
+        assert len(loaded_conn.custom_fields) == 1
+        assert "priority_level" in loaded_conn.custom_fields
+        assert loaded_conn.custom_fields["priority_level"].options == ["P1", "P2", "P3"]
+
+        # Check ai_prompt
+        assert loaded_conn.ai_prompt == ai_prompt

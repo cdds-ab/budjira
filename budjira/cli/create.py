@@ -20,6 +20,7 @@ from budjira.utils.errors import BudjiraError
 if TYPE_CHECKING:
     from budjira.config.settings import Settings
     from budjira.models.connection import Connection
+    from budjira.models.custom_field import CustomFieldConfig
     from budjira.models.issue import Issue
 
 app = typer.Typer(
@@ -168,6 +169,187 @@ def _get_epic_input(interactive: bool, epic: str | None) -> str | None:
     if interactive and epic is None and Confirm.ask("Link to an epic?", default=False):
         return str(Prompt.ask("Epic key (e.g., PROJ-100)"))
     return epic
+
+
+def _parse_custom_fields(
+    custom_args: list[str] | None,
+    custom_field_configs: dict[str, CustomFieldConfig],
+) -> dict[str, str]:
+    """Parse custom field arguments from CLI.
+
+    Args:
+        custom_args: List of 'name=value' strings from --custom flags
+        custom_field_configs: Custom field configurations from connection
+
+    Returns:
+        Dictionary mapping field names to their raw values
+
+    Raises:
+        typer.Exit: If parsing fails or field name is unknown
+    """
+    if not custom_args:
+        return {}
+
+    parsed: dict[str, str] = {}
+    for arg in custom_args:
+        if "=" not in arg:
+            console.print(f"[red]Invalid custom field format:[/red] '{arg}'", style="red")
+            console.print("[dim]Expected format: name=value (e.g., --custom affected_system=Infrastructure)[/dim]")
+            raise typer.Exit(1)
+
+        name, value = arg.split("=", 1)
+        name = name.strip()
+        value = value.strip()
+
+        if not name:
+            console.print("[red]Custom field name cannot be empty[/red]", style="red")
+            raise typer.Exit(1)
+
+        # Check if custom fields are configured
+        if not custom_field_configs:
+            console.print(f"[red]Unknown custom field:[/red] '{name}'", style="red")
+            console.print("[dim]No custom fields configured for this connection[/dim]")
+            raise typer.Exit(1)
+
+        if name not in custom_field_configs:
+            available = ", ".join(custom_field_configs.keys())
+            console.print(f"[red]Unknown custom field:[/red] '{name}'", style="red")
+            console.print(f"[dim]Available fields: {available}[/dim]")
+            raise typer.Exit(1)
+
+        parsed[name] = value
+
+    return parsed
+
+
+def _validate_custom_field_values(
+    values: dict[str, str],
+    configs: dict[str, CustomFieldConfig],
+) -> None:
+    """Validate custom field values against their configurations.
+
+    Args:
+        values: Dictionary mapping field names to their raw values
+        configs: Custom field configurations
+
+    Raises:
+        typer.Exit: If validation fails
+    """
+    for name, value in values.items():
+        if name not in configs:
+            continue
+
+        config = configs[name]
+        is_valid, error_msg = config.validate_value(value)
+        if not is_valid:
+            label = config.label or name
+            console.print(f"[red]Invalid value for '{label}':[/red] {error_msg}", style="red")
+            raise typer.Exit(1)
+
+
+def _get_custom_fields_input(
+    interactive: bool,
+    custom_values: dict[str, str],
+    configs: dict[str, CustomFieldConfig],
+) -> dict[str, str]:
+    """Get custom field values interactively for required fields.
+
+    Args:
+        interactive: Whether to prompt interactively
+        custom_values: Already provided custom field values
+        configs: Custom field configurations
+
+    Returns:
+        Updated dictionary with all required fields filled
+    """
+    if not interactive or not configs:
+        return custom_values
+
+    result = dict(custom_values)
+
+    for name, config in configs.items():
+        # Skip if already provided
+        if name in result:
+            continue
+
+        # Skip if not required and has no default
+        if not config.required and config.default is None:
+            continue
+
+        label = config.label or name
+
+        # For required fields without value, prompt
+        if config.required:
+            if config.options:
+                options_str = ", ".join(config.options)
+                prompt_text = f"{label} ({options_str})"
+            else:
+                prompt_text = label
+
+            default = config.default
+            value = str(Prompt.ask(prompt_text, default=default or ""))
+
+            if value:
+                result[name] = value
+            elif config.required:
+                console.print(f"[red]'{label}' is required[/red]", style="red")
+                raise typer.Exit(1)
+        elif config.default is not None:
+            # Optional field with default - use default
+            result[name] = config.default
+
+    return result
+
+
+def _format_custom_fields_for_api(
+    values: dict[str, str],
+    configs: dict[str, CustomFieldConfig],
+) -> dict[str, Any]:
+    """Format custom field values for Jira API.
+
+    Args:
+        values: Dictionary mapping field names to their raw values
+        configs: Custom field configurations
+
+    Returns:
+        Dictionary mapping Jira field IDs to formatted values
+    """
+    result: dict[str, Any] = {}
+
+    for name, value in values.items():
+        if name not in configs:
+            continue
+
+        config = configs[name]
+        formatted_value = config.format_value(value)
+        result[config.field_id] = formatted_value
+
+    return result
+
+
+def _check_required_custom_fields(
+    values: dict[str, str],
+    configs: dict[str, CustomFieldConfig],
+) -> None:
+    """Check that all required custom fields have values.
+
+    Args:
+        values: Dictionary mapping field names to their raw values
+        configs: Custom field configurations
+
+    Raises:
+        typer.Exit: If required fields are missing
+    """
+    missing = []
+    for name, config in configs.items():
+        if config.required and name not in values:
+            label = config.label or name
+            missing.append(label)
+
+    if missing:
+        console.print(f"[red]Missing required custom field(s):[/red] {', '.join(missing)}", style="red")
+        console.print("[dim]Use --custom name=value to provide values[/dim]")
+        raise typer.Exit(1)
 
 
 def _validate_required_fields(summary: str, issue_type: str) -> None:
@@ -392,6 +574,11 @@ def issue(
         "-e",
         help="Epic key to link this issue to (e.g., PROJ-100)",
     ),
+    custom: list[str] = typer.Option(
+        None,
+        "--custom",
+        help="Custom field value as name=value (can be specified multiple times)",
+    ),
 ) -> None:
     """Create a new Jira issue.
 
@@ -415,12 +602,19 @@ def issue(
         # Create multiple stories for same epic
         budjira create issue "Story 1" --type Story --epic PROJ-100 --no-interactive
         budjira create issue "Story 2" --type Story --epic PROJ-100 --no-interactive
+
+        # With custom fields (configured in connection)
+        budjira create issue "Fix bug" --type Bug --custom affected_system=Infrastructure --no-interactive
+
+        # Multiple custom fields
+        budjira create issue "New feature" --type Story --custom env=Production --custom component=API
     """
     try:
         # Setup
         settings = get_settings()
         active_connection = get_active_connection(connection)
         project_key = project or active_connection.project_key
+        custom_field_configs = active_connection.custom_fields
 
         # Gather inputs (interactive or command-line provided)
         summary = _get_summary_input(interactive, summary)
@@ -431,6 +625,13 @@ def issue(
         labels = _get_labels_input(interactive, labels)
         epic = _get_epic_input(interactive, epic)  # type: ignore[assignment]
 
+        # Handle custom fields
+        custom_values = _parse_custom_fields(custom, custom_field_configs)
+        _validate_custom_field_values(custom_values, custom_field_configs)
+        custom_values = _get_custom_fields_input(interactive, custom_values, custom_field_configs)
+        if not interactive:
+            _check_required_custom_fields(custom_values, custom_field_configs)
+
         # Validate
         _validate_required_fields(summary, issue_type)
         _validate_dor(description, issue_type, skip_dor, settings)
@@ -440,6 +641,12 @@ def issue(
         console.print(f"\n[dim]Creating {issue_type} in project {project_key}...[/dim]")
 
         extra_fields = _prepare_time_tracking(original_estimate, remaining_estimate)
+
+        # Add custom fields to extra_fields
+        if custom_values and custom_field_configs:
+            custom_api_fields = _format_custom_fields_for_api(custom_values, custom_field_configs)
+            extra_fields.update(custom_api_fields)
+
         created_issue = client.create_issue(
             project_key=project_key,
             summary=summary,

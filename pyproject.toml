@@ -161,7 +161,6 @@ addopts = [
     "--showlocals",
     "--cov=budjira",
     "--cov-report=term-missing",
-    "--cov-report=html",
     "--cov-fail-under=70",
 ]
 

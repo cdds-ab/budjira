@@ -1,10 +1,17 @@
 """AI-related commands for budjira."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
 
 from budjira.config.settings import get_settings
+
+if TYPE_CHECKING:
+    from budjira.models.connection import Connection
 
 app = typer.Typer(
     name="ai",
@@ -15,20 +22,35 @@ app = typer.Typer(
 console = Console()
 
 
-def _generate_usage_prompt() -> str:
+def _generate_usage_prompt(connection: Connection | None = None) -> str:
     """Generate comprehensive AI usage prompt for budjira.
+
+    Args:
+        connection: Optional connection to include project-specific prompt from
 
     Returns:
         Markdown-formatted prompt text explaining all budjira functionality
     """
     settings = get_settings()
     template = settings.ai_prompt_template
-    return template.render()
+    base_prompt = template.render()
+
+    # Append project-specific prompt if connection has one
+    if connection is not None and connection.ai_prompt:
+        base_prompt += f"\n\n# Project-Specific: {connection.name}\n\n{connection.ai_prompt}"
+
+    return base_prompt
 
 
 @app.command("usage-prompt")
 def usage_prompt(
     plain: bool = typer.Option(False, "--plain", "-p", help="Output plain markdown without terminal formatting"),
+    connection_name: str | None = typer.Option(
+        None,
+        "--connection",
+        "-c",
+        help="Include project-specific AI prompt from this connection",
+    ),
 ) -> None:
     """Generate comprehensive usage guide for AI assistants.
 
@@ -46,6 +68,9 @@ def usage_prompt(
     - Common workflows and examples
     - Error handling patterns
 
+    When --connection is specified, the connection's project-specific AI prompt
+    (if configured) will be appended to the generated guide.
+
     Examples:
         # Display the guide in terminal (formatted)
         budjira ai usage-prompt
@@ -53,13 +78,25 @@ def usage_prompt(
         # Output plain markdown for files/clipboard
         budjira ai usage-prompt --plain
 
+        # Include project-specific prompt from a connection
+        budjira ai usage-prompt --connection my-project --plain
+
         # Save to file
         budjira ai usage-prompt --plain > .claude/ai-usage-prompt.md
 
         # Copy to clipboard (requires xclip/pbcopy)
         budjira ai usage-prompt --plain | xclip -selection clipboard
     """
-    prompt = _generate_usage_prompt()
+    # Look up connection if specified
+    connection = None
+    if connection_name:
+        settings = get_settings()
+        connection = settings.connections.find_by_name(connection_name)
+        if connection is None:
+            console.print(f"[red]Error:[/red] Connection '{connection_name}' not found", style="red")
+            raise typer.Exit(1)
+
+    prompt = _generate_usage_prompt(connection)
 
     if plain:
         # Output raw markdown for file/clipboard

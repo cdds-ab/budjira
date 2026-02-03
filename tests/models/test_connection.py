@@ -5,6 +5,7 @@
 
 import pytest
 from budjira.models.connection import Connection, ConnectionList
+from budjira.models.custom_field import CustomFieldConfig, CustomFieldType
 from pydantic import ValidationError
 
 
@@ -104,6 +105,93 @@ class TestConnection:
 
         key = conn.get_tempo_credential_key()
         assert key == "budjira_tempo_my_jira"
+
+    def test_custom_fields_default_empty(self) -> None:
+        """Test that custom_fields defaults to empty dict."""
+        conn = Connection(
+            name="Test",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+        )
+
+        assert conn.custom_fields == {}
+
+    def test_custom_fields_can_be_set(self) -> None:
+        """Test that custom_fields can be set with CustomFieldConfig objects."""
+        custom_fields = {
+            "affected_system": CustomFieldConfig(
+                field_id="customfield_10001",
+                type=CustomFieldType.SELECT,
+                required=True,
+                options=["Infrastructure", "Application"],
+            ),
+            "environment": CustomFieldConfig(
+                field_id="customfield_10002",
+                type=CustomFieldType.TEXT,
+            ),
+        }
+
+        conn = Connection(
+            name="Test",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+            custom_fields=custom_fields,
+        )
+
+        assert len(conn.custom_fields) == 2
+        assert "affected_system" in conn.custom_fields
+        assert conn.custom_fields["affected_system"].field_id == "customfield_10001"
+        assert conn.custom_fields["affected_system"].type == CustomFieldType.SELECT
+        assert conn.custom_fields["affected_system"].required is True
+
+    def test_ai_prompt_default_none(self) -> None:
+        """Test that ai_prompt defaults to None."""
+        conn = Connection(
+            name="Test",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+        )
+
+        assert conn.ai_prompt is None
+
+    def test_ai_prompt_can_be_set(self) -> None:
+        """Test that ai_prompt can be set."""
+        ai_prompt = """## Project Workflow
+
+This project uses specific issue types:
+- Change: For production changes
+- Service Request: For service requests
+
+Always include the affected system field.
+"""
+        conn = Connection(
+            name="Test",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+            ai_prompt=ai_prompt,
+        )
+
+        assert conn.ai_prompt == ai_prompt
+        assert "Change" in conn.ai_prompt
+        assert "Service Request" in conn.ai_prompt
+
+    def test_ai_prompt_multiline(self) -> None:
+        """Test that ai_prompt handles multiline strings."""
+        ai_prompt = "Line 1\nLine 2\nLine 3"
+        conn = Connection(
+            name="Test",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+            ai_prompt=ai_prompt,
+        )
+
+        assert conn.ai_prompt == ai_prompt
+        assert conn.ai_prompt.count("\n") == 2
 
 
 class TestConnectionList:
