@@ -11,15 +11,16 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.13.0
+- **Current Version**: v1.13.1
 - **Branch**: master
 - **Status**: Clean working tree
-- **Last Update**: 2026-02-03
+- **Last Update**: 2026-02-04
 
 ### Recent Releases (seit v1.8.1)
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.13.1** | 2026-02-04 | fix | AI prompt documentation for Custom Fields + AI Prompts |
 | **v1.13.0** | 2026-02-03 | feat | Custom fields (#64) + Connection-specific AI prompts (#63) |
 | **v1.12.4** | 2026-01-15 | fix | Epic show: query both parent and Epic Link fields (#62) |
 | **v1.12.3** | 2025-11-27 | fix | Tempo issue_key backfill for table output (Issue #61) |
@@ -253,7 +254,7 @@ Keine aktiven Bugs. Bug #62 wurde in v1.12.4 gefixt.
 
 ```
 budjira/
-├── __init__.py              # Version: 1.13.0
+├── __init__.py              # Version: 1.13.1
 ├── __main__.py              # Entry point
 ├── cli/                     # Command-line interface
 │   ├── main.py             # Main CLI app, global flags (--format, --quiet)
@@ -388,5 +389,5 @@ budjira/
 
 ---
 
-**Letzte Aktualisierung**: 2026-02-03
+**Letzte Aktualisierung**: 2026-02-04
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
