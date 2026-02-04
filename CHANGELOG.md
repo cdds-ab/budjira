@@ -1,6 +1,32 @@
 # CHANGELOG
 
 
+## v1.13.1 (2026-02-04)
+
+### Bug Fixes
+
+- **ai**: Add Custom Fields and AI Prompts documentation to usage guide
+  ([`780b5bb`](https://github.com/cdds-ab/budjira/commit/780b5bbede0e91f896490a9956d6487b5b534839))
+
+Update AI prompt template with comprehensive documentation for v1.13.0 features: - Custom Fields
+  Configuration section with TOML examples - Connection-Specific AI Prompts section with usage
+  examples - Updated Creating Issues section with --custom and --epic flags - Enhanced Tips for AI
+  Assistants with custom fields guidance
+
+This fixes missing documentation that prevented users from discovering how to configure custom
+  fields in budjira.
+
+Regenerate ai-usage-prompt.md with new sections.
+
+### Documentation
+
+- Update project context to v1.13.0
+  ([`87f4842`](https://github.com/cdds-ab/budjira/commit/87f484216fd9f98fd7ee340c0a7c5c827655f7f9))
+
+Document new features: - Custom fields configuration (#64) - Connection-specific AI prompts (#63)
+  Update test statistics: 549 tests, 85.36% coverage
+
+
 ## v1.13.0 (2026-02-03)
 
 ### Documentation
