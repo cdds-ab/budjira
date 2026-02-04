@@ -87,6 +87,133 @@ export BUDJIRA_CONNECTION=prod-jira
 budjira search "project = PROJ"
 ```
 
+## Custom Fields Configuration
+
+**NEW in v1.13.0** - Configure connection-level custom fields for issue creation.
+
+### Configuration
+
+Custom fields are configured in `~/.config/budjira/connections.toml` under each connection:
+
+```toml
+[[connections]]
+name = "my-project"
+url = "https://company.atlassian.net"
+email = "user@example.com"
+project_key = "PROJ"
+
+# Custom field configuration
+[connections.custom_fields.affected_system]
+field_id = "customfield_10001"       # Jira field ID (required)
+type = "select"                       # Field type (see below)
+required = true                       # Prompt if not provided
+options = ["Infrastructure", "Application", "Database"]
+label = "Affected System"             # Display name
+
+[connections.custom_fields.environment]
+field_id = "customfield_10002"
+type = "multi_select"
+options = ["Dev", "Staging", "Prod"]
+label = "Environment"
+
+[connections.custom_fields.story_points]
+field_id = "customfield_10003"
+type = "number"
+default = "3"
+label = "Story Points"
+```
+
+### Field Types
+
+| Type | Description | Jira API Format |
+|------|-------------|-----------------|
+| `text` | Plain text (default) | `"value"` |
+| `select` | Single select dropdown | `{"value": "Option"}` |
+| `multi_select` | Multi-select (comma-separated) | `[{"value": "A"}, {"value": "B"}]` |
+| `user` | User picker | `{"accountId": "..."}` |
+| `date` | Date field | `"YYYY-MM-DD"` |
+| `number` | Numeric value | `42` or `3.14` |
+
+### Finding Jira Field IDs
+
+1. **Via Jira REST API:**
+   ```bash
+   curl -u email:token "https://company.atlassian.net/rest/api/3/field" | jq '.[] | select(.custom) | {id, name}'
+   ```
+
+2. **Via Jira UI:** Open issue → click field → check URL for `customfield_XXXXX`
+
+### Usage
+
+```bash
+# Single custom field
+budjira create issue "Bug title" --custom affected_system=Infrastructure
+
+# Multiple custom fields
+budjira create issue "Feature" --custom affected_system=Application --custom environment="Dev, Staging"
+
+# Interactive mode prompts for required fields automatically
+budjira create issue "Title"
+# Prompts: "Affected System (Infrastructure, Application, Database):"
+```
+
+### Validation
+
+- **Options validation**: Select/multi-select values are validated against configured options
+- **Required fields**: Must be provided via --custom or interactively
+- **Number validation**: Numeric fields validate that input is a valid number
+
+## Connection-Specific AI Prompts
+
+**NEW in v1.13.0** - Add project-specific instructions to the generated AI usage prompt.
+
+### Configuration
+
+Add an `ai_prompt` field to your connection in `~/.config/budjira/connections.toml`:
+
+```toml
+[[connections]]
+name = "my-project"
+url = "https://company.atlassian.net"
+email = "user@example.com"
+project_key = "PROJ"
+
+# Project-specific AI prompt (multiline supported)
+ai_prompt = """
+## Project Workflow
+
+**Issue Types:**
+- Change: For planned modifications
+- Service Request: For user requests
+- Incident: For production issues
+
+**Required Custom Fields:**
+- affected_system: Always set for bugs
+- environment: Required for deployments
+
+**Naming Conventions:**
+- Bugs: "BUG: <component> - <description>"
+- Features: "FEAT: <area> - <description>"
+"""
+```
+
+### Usage
+
+Generate the AI usage prompt with project-specific additions:
+
+```bash
+# Include project-specific prompt
+budjira ai usage-prompt --connection my-project
+
+# Output to file for AI assistant
+budjira ai usage-prompt --connection my-project --plain > .claude/ai-usage-prompt.md
+
+# View formatted in terminal
+budjira ai usage-prompt --connection my-project
+```
+
+The project-specific prompt is appended after the standard budjira documentation.
+
 ## Searching Issues
 
 ### JQL Query Search
@@ -205,6 +332,8 @@ budjira create issue "Issue summary" --no-interactive [OPTIONS]
 - `--assignee USER`: Assign to user (username or account ID)
 - `--label TAG`: Add label (can be used multiple times)
 - `--project KEY`: Override default project
+- `--epic KEY`: Link to epic during creation
+- `--custom NAME=VALUE`: Set custom field (repeatable, requires configuration)
 
 **Examples:**
 
@@ -228,6 +357,20 @@ budjira create issue "Add export functionality" \
 # Quick task creation
 budjira create issue "Update documentation" \
   --type Task \
+  --no-interactive
+
+# With custom fields (requires configuration in connections.toml)
+budjira create issue "Production bug" \
+  --type Bug \
+  --custom affected_system=Infrastructure \
+  --custom environment=Prod \
+  --no-interactive
+
+# Link to epic with custom fields
+budjira create issue "New feature" \
+  --type Story \
+  --epic PROJ-100 \
+  --custom story_points=5 \
   --no-interactive
 ```
 
@@ -1027,6 +1170,8 @@ Located in `~/.config/budjira/`:
 4. **Non-interactive for automation**: Use `--no-interactive` when all details are available
 5. **Respect quiet mode**: Add `-q` flag when parsing output programmatically
 6. **Connection override**: Use `--connection NAME` when user has multiple Jira instances
+7. **Custom fields**: Check connection config for required custom fields before creating issues
+8. **Project-specific prompts**: Use `budjira ai usage-prompt --connection NAME` for project-specific guidance
 
 ## Version Information
 

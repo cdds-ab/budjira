@@ -200,6 +200,141 @@ budjira search "project = PROJ"
             enabled=True,
         ),
         AiPromptSection(
+            title="Custom Fields Configuration",
+            content="""## Custom Fields Configuration
+
+**NEW in v1.13.0** - Configure connection-level custom fields for issue creation.
+
+### Configuration
+
+Custom fields are configured in `~/.config/budjira/connections.toml` under each connection:
+
+```toml
+[[connections]]
+name = "my-project"
+url = "https://company.atlassian.net"
+email = "user@example.com"
+project_key = "PROJ"
+
+# Custom field configuration
+[connections.custom_fields.affected_system]
+field_id = "customfield_10001"       # Jira field ID (required)
+type = "select"                       # Field type (see below)
+required = true                       # Prompt if not provided
+options = ["Infrastructure", "Application", "Database"]
+label = "Affected System"             # Display name
+
+[connections.custom_fields.environment]
+field_id = "customfield_10002"
+type = "multi_select"
+options = ["Dev", "Staging", "Prod"]
+label = "Environment"
+
+[connections.custom_fields.story_points]
+field_id = "customfield_10003"
+type = "number"
+default = "3"
+label = "Story Points"
+```
+
+### Field Types
+
+| Type | Description | Jira API Format |
+|------|-------------|-----------------|
+| `text` | Plain text (default) | `"value"` |
+| `select` | Single select dropdown | `{"value": "Option"}` |
+| `multi_select` | Multi-select (comma-separated) | `[{"value": "A"}, {"value": "B"}]` |
+| `user` | User picker | `{"accountId": "..."}` |
+| `date` | Date field | `"YYYY-MM-DD"` |
+| `number` | Numeric value | `42` or `3.14` |
+
+### Finding Jira Field IDs
+
+1. **Via Jira REST API:**
+   ```bash
+   curl -u email:token "https://company.atlassian.net/rest/api/3/field" | jq '.[] | select(.custom) | {id, name}'
+   ```
+
+2. **Via Jira UI:** Open issue → click field → check URL for `customfield_XXXXX`
+
+### Usage
+
+```bash
+# Single custom field
+budjira create issue "Bug title" --custom affected_system=Infrastructure
+
+# Multiple custom fields
+budjira create issue "Feature" --custom affected_system=Application --custom environment="Dev, Staging"
+
+# Interactive mode prompts for required fields automatically
+budjira create issue "Title"
+# Prompts: "Affected System (Infrastructure, Application, Database):"
+```
+
+### Validation
+
+- **Options validation**: Select/multi-select values are validated against configured options
+- **Required fields**: Must be provided via --custom or interactively
+- **Number validation**: Numeric fields validate that input is a valid number""",
+            order=2,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Connection-Specific AI Prompts",
+            content="""## Connection-Specific AI Prompts
+
+**NEW in v1.13.0** - Add project-specific instructions to the generated AI usage prompt.
+
+### Configuration
+
+Add an `ai_prompt` field to your connection in `~/.config/budjira/connections.toml`:
+
+```toml
+[[connections]]
+name = "my-project"
+url = "https://company.atlassian.net"
+email = "user@example.com"
+project_key = "PROJ"
+
+# Project-specific AI prompt (multiline supported)
+ai_prompt = \"\"\"
+## Project Workflow
+
+**Issue Types:**
+- Change: For planned modifications
+- Service Request: For user requests
+- Incident: For production issues
+
+**Required Custom Fields:**
+- affected_system: Always set for bugs
+- environment: Required for deployments
+
+**Naming Conventions:**
+- Bugs: "BUG: <component> - <description>"
+- Features: "FEAT: <area> - <description>"
+\"\"\"
+```
+
+### Usage
+
+Generate the AI usage prompt with project-specific additions:
+
+```bash
+# Include project-specific prompt
+budjira ai usage-prompt --connection my-project
+
+# Output to file for AI assistant
+budjira ai usage-prompt --connection my-project --plain > .claude/ai-usage-prompt.md
+
+# View formatted in terminal
+budjira ai usage-prompt --connection my-project
+```
+
+The project-specific prompt is appended after the standard budjira documentation.""",
+            order=3,
+            enabled=True,
+        ),
+        AiPromptSection(
             title="Searching Issues",
             content="""## Searching Issues
 
@@ -254,7 +389,7 @@ Results display as a table with:
 - Priority
 - Created date
 - Updated date""",
-            order=2,
+            order=4,
             enabled=True,
         ),
         AiPromptSection(
@@ -294,7 +429,7 @@ budjira show PROJ-456 --connection my-connection
 - Check time tracking and estimates
 - View attachments and related files
 - Understand issue context before making changes""",
-            order=3,
+            order=5,
             enabled=True,
         ),
         AiPromptSection(
@@ -327,6 +462,8 @@ budjira create issue "Issue summary" --no-interactive [OPTIONS]
 - `--assignee USER`: Assign to user (username or account ID)
 - `--label TAG`: Add label (can be used multiple times)
 - `--project KEY`: Override default project
+- `--epic KEY`: Link to epic during creation
+- `--custom NAME=VALUE`: Set custom field (repeatable, requires configuration)
 
 **Examples:**
 
@@ -351,8 +488,22 @@ budjira create issue "Add export functionality" \\
 budjira create issue "Update documentation" \\
   --type Task \\
   --no-interactive
+
+# With custom fields (requires configuration in connections.toml)
+budjira create issue "Production bug" \\
+  --type Bug \\
+  --custom affected_system=Infrastructure \\
+  --custom environment=Prod \\
+  --no-interactive
+
+# Link to epic with custom fields
+budjira create issue "New feature" \\
+  --type Story \\
+  --epic PROJ-100 \\
+  --custom story_points=5 \\
+  --no-interactive
 ```""",
-            order=4,
+            order=6,
             enabled=True,
         ),
         AiPromptSection(
@@ -413,7 +564,7 @@ So that [benefit]
 - Checks for required sections (## Section Name format)
 - Warns on empty section content
 - Customizable per issue type""",
-            order=5,
+            order=7,
             enabled=True,
         ),
         AiPromptSection(
@@ -483,7 +634,7 @@ budjira issue transitions PROJ-123
 ```
 
 **Note:** Status transitions are case-insensitive, so "in progress", "In Progress", and "IN PROGRESS" all work.""",
-            order=6,
+            order=8,
             enabled=True,
         ),
         AiPromptSection(
@@ -514,7 +665,7 @@ budjira epic show PROJ-100
 # Shows epic with all stories and tasks
 # Progress: 12/20 issues done (60%)
 ```""",
-            order=7,
+            order=9,
             enabled=True,
         ),
         AiPromptSection(
@@ -571,7 +722,7 @@ budjira comment add PROJ-789 "Status update" --connection prod-jira
 - Supports markdown formatting for rich text
 - Multi-line content for detailed updates
 - Empty content (whitespace only) aborts comment creation""",
-            order=8,
+            order=10,
             enabled=True,
         ),
         AiPromptSection(
@@ -691,7 +842,7 @@ budjira issue update PROJ-789 \\
   --work-comment "Completed backend API" \\
   --remaining-estimate 12h
 ```""",
-            order=9,
+            order=11,
             enabled=True,
         ),
         AiPromptSection(
@@ -876,7 +1027,7 @@ budjira tempo accounts
 - Account name
 - Status (OPEN/CLOSED)
 - Account ID""",
-            order=10,
+            order=12,
             enabled=True,
         ),
         AiPromptSection(
@@ -921,7 +1072,7 @@ Disable automatic checks:
 [global]
 check_updates = false
 ```""",
-            order=11,
+            order=13,
             enabled=True,
         ),
         AiPromptSection(
@@ -958,7 +1109,7 @@ budjira --show-completion zsh > ~/.zsh/completions/_budjira
 # Fish
 budjira --show-completion fish > ~/.config/fish/completions/budjira.fish
 ```""",
-            order=12,
+            order=14,
             enabled=True,
         ),
         AiPromptSection(
@@ -971,7 +1122,7 @@ Available on all commands:
 - `--debug`, `-d`: Enable debug output
 - `--version`, `-v`: Show version and exit
 - `--help`, `-h`: Show help message""",
-            order=13,
+            order=15,
             enabled=True,
         ),
         AiPromptSection(
@@ -1142,7 +1293,7 @@ budjira --format json tempo worklogs --from 2025-10-01 --to 2025-10-31
 # 8. Delete incorrect worklog
 budjira tempo delete-worklog 999 --force
 ```""",
-            order=14,
+            order=16,
             enabled=True,
         ),
         AiPromptSection(
@@ -1174,7 +1325,7 @@ Invalid JQL:
 ```
 Error: Invalid JQL query: [Jira error message]
 ```""",
-            order=15,
+            order=17,
             enabled=True,
         ),
         AiPromptSection(
@@ -1188,7 +1339,7 @@ Located in `~/.config/budjira/`:
 - `config.toml` - Global settings
 - `cache/` - Optional issue cache (future feature)
 - `logs/` - Per-context log files""",
-            order=16,
+            order=18,
             enabled=True,
         ),
         AiPromptSection(
@@ -1200,8 +1351,10 @@ Located in `~/.config/budjira/`:
 3. **Interactive mode for missing details**: Use interactive create when user hasn't provided all info
 4. **Non-interactive for automation**: Use `--no-interactive` when all details are available
 5. **Respect quiet mode**: Add `-q` flag when parsing output programmatically
-6. **Connection override**: Use `--connection NAME` when user has multiple Jira instances""",
-            order=17,
+6. **Connection override**: Use `--connection NAME` when user has multiple Jira instances
+7. **Custom fields**: Check connection config for required custom fields before creating issues
+8. **Project-specific prompts**: Use `budjira ai usage-prompt --connection NAME` for project-specific guidance""",
+            order=19,
             enabled=True,
         ),
         AiPromptSection(
@@ -1217,7 +1370,7 @@ Update to latest:
 ```bash
 budjira update
 ```""",
-            order=18,
+            order=20,
             enabled=True,
         ),
         AiPromptSection(
@@ -1227,13 +1380,13 @@ budjira update
 - GitHub: https://github.com/cdds-ab/budjira
 - Issues: https://github.com/cdds-ab/budjira/issues
 - Releases: https://github.com/cdds-ab/budjira/releases""",
-            order=19,
+            order=21,
             enabled=True,
         ),
         AiPromptSection(
             title="Footer",
             content="""**This guide is generated by budjira itself and reflects the current feature set.**""",
-            order=20,
+            order=22,
             enabled=True,
         ),
     ]
