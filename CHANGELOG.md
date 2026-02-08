@@ -1,6 +1,29 @@
 # CHANGELOG
 
 
+## v1.14.0 (2026-02-08)
+
+### Documentation
+
+- Update project context to v1.13.1
+  ([`4880332`](https://github.com/cdds-ab/budjira/commit/4880332e56083941455fd92d9f77b1cf72bc2b0d))
+
+### Features
+
+- Add issue linking support ([#65](https://github.com/cdds-ab/budjira/pull/65),
+  [`67a7f9e`](https://github.com/cdds-ab/budjira/commit/67a7f9eff98d2719fc6c2a7686d0b8ef240fc0db))
+
+Implement comprehensive issue linking functionality with service-based architecture: - IssueLink
+  model for type-safe link data (id, type, direction, issue key/summary) - LinkService with 24h
+  cached link type validation and CRUD operations - `budjira issue link` CLI command with multiple
+  link type flags (relates-to, blocks, etc.) - `budjira show` displays issue links in formatted
+  table - Issue.from_jira_issue() parses issuelinks field (outward/inward) - Full error handling
+  (404, 403, invalid link types) - 97% test coverage for LinkService, comprehensive tests for models
+  and CLI - Follows Epic linking pattern (v1.12.0) with service delegation - Logger consistency fix:
+  use self._logger instead of module-level logger - AI prompt updated with Issue Linking section -
+  README.md and documentation updated
+
+
 ## v1.13.1 (2026-02-04)
 
 ### Bug Fixes
