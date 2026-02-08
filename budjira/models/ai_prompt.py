@@ -19,8 +19,8 @@ class AiPromptSection(BaseModel):
     content: str = Field(
         description="Markdown content of the section",
     )
-    order: int = Field(
-        description="Display order (0-99, lower numbers appear first)",
+    order: int | float = Field(
+        description="Display order (0-99, lower numbers appear first, supports decimals for fine-grained ordering)",
     )
     enabled: bool = Field(
         default=True,
@@ -635,6 +635,72 @@ budjira issue transitions PROJ-123
 
 **Note:** Status transitions are case-insensitive, so "in progress", "In Progress", and "IN PROGRESS" all work.""",
             order=8,
+            enabled=True,
+        ),
+        AiPromptSection(
+            title="Issue Linking",
+            content="""## Issue Linking
+
+### Create Issue Links
+
+```bash
+budjira issue link ISSUE-KEY [OPTIONS]
+```
+
+Create relationships between issues to express dependencies, related work, or duplicates.
+
+**Options:**
+- `--relates-to ISSUE-KEY`: Generic relationship
+- `--blocks ISSUE-KEY`: This issue blocks another issue
+- `--is-blocked-by ISSUE-KEY`: This issue is blocked by another issue
+- `--clones ISSUE-KEY`: This issue clones another issue
+- `--is-cloned-by ISSUE-KEY`: This issue is cloned by another issue
+- `--duplicates ISSUE-KEY`: This issue duplicates another issue
+- `--is-duplicated-by ISSUE-KEY`: This issue is duplicated by another issue
+
+**Examples:**
+
+```bash
+# Link two issues with a relationship
+budjira issue link PROJ-123 --relates-to PROJ-456
+
+# Express blocking relationships
+budjira issue link PROJ-123 --blocks PROJ-456
+budjira issue link PROJ-123 --is-blocked-by PROJ-789
+
+# Mark duplicates
+budjira issue link PROJ-123 --duplicates PROJ-100
+
+# Create multiple links in one command
+budjira issue link PROJ-123 --relates-to PROJ-456 --relates-to PROJ-789
+budjira issue link PROJ-123 --relates-to PROJ-200 --blocks PROJ-300
+```
+
+### View Issue Links
+
+Links are displayed in the issue detail view:
+
+```bash
+budjira show PROJ-123
+```
+
+**Output includes link table:**
+```
+🔗 Issue Links (2)
+┌─────────┬───────────┬──────────┬─────────────────────┐
+│ Type    │ Direction │ Issue    │ Summary             │
+├─────────┼───────────┼──────────┼─────────────────────┤
+│ Relates │ outward   │ PROJ-456 │ Related feature     │
+│ Blocks  │ inward    │ PROJ-789 │ Dependent task      │
+└─────────┴───────────┴──────────┴─────────────────────┘
+```
+
+**Use Cases:**
+- **Dependency Tracking**: Express which issues block others
+- **Related Work**: Link issues that are related but not dependent
+- **Duplicate Management**: Mark duplicate issues
+- **Impact Analysis**: Understand issue relationships for planning""",
+            order=8.5,
             enabled=True,
         ),
         AiPromptSection(

@@ -8,7 +8,7 @@ from rich.table import Table
 
 from budjira.core.jira_client import JiraClient
 from budjira.utils.connection import get_active_connection
-from budjira.utils.errors import BudjiraError
+from budjira.utils.errors import BudjiraError, InvalidIssueError, PermissionError
 from budjira.utils.time_parser import parse_time_string
 
 app = typer.Typer(
@@ -241,6 +241,130 @@ def show_transitions(
         console.print(table)
 
         console.print(f'\n[dim]Use: budjira update issue {issue_key} --status "<name>"[/dim]')
+
+    except BudjiraError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from e
+
+
+@app.command("link")
+def link_issue(
+    issue_key: Annotated[str, typer.Argument(help="Issue to link FROM")],
+    relates_to: Annotated[list[str] | None, typer.Option("--relates-to", help="Link as 'relates to'")] = None,
+    blocks: Annotated[list[str] | None, typer.Option("--blocks", help="Link as 'blocks'")] = None,
+    is_blocked_by: Annotated[list[str] | None, typer.Option("--is-blocked-by", help="Link as 'is blocked by'")] = None,
+    clones: Annotated[list[str] | None, typer.Option("--clones", help="Link as 'clones'")] = None,
+    is_cloned_by: Annotated[list[str] | None, typer.Option("--is-cloned-by", help="Link as 'is cloned by'")] = None,
+    duplicates: Annotated[list[str] | None, typer.Option("--duplicates", help="Link as 'duplicates'")] = None,
+    is_duplicated_by: Annotated[
+        list[str] | None, typer.Option("--is-duplicated-by", help="Link as 'is duplicated by'")
+    ] = None,
+    connection: Annotated[
+        str | None, typer.Option("--connection", "-c", help="Connection name (overrides environment)")
+    ] = None,
+) -> None:
+    """Link an issue to another issue.
+
+    Create issue links between two issues. Multiple links can be created in a single command.
+
+    Common link types:
+    - Relates: Generic relationship
+    - Blocks/Blocked By: Dependency relationship
+    - Clones/Cloned By: Issue duplication
+    - Duplicates/Duplicated By: Issue tracking
+
+    Examples:
+
+        # Link issue to related issues
+        budjira issue link PROJ-123 --relates-to PROJ-456 --relates-to PROJ-789
+
+        # Create blocking relationship
+        budjira issue link PROJ-123 --blocks PROJ-456
+
+        # Multiple link types
+        budjira issue link PROJ-100 --relates-to PROJ-200 --blocks PROJ-300
+    """
+    try:
+        # Get active connection
+        conn = get_active_connection(connection)
+        console.print(f"[dim]Using connection: {conn.name}[/dim]\n")
+
+        # Create client
+        client = JiraClient.from_connection(conn)
+
+        # Collect all link operations
+        link_operations = []
+
+        if relates_to:
+            for target in relates_to:
+                link_operations.append(("Relates", issue_key, target))
+
+        if blocks:
+            for target in blocks:
+                link_operations.append(("Blocks", issue_key, target))
+
+        if is_blocked_by:
+            for target in is_blocked_by:
+                link_operations.append(("Blocks", target, issue_key))
+
+        if clones:
+            for target in clones:
+                link_operations.append(("Clones", issue_key, target))
+
+        if is_cloned_by:
+            for target in is_cloned_by:
+                link_operations.append(("Clones", target, issue_key))
+
+        if duplicates:
+            for target in duplicates:
+                link_operations.append(("Duplicate", issue_key, target))
+
+        if is_duplicated_by:
+            for target in is_duplicated_by:
+                link_operations.append(("Duplicate", target, issue_key))
+
+        if not link_operations:
+            console.print("[yellow]No link operations specified. Use --help for usage.[/yellow]")
+            raise typer.Exit(1)
+
+        # Validate link types first
+        try:
+            available_types = client.links.get_link_types()
+        except Exception as e:
+            console.print(f"[red]Failed to fetch available link types:[/red] {e}")
+            raise typer.Exit(1) from e
+
+        # Execute link operations
+        success_count = 0
+        failed_count = 0
+
+        for link_type, outward_issue, inward_issue in link_operations:
+            try:
+                client.links.create_link(link_type, outward_issue, inward_issue)
+                console.print(f"[green]✓[/green] Linked {outward_issue} → {inward_issue} ({link_type})")
+                success_count += 1
+            except ValueError as e:
+                # Invalid link type
+                console.print(f"[red]✗[/red] {e}")
+                console.print(f"[dim]Available types: {', '.join(available_types.keys())}[/dim]")
+                failed_count += 1
+            except InvalidIssueError as e:
+                console.print(f"[red]✗[/red] {e}")
+                failed_count += 1
+            except PermissionError as e:
+                console.print(f"[red]✗[/red] {e}")
+                failed_count += 1
+            except Exception as e:
+                console.print(f"[red]✗[/red] Failed to create link: {e}")
+                failed_count += 1
+
+        # Summary
+        console.print()
+        if success_count > 0:
+            console.print(f"[green]Successfully created {success_count} link(s)[/green]")
+        if failed_count > 0:
+            console.print(f"[red]Failed to create {failed_count} link(s)[/red]")
+            raise typer.Exit(1)
 
     except BudjiraError as e:
         console.print(f"[red]Error:[/red] {e}")

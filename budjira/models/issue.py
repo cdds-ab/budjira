@@ -63,6 +63,16 @@ class Attachment(BaseModel):
     author: str | None = Field(None, description="Uploader display name")
 
 
+class IssueLink(BaseModel):
+    """Jira issue link."""
+
+    link_id: str = Field(..., description="Link ID for deletion")
+    link_type: str = Field(..., description="Link type name")
+    direction: str = Field(..., description="'outward' or 'inward'")
+    issue_key: str = Field(..., description="Linked issue key")
+    issue_summary: str | None = Field(None, description="Linked issue summary")
+
+
 class Issue(BaseModel):
     """Jira issue model."""
 
@@ -92,6 +102,9 @@ class Issue(BaseModel):
     # Comments and attachments
     comments: list[Comment] = Field(default_factory=list, description="Issue comments")
     attachments: list[Attachment] = Field(default_factory=list, description="Issue attachments")
+
+    # Issue links
+    issuelinks: list[IssueLink] = Field(default_factory=list, description="Issue links")
 
     @staticmethod
     def _parse_jira_datetime(datetime_str: str) -> datetime:
@@ -308,6 +321,57 @@ class Issue(BaseModel):
         return attachments
 
     @classmethod
+    def _parse_issue_links(cls, issue_links: list[Any]) -> list[IssueLink]:
+        """Extract and parse issue links.
+
+        Args:
+            issue_links: List of issue link objects from Jira API
+
+        Returns:
+            List of IssueLink objects
+        """
+        links = []
+        for link in issue_links:
+            link_id = link.id if hasattr(link, "id") else ""
+            link_type = link.type.name if hasattr(link, "type") and hasattr(link.type, "name") else "Unknown"
+
+            # Check for outward link (this issue -> other issue)
+            if hasattr(link, "outwardIssue"):
+                issue_key = link.outwardIssue.key
+                issue_summary = None
+                if hasattr(link.outwardIssue, "fields") and hasattr(link.outwardIssue.fields, "summary"):
+                    issue_summary = link.outwardIssue.fields.summary
+
+                links.append(
+                    IssueLink(
+                        link_id=link_id,
+                        link_type=link_type,
+                        direction="outward",
+                        issue_key=issue_key,
+                        issue_summary=issue_summary,
+                    )
+                )
+
+            # Check for inward link (other issue -> this issue)
+            if hasattr(link, "inwardIssue"):
+                issue_key = link.inwardIssue.key
+                issue_summary = None
+                if hasattr(link.inwardIssue, "fields") and hasattr(link.inwardIssue.fields, "summary"):
+                    issue_summary = link.inwardIssue.fields.summary
+
+                links.append(
+                    IssueLink(
+                        link_id=link_id,
+                        link_type=link_type,
+                        direction="inward",
+                        issue_key=issue_key,
+                        issue_summary=issue_summary,
+                    )
+                )
+
+        return links
+
+    @classmethod
     def from_jira_issue(cls, jira_issue: Any, epic_info: tuple[str, str] | None = None) -> Issue:
         """Create Issue from jira library Issue object.
 
@@ -333,6 +397,11 @@ class Issue(BaseModel):
         comments = cls._parse_comments(fields)
         attachments = cls._parse_attachments(fields)
 
+        # Parse issue links
+        issue_links = []
+        if hasattr(fields, "issuelinks") and fields.issuelinks:
+            issue_links = cls._parse_issue_links(fields.issuelinks)
+
         # Combine all parsed data
         return cls(
             **basic,
@@ -343,6 +412,7 @@ class Issue(BaseModel):
             **time_tracking,
             comments=comments,
             attachments=attachments,
+            issuelinks=issue_links,
         )
 
 

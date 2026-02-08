@@ -5,7 +5,7 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
-from budjira.models.issue import Issue, IssueType, Priority, Status, User, WorkLog
+from budjira.models.issue import Issue, IssueLink, IssueType, Priority, Status, User, WorkLog
 from pydantic import ValidationError
 
 
@@ -64,6 +64,45 @@ class TestUser:
         user = User(name="jdoe", display_name="John Doe")
         assert user.name == "jdoe"
         assert user.email is None
+
+
+class TestIssueLink:
+    """Test IssueLink model."""
+
+    def test_create_issue_link(self) -> None:
+        """Test issue link creation."""
+        link = IssueLink(
+            link_id="10001",
+            link_type="Relates",
+            direction="outward",
+            issue_key="PROJ-456",
+            issue_summary="Related issue",
+        )
+        assert link.link_id == "10001"
+        assert link.link_type == "Relates"
+        assert link.direction == "outward"
+        assert link.issue_key == "PROJ-456"
+        assert link.issue_summary == "Related issue"
+
+    def test_create_issue_link_without_summary(self) -> None:
+        """Test issue link without summary."""
+        link = IssueLink(
+            link_id="10002",
+            link_type="Blocks",
+            direction="inward",
+            issue_key="PROJ-789",
+        )
+        assert link.link_id == "10002"
+        assert link.issue_summary is None
+
+    def test_issue_link_validation(self) -> None:
+        """Test issue link validation."""
+        # Missing required fields
+        with pytest.raises(ValidationError):
+            IssueLink(link_id="10001")  # type: ignore
+
+        with pytest.raises(ValidationError):
+            IssueLink(link_type="Relates", direction="outward")  # type: ignore
 
 
 class TestIssue:
@@ -169,6 +208,94 @@ class TestIssue:
         assert issue.priority is None
         assert issue.created is None
         assert issue.updated is None
+
+    def test_parse_issue_links_outward(self) -> None:
+        """Test parsing issue links with outward direction."""
+        # Mock Jira API response for outward link
+        link_data = MagicMock()
+        link_data.id = "10001"
+        link_data.type.name = "Relates"
+        link_data.type.outward = "relates to"
+        link_data.type.inward = "relates to"
+        link_data.outwardIssue.key = "PROJ-456"
+        link_data.outwardIssue.fields.summary = "Related issue"
+        # No inwardIssue
+        delattr(link_data, "inwardIssue")
+
+        links = Issue._parse_issue_links([link_data])
+
+        assert len(links) == 1
+        assert links[0].link_id == "10001"
+        assert links[0].link_type == "Relates"
+        assert links[0].direction == "outward"
+        assert links[0].issue_key == "PROJ-456"
+        assert links[0].issue_summary == "Related issue"
+
+    def test_parse_issue_links_inward(self) -> None:
+        """Test parsing issue links with inward direction."""
+        # Mock Jira API response for inward link
+        link_data = MagicMock()
+        link_data.id = "10002"
+        link_data.type.name = "Blocks"
+        link_data.type.outward = "blocks"
+        link_data.type.inward = "is blocked by"
+        link_data.inwardIssue.key = "PROJ-789"
+        link_data.inwardIssue.fields.summary = "Blocking issue"
+        # No outwardIssue
+        delattr(link_data, "outwardIssue")
+
+        links = Issue._parse_issue_links([link_data])
+
+        assert len(links) == 1
+        assert links[0].link_id == "10002"
+        assert links[0].link_type == "Blocks"
+        assert links[0].direction == "inward"
+        assert links[0].issue_key == "PROJ-789"
+        assert links[0].issue_summary == "Blocking issue"
+
+    def test_parse_issue_links_multiple(self) -> None:
+        """Test parsing multiple issue links."""
+        # Mock outward link
+        link1 = MagicMock()
+        link1.id = "10001"
+        link1.type.name = "Relates"
+        link1.outwardIssue.key = "PROJ-100"
+        link1.outwardIssue.fields.summary = "First link"
+        delattr(link1, "inwardIssue")
+
+        # Mock inward link
+        link2 = MagicMock()
+        link2.id = "10002"
+        link2.type.name = "Blocks"
+        link2.inwardIssue.key = "PROJ-200"
+        link2.inwardIssue.fields.summary = "Second link"
+        delattr(link2, "outwardIssue")
+
+        links = Issue._parse_issue_links([link1, link2])
+
+        assert len(links) == 2
+        assert links[0].issue_key == "PROJ-100"
+        assert links[1].issue_key == "PROJ-200"
+
+    def test_parse_issue_links_no_links(self) -> None:
+        """Test parsing with no issue links."""
+        links = Issue._parse_issue_links([])
+        assert links == []
+
+    def test_parse_issue_links_no_summary(self) -> None:
+        """Test parsing issue links without summary."""
+        link_data = MagicMock()
+        link_data.id = "10003"
+        link_data.type.name = "Relates"
+        link_data.outwardIssue.key = "PROJ-999"
+        # No summary field
+        delattr(link_data.outwardIssue.fields, "summary")
+        delattr(link_data, "inwardIssue")
+
+        links = Issue._parse_issue_links([link_data])
+
+        assert len(links) == 1
+        assert links[0].issue_summary is None
 
 
 class TestWorkLog:

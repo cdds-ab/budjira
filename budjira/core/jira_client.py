@@ -18,6 +18,7 @@ from budjira.services import (
     EpicService,
     IssueService,
     LabelService,
+    LinkService,
     MetadataService,
     TransitionService,
     WorklogService,
@@ -96,6 +97,7 @@ class JiraClient:
         self.labels = LabelService(self._client)
         self.comments = CommentService(self._client)
         self.metadata = MetadataService(self._client)
+        self.links = LinkService(self._client)
 
     @classmethod
     def from_connection(cls, connection: Connection) -> JiraClient:

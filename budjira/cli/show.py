@@ -195,6 +195,27 @@ def show_issue(
             console.print(att_table)
             console.print()
 
+        # Issue Links
+        if issue.issuelinks:
+            console.print(f"[bold yellow]🔗 Issue Links ({len(issue.issuelinks)})[/bold yellow]")
+
+            link_table = Table(show_header=True)
+            link_table.add_column("Type", style="cyan")
+            link_table.add_column("Direction", style="dim")
+            link_table.add_column("Issue", style="bold")
+            link_table.add_column("Summary", style="dim")
+
+            for link in issue.issuelinks:
+                link_table.add_row(
+                    link.link_type,
+                    link.direction,
+                    link.issue_key,
+                    link.issue_summary or "",
+                )
+
+            console.print(link_table)
+            console.print()
+
     except InvalidIssueError as e:
         console.print(f"❌ [red]Issue not found:[/red] {e}")
         raise typer.Exit(1)  # noqa: B904

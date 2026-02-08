@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 from budjira.cli.main import app
 from budjira.cli.show import format_time_seconds
 from budjira.models.connection import Connection
-from budjira.models.issue import Attachment, Comment, Issue
+from budjira.models.issue import Attachment, Comment, Issue, IssueLink
 from budjira.utils.errors import (
     AuthenticationError,
     ConnectionError,
@@ -466,3 +466,62 @@ def test_show_issue_with_connection_flag(
     assert result.exit_code == 0
     assert "TEST-555" in result.stdout
     mock_get_connection.assert_called_once_with("my-connection")
+
+
+@patch("budjira.cli.show.get_active_connection")
+@patch("budjira.cli.show.JiraClient")
+def test_show_issue_with_links(
+    mock_jira_client_class: MagicMock,
+    mock_get_connection: MagicMock,
+) -> None:
+    """Test showing issue with issue links."""
+    connection = Connection(
+        name="test",
+        url="https://test.atlassian.net",  # type: ignore[arg-type]
+        email="test@test.com",
+        project_key="TEST",
+    )
+    mock_get_connection.return_value = connection
+
+    issuelinks = [
+        IssueLink(
+            link_id="10001",
+            link_type="Relates",
+            direction="outward",
+            issue_key="TEST-456",
+            issue_summary="Related issue",
+        ),
+        IssueLink(
+            link_id="10002",
+            link_type="Blocks",
+            direction="inward",
+            issue_key="TEST-789",
+            issue_summary="Blocking issue",
+        ),
+    ]
+
+    issue = Issue(
+        key="TEST-333",
+        summary="Issue with Links",
+        description="Has links",
+        issue_type="Story",
+        status="In Progress",
+        assignee="Mike",
+        reporter="Nancy",
+        project_key="TEST",
+        issuelinks=issuelinks,
+    )
+
+    mock_client = MagicMock()
+    mock_client.get_issue_details.return_value = issue
+    mock_jira_client_class.from_connection.return_value = mock_client
+
+    result = runner.invoke(app, ["show", "TEST-333"])
+
+    assert result.exit_code == 0
+    assert "TEST-333" in result.stdout
+    assert "Issue Links (2)" in result.stdout
+    assert "TEST-456" in result.stdout
+    assert "Related issue" in result.stdout
+    assert "TEST-789" in result.stdout
+    assert "Blocking issue" in result.stdout
