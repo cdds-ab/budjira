@@ -11,15 +11,18 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.14.0 (v1.15.0 pending release)
+- **Current Version**: v1.16.2
 - **Branch**: master
-- **Status**: Uncommitted changes (issue delete feature #66)
-- **Last Update**: 2026-02-21
+- **Status**: 2 unpushed commits (fixes #68, #69)
+- **Last Update**: 2026-02-23
 
 ### Recent Releases (seit v1.8.1)
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.16.2** | 2026-02-23 | fix | Handle divergent git history in install script |
+| **v1.16.1** | 2026-02-23 | fix | AI usage prompt for workflow profiles |
+| **v1.16.0** | 2026-02-23 | feat | Workflow profiles for cross-instance Jira operations (#67) |
 | **v1.14.0** | 2026-02-08 | feat | Issue linking support (#65) |
 | **v1.13.1** | 2026-02-04 | fix | AI prompt documentation for Custom Fields + AI Prompts |
 | **v1.13.0** | 2026-02-03 | feat | Custom fields (#64) + Connection-specific AI prompts (#63) |
@@ -239,10 +242,10 @@ budjira/services/
 
 | Metrik | Wert |
 |--------|------|
-| **Total Tests** | 583 |
+| **Total Tests** | 672 |
 | **Skipped Tests** | 3 |
-| **Coverage** | 84% |
-| **Test Duration** | ~8s |
+| **Coverage** | 85% |
+| **Test Duration** | ~9s |
 
 ### Coverage by Module (Top)
 ```
@@ -259,15 +262,17 @@ budjira/tempo/client.py        90%
 ```
 
 ### Coverage Improvements Since v1.8.1
-- Total: 82% → 84% (+2%)
-- New tests: 423 → 583 (+160 tests)
+- Total: 82% → 85% (+3%)
+- New tests: 423 → 672 (+249 tests)
 
 ---
 
 ## Offene GitHub Issues
 
-### Bugs
-Keine aktiven Bugs. Bug #62 wurde in v1.12.4 gefixt.
+### Bugs (Fixed, unpushed)
+- **#68** - `connect test` erkennt abgelaufene Tokens nicht → Fixed in `8437b75`
+- **#69** - `workflow book` Tempo API 400 beim Overbooking-Check → Fixed in `1b7b1c6`
+- Bug #62 wurde in v1.12.4 gefixt.
 
 ### Refactoring-Backlog (39 Issues)
 
@@ -293,7 +298,7 @@ Keine aktiven Bugs. Bug #62 wurde in v1.12.4 gefixt.
 
 ```
 budjira/
-├── __init__.py              # Version: 1.14.0
+├── __init__.py              # Version: 1.16.2
 ├── __main__.py              # Entry point
 ├── cli/                     # Command-line interface
 │   ├── main.py             # Main CLI app, global flags (--format, --quiet)
@@ -308,6 +313,7 @@ budjira/
 │   ├── show.py             # Issue detail view
 │   ├── tempo.py            # Tempo Timesheets (+ update-worklog) ✨ UPDATED v1.9.0
 │   ├── update.py           # Self-update commands
+│   ├── workflow.py         # ✨ NEW v1.16.0 - Workflow profiles (cross-instance)
 │   └── worklog.py          # Worklog commands
 ├── core/                    # Core business logic (lightweight after refactoring)
 │   └── jira_client.py      # Jira API wrapper (delegates to services)
@@ -319,6 +325,7 @@ budjira/
 │   ├── labels.py           # Label operations
 │   ├── metadata.py         # Metadata operations
 │   ├── transitions.py      # Transition operations
+│   ├── workflow.py         # ✨ NEW v1.16.0 - Cross-instance workflow operations
 │   └── worklogs.py         # Worklog operations
 ├── tempo/                   # Tempo Timesheets integration
 │   ├── client.py           # TempoClient - REST API
@@ -370,6 +377,7 @@ budjira/
 | Connection AI Prompts | v1.13.0 | `budjira ai usage-prompt --connection` |
 | Issue Linking | v1.14.0 | `budjira issue link` |
 | Issue Delete | v1.15.0 | `budjira issue delete` |
+| Workflow Profiles | v1.16.0 | `budjira workflow *` |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---
@@ -430,5 +438,5 @@ budjira/
 
 ---
 
-**Letzte Aktualisierung**: 2026-02-21
+**Letzte Aktualisierung**: 2026-02-23
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
