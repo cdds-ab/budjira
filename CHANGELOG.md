@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v1.16.2 (2026-02-23)
+
+### Bug Fixes
+
+- Handle divergent git history in install script
+  ([`75e0acc`](https://github.com/cdds-ab/budjira/commit/75e0acc6a63d521a25c406f7b771fabf3727058a))
+
+Replace git pull with fetch+reset to gracefully handle force-pushed commits that cause divergent
+  branch errors during updates.
+
+
 ## v1.16.1 (2026-02-23)
 
 ### Bug Fixes
