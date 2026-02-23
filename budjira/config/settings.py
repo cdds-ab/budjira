@@ -19,6 +19,7 @@ from budjira.models.config import GlobalConfig
 from budjira.models.connection import Connection, ConnectionList
 from budjira.models.custom_field import CustomFieldConfig
 from budjira.models.dor import DorTemplateConfig, get_default_templates
+from budjira.models.workflow import WorkflowProfileList
 
 
 class Settings:
@@ -42,6 +43,7 @@ class Settings:
         self.connections_file = self.config_dir / "connections.toml"
         self.dor_templates_file = self.config_dir / "dor-templates.toml"
         self.ai_prompt_template_file = self.config_dir / "ai-prompt-template.toml"
+        self.workflows_file = self.config_dir / "workflows.toml"
 
         # Data directories
         self.credentials_dir = self.config_dir / "credentials"
@@ -56,6 +58,7 @@ class Settings:
         self._connections: ConnectionList | None = None
         self._dor_templates: DorTemplateConfig | None = None
         self._ai_prompt_template: AiPromptTemplate | None = None
+        self._workflows: WorkflowProfileList | None = None
 
     def _ensure_directories(self) -> None:
         """Create all required directories if they don't exist."""
@@ -357,6 +360,42 @@ class Settings:
             tomli_w.dump(template.model_dump(exclude_none=True), f)
 
         self._ai_prompt_template = template
+
+    @property
+    def workflows(self) -> WorkflowProfileList:
+        """Get workflow profiles, loading from file if needed.
+
+        Returns:
+            Workflow profile list object
+        """
+        if self._workflows is None:
+            self._workflows = self.load_workflows()
+        return self._workflows
+
+    def load_workflows(self) -> WorkflowProfileList:
+        """Load workflow profiles from workflows.toml.
+
+        Returns:
+            Workflow profile list (empty if file doesn't exist)
+        """
+        if not self.workflows_file.exists():
+            return WorkflowProfileList()
+
+        with self.workflows_file.open("rb") as f:
+            data = tomllib.load(f)
+
+        return WorkflowProfileList(**data)
+
+    def save_workflows(self, workflows: WorkflowProfileList) -> None:
+        """Save workflow profiles to workflows.toml.
+
+        Args:
+            workflows: Workflow profile list to save
+        """
+        with self.workflows_file.open("wb") as f:
+            tomli_w.dump(workflows.model_dump(exclude_none=True), f)
+
+        self._workflows = workflows
 
 
 # Global settings instance

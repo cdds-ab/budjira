@@ -53,3 +53,33 @@ class CacheError(BudjiraError):
     """Raised when cache operations fail."""
 
     pass
+
+
+class WorkflowError(BudjiraError):
+    """Raised when workflow operations fail."""
+
+    pass
+
+
+class ShadowTicketNotFoundError(WorkflowError):
+    """Raised when a shadow ticket cannot be found in the booking instance."""
+
+    pass
+
+
+class ShadowTicketAmbiguousError(WorkflowError):
+    """Raised when multiple shadow tickets match, making resolution ambiguous."""
+
+    pass
+
+
+class OverbookingError(WorkflowError):
+    """Raised when booking would exceed the estimate and policy is BLOCK."""
+
+    pass
+
+
+class WorkflowConfigError(ConfigurationError):
+    """Raised when workflow profile configuration is invalid."""
+
+    pass

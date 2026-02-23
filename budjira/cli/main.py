@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 
 from budjira import __version__
-from budjira.cli import ai, comment, connect, create, dor, epic, issue, search, show, tempo, update, worklog
+from budjira.cli import ai, comment, connect, create, dor, epic, issue, search, show, tempo, update, workflow, worklog
 from budjira.utils.banner import print_header
 
 # Show header early for --help (which bypasses callback)
@@ -35,6 +35,7 @@ app.add_typer(issue.app, name="issue")
 app.add_typer(search.app, name="search")
 app.add_typer(tempo.app, name="tempo")
 app.add_typer(update.app, name="update")
+app.add_typer(workflow.app, name="workflow")
 app.add_typer(worklog.app, name="worklog")
 
 # Register top-level show command
