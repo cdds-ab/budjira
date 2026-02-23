@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v1.16.1 (2026-02-23)
+
+### Bug Fixes
+
+- **docs**: Update AI usage prompt for workflow profiles (v1.16.0)
+  ([`255fa4e`](https://github.com/cdds-ab/budjira/commit/255fa4e65b58a6a25fbb614bc61ab59c31df70a8))
+
+Add workflow profiles documentation to AI prompt template, supplements, and regenerate
+  ai-usage-prompt.md.
+
+
 ## v1.16.0 (2026-02-23)
 
 ### Features
