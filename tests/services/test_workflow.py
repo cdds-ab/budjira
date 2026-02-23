@@ -12,6 +12,7 @@ from budjira.models.workflow import (
 )
 from budjira.services.workflow import WorkflowService, _format_seconds
 from budjira.utils.errors import (
+    JiraAPIError,
     OverbookingError,
     ShadowTicketAmbiguousError,
     ShadowTicketNotFoundError,
@@ -185,6 +186,36 @@ class TestGetBookingStatus:
         assert status.spent_seconds == 0
         assert status.estimate_seconds == 28800
         assert status.is_overbooked is False
+
+    def test_tempo_api_error_returns_zero_spent(self) -> None:
+        """Tempo API 400 on worklog query should not crash (regression #69)."""
+        planning_jira = MagicMock()
+        planning_issue = MagicMock()
+        planning_issue.time_original_estimate = 28800
+        planning_issue.summary = "Task with Tempo error"
+        planning_jira.get_issue.return_value = planning_issue
+
+        booking_jira = MagicMock()
+        shadow_result = MagicMock()
+        shadow_result.key = "K-456"
+        booking_jira.search_issues.return_value = [shadow_result]
+        shadow_jira_issue = MagicMock()
+        shadow_jira_issue.id = "67890"
+        booking_jira.client.issue.return_value = shadow_jira_issue
+
+        tempo_client = MagicMock()
+        tempo_client.get_worklogs.side_effect = JiraAPIError("Tempo API error: 400 Bad Request")
+
+        service = _make_service(
+            planning_jira=planning_jira,
+            booking_jira=booking_jira,
+            tempo_client=tempo_client,
+        )
+        status = service.get_booking_status("EK-123")
+
+        assert status.spent_seconds == 0
+        assert status.booking_issue_key == "K-456"
+        assert status.estimate_seconds == 28800
 
     def test_overbooked_status(self) -> None:
         planning_jira = MagicMock()
@@ -368,6 +399,39 @@ class TestBookTime:
         service = _make_service(booking_jira=booking_jira)
         with pytest.raises(ShadowTicketNotFoundError):
             service.book_time("EK-999", "1h")
+
+    def test_booking_succeeds_on_tempo_worklog_query_error(self) -> None:
+        """Tempo API 400 on overbooking check should not block booking (regression #69)."""
+        planning_jira = MagicMock()
+        planning_issue = MagicMock()
+        planning_issue.time_original_estimate = 28800
+        planning_issue.summary = "Fix bug"
+        planning_jira.get_issue.return_value = planning_issue
+
+        booking_jira = MagicMock()
+        shadow_result = MagicMock()
+        shadow_result.key = "K-456"
+        booking_jira.search_issues.return_value = [shadow_result]
+        shadow_jira_issue = MagicMock()
+        shadow_jira_issue.id = "67890"
+        booking_jira.client.issue.return_value = shadow_jira_issue
+        booking_jira.client.myself.return_value = {"accountId": "abc123"}
+
+        tempo_client = MagicMock()
+        tempo_client.get_worklogs.side_effect = JiraAPIError("Tempo API error: 400 Bad Request")
+        mock_worklog = MagicMock()
+        mock_worklog.tempoWorklogId = 555
+        tempo_client.create_worklog.return_value = mock_worklog
+
+        service = _make_service(
+            planning_jira=planning_jira,
+            booking_jira=booking_jira,
+            tempo_client=tempo_client,
+        )
+        result = service.book_time("EK-123", "1h")
+
+        assert result.tempoWorklogId == 555
+        tempo_client.create_worklog.assert_called_once()
 
 
 class TestFromProfile:

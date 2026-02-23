@@ -19,6 +19,7 @@ from budjira.utils.datetime_parser import parse_datetime_string
 from budjira.utils.errors import (
     AuthenticationError,
     ConnectionError,
+    JiraAPIError,
     OverbookingError,
     ShadowTicketAmbiguousError,
     ShadowTicketNotFoundError,
@@ -223,8 +224,16 @@ class WorkflowService:
         shadow_issue = self.booking_jira.client.issue(shadow_key)
         shadow_issue_id = int(shadow_issue.id)
 
-        worklogs = self.tempo_client.get_worklogs(issue_id=shadow_issue_id, limit=1000)
-        spent_seconds = sum(w.timeSpentSeconds for w in worklogs)
+        try:
+            worklogs = self.tempo_client.get_worklogs(issue_id=shadow_issue_id, limit=1000)
+            spent_seconds = sum(w.timeSpentSeconds for w in worklogs)
+        except JiraAPIError:
+            logger.warning(
+                "Could not fetch Tempo worklogs for %s (ID: %d), assuming 0 spent",
+                shadow_key,
+                shadow_issue_id,
+            )
+            spent_seconds = 0
 
         # Calculate remaining and overbooking
         remaining_seconds: int | None = None
@@ -332,8 +341,16 @@ class WorkflowService:
         shadow_issue = self.booking_jira.client.issue(shadow_key)
         shadow_issue_id = int(shadow_issue.id)
 
-        worklogs = self.tempo_client.get_worklogs(issue_id=shadow_issue_id, limit=1000)
-        spent_seconds = sum(w.timeSpentSeconds for w in worklogs)
+        try:
+            worklogs = self.tempo_client.get_worklogs(issue_id=shadow_issue_id, limit=1000)
+            spent_seconds = sum(w.timeSpentSeconds for w in worklogs)
+        except JiraAPIError:
+            logger.warning(
+                "Could not fetch Tempo worklogs for %s (ID: %d), assuming 0 spent",
+                shadow_key,
+                shadow_issue_id,
+            )
+            spent_seconds = 0
 
         # Parse time
         time_spent_minutes = parse_time_string(time_spent)
