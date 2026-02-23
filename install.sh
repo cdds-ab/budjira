@@ -41,10 +41,11 @@ echo "${YELLOW}→${NC} Installing budjira to ${INSTALL_DIR}..."
 if [ -d "$INSTALL_DIR" ]; then
     echo "${YELLOW}→${NC} Updating existing installation..."
     cd "$INSTALL_DIR"
-    # Reset any local changes and remove untracked files
-    git reset --hard --quiet
+    # Reset any local changes and force-sync with remote
+    # Using fetch+reset instead of pull to handle divergent history gracefully
+    git fetch --quiet origin
+    git reset --hard origin/master --quiet
     git clean -fd --quiet
-    git pull --quiet
 else
     echo "${YELLOW}→${NC} Cloning budjira repository..."
     mkdir -p "$(dirname "$INSTALL_DIR")"
