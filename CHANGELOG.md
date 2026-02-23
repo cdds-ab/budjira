@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v1.15.0 (2026-02-23)
+
+### Features
+
+- Add issue delete command ([#66](https://github.com/cdds-ab/budjira/pull/66),
+  [`5498f68`](https://github.com/cdds-ab/budjira/commit/5498f68cafa9401948653ca29ff2d35c9b135f21))
+
+Add `budjira issue delete` to remove Jira issues from CLI. Includes confirmation prompt, --force
+  flag, --delete-subtasks option, and proper error handling for 404/403 responses.
+
+
 ## v1.14.0 (2026-02-08)
 
 ### Documentation
