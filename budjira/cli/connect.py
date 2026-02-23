@@ -389,26 +389,30 @@ def test_connection(
             timeout=10,
         )
 
-        # Try to get server info
-        server_info = jira.server_info()
+        # Verify authentication by fetching current user
+        # server_info() does NOT require auth on many Jira instances,
+        # so we must use an authenticated endpoint to validate the token
+        current_user = jira.current_user()
+
+        # Fetch server info for display (optional, non-critical)
+        try:
+            server_info = jira.server_info()
+        except Exception:  # nosec B110
+            server_info = {}
 
         console.print("[green]✓[/green] Connection successful!")
         console.print("\n[bold]Server Info:[/bold]")
-        console.print(f"  Version:      {server_info.get('version', 'Unknown')}")
-        console.print(f"  Build:        {server_info.get('buildNumber', 'Unknown')}")
-        console.print(f"  Server Title: {server_info.get('serverTitle', 'Unknown')}")
-
-        # Try to get current user
-        try:
-            current_user = jira.current_user()
-            console.print(f"  Logged in as: {current_user}")
-        except Exception:  # nosec B110
-            pass  # Some Jira instances don't support this
+        if server_info:
+            console.print(f"  Version:      {server_info.get('version', 'Unknown')}")
+            console.print(f"  Build:        {server_info.get('buildNumber', 'Unknown')}")
+            console.print(f"  Server Title: {server_info.get('serverTitle', 'Unknown')}")
+        console.print(f"  Logged in as: {current_user}")
 
     except Exception as e:
         console.print(f"[red]✗[/red] Connection failed: {e}", style="red")
         console.print("\n[yellow]Common issues:[/yellow]")
-        console.print("  • Invalid URL or API token")
+        console.print("  • Invalid or expired API token")
+        console.print("  • Wrong email address for this token")
         console.print("  • Network connectivity problems")
         console.print("  • Jira instance is down or unreachable")
         raise typer.Exit(1) from None

@@ -309,6 +309,49 @@ class TestConnectTest:
             assert result.exit_code == 1
             assert "Connection failed" in result.stdout
 
+    def test_test_connection_expired_token(self, tmp_path: Path) -> None:
+        """Test that expired/invalid tokens are detected (not silently ignored).
+
+        Regression test for #68: server_info() succeeds without auth on many
+        Jira instances, so we must use current_user() to validate the token.
+        """
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.current_user.side_effect = Exception("401 Client Error: Unauthorized")
+
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_get_settings,
+            patch("jira.JIRA", return_value=mock_jira_instance),
+        ):
+            # Reset singletons
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_get_settings.return_value = settings
+            credential_store = get_credential_store()
+
+            conn = Connection(
+                name="Expired Token",
+                url="https://test.atlassian.net",
+                email="test@example.com",
+                project_key="TEST",
+            )
+            settings.add_connection(conn)
+            credential_store.store(conn, "expired-token")
+
+            result = runner.invoke(app, ["connect", "test", "Expired Token"])
+
+            assert result.exit_code == 1
+            assert "Connection failed" in result.stdout
+            assert "expired" in result.stdout.lower() or "Unauthorized" in result.stdout
+
 
 class TestConnectTempoSetup:
     """Test connect tempo-setup command."""
