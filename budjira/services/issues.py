@@ -204,6 +204,42 @@ class IssueService(BaseJiraService):
         except Exception as e:
             raise JiraAPIError(f"Unexpected error creating issue: {e}") from e
 
+    def delete(self, issue_key: str, delete_subtasks: bool = False) -> None:
+        """Delete an issue.
+
+        Args:
+            issue_key: Issue key (e.g., PROJ-123)
+            delete_subtasks: If True, also delete subtasks of the issue
+
+        Raises:
+            InvalidIssueError: If issue not found
+            PermissionError: If user lacks permission to delete issue
+            JiraAPIError: If deletion fails
+        """
+        try:
+            self._log_operation("Delete issue", issue_key=issue_key, delete_subtasks=delete_subtasks)
+            self.client.issue(issue_key).delete(deleteSubtasks=delete_subtasks)
+            self._logger.info(f"Deleted issue {issue_key}")
+
+        except JIRAError as e:
+            if e.status_code == 404:
+                raise InvalidIssueError(
+                    f"Issue '{issue_key}' not found. "
+                    f"Check that the issue exists and you have permission to view it."
+                ) from e
+            elif e.status_code == 403:
+                raise PermissionError(
+                    f"Permission denied deleting issue '{issue_key}'. "
+                    f"You need the 'Delete Issues' permission in Jira."
+                ) from e
+            else:
+                self._handle_jira_error(e, "Delete issue", issue_key=issue_key)
+                raise  # Ensure type checker knows this path raises
+        except (InvalidIssueError, PermissionError, JiraAPIError):
+            raise
+        except Exception as e:
+            raise JiraAPIError(f"Unexpected error deleting issue: {e}") from e
+
     def update(
         self,
         issue_key: str,

@@ -20,6 +20,64 @@ app = typer.Typer(
 console = Console()
 
 
+@app.command("delete")
+def delete_issue(
+    issue_key: Annotated[str, typer.Argument(help="Issue key (e.g., PROJ-123)")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation prompt")] = False,
+    delete_subtasks: Annotated[
+        bool, typer.Option("--delete-subtasks", help="Also delete subtasks of the issue")
+    ] = False,
+    connection: Annotated[
+        str | None, typer.Option("--connection", "-c", help="Connection name (overrides environment)")
+    ] = None,
+) -> None:
+    """Delete a Jira issue.
+
+    Permanently removes an issue from Jira. This action cannot be undone.
+
+    Examples:
+
+        # Delete issue with confirmation
+        budjira issue delete PROJ-123
+
+        # Delete without confirmation
+        budjira issue delete PROJ-123 --force
+
+        # Delete issue and its subtasks
+        budjira issue delete PROJ-123 --delete-subtasks
+    """
+    try:
+        # Get active connection
+        conn = get_active_connection(connection)
+        console.print(f"[dim]Using connection: {conn.name}[/dim]")
+
+        # Create client
+        client = JiraClient.from_connection(conn)
+
+        # Fetch issue summary for confirmation
+        try:
+            issue = client.issues.get(issue_key, fields=["summary"])
+            issue_summary = issue.summary
+        except InvalidIssueError as e:
+            console.print(f"[red]Error:[/red] Issue '{issue_key}' not found.")
+            raise typer.Exit(1) from e
+
+        # Confirm deletion unless --force is used
+        if not force:
+            confirm = typer.confirm(f"Are you sure you want to delete {issue_key} '{issue_summary}'?")
+            if not confirm:
+                console.print("[yellow]Deletion cancelled[/yellow]")
+                return
+
+        # Delete issue
+        client.issues.delete(issue_key, delete_subtasks=delete_subtasks)
+        console.print(f"[green]✓[/green] Deleted issue {issue_key} '{issue_summary}'")
+
+    except BudjiraError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from e
+
+
 @app.command("update")
 def update_issue(
     issue_key: Annotated[str, typer.Argument(help="Issue key (e.g., PROJ-123)")],

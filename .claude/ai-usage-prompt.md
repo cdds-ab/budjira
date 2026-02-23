@@ -481,6 +481,37 @@ budjira issue update PROJ-123 \
   --add-label security
 ```
 
+### Delete Issue
+
+```bash
+budjira issue delete ISSUE-KEY [OPTIONS]
+```
+
+Permanently delete a Jira issue. This action cannot be undone.
+
+**Options:**
+- `--force`, `-f`: Skip confirmation prompt
+- `--delete-subtasks`: Also delete subtasks of the issue
+- `--connection NAME`, `-c`: Use specific connection
+
+**Examples:**
+
+```bash
+# Delete issue with confirmation prompt
+budjira issue delete PROJ-123
+
+# Delete without confirmation (for automation)
+budjira issue delete PROJ-123 --force
+
+# Delete issue and all its subtasks
+budjira issue delete PROJ-123 --delete-subtasks
+
+# Delete with force and subtasks
+budjira issue delete PROJ-123 --force --delete-subtasks
+```
+
+**Note:** Deleting an issue requires the 'Delete Issues' permission in Jira. The confirmation prompt shows the issue summary before deletion.
+
 ### Show Available Transitions
 
 ```bash

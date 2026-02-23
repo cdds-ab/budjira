@@ -27,7 +27,7 @@
 - 🔍 **Search & Filter**: Powerful JQL-based ticket search with filter options
 - ✏️ **Create Issues**: Interactive and non-interactive issue creation
 - 📋 **Definition of Ready**: Customizable templates for Story, Bug, Task with validation
-- 🔄 **Update Issues**: Transition status, update fields, manage labels
+- 🔄 **Update Issues**: Transition status, update fields, manage labels, delete issues
 - 🎯 **Epic Management**: Link stories to epics and view epic progress
 - 💬 **Comment Management**: Add comments to issues without time tracking
 - ⏱️ **Time Tracking**: Comprehensive worklog management and time estimates
@@ -288,6 +288,15 @@ budjira issue update PROJ-123 --epic PROJ-100
 
 # Show available transitions
 budjira issue transitions PROJ-123
+
+# Delete an issue (with confirmation)
+budjira issue delete PROJ-123
+
+# Delete without confirmation
+budjira issue delete PROJ-123 --force
+
+# Delete issue and its subtasks
+budjira issue delete PROJ-123 --delete-subtasks
 ```
 
 ### 8. View Epic Progress

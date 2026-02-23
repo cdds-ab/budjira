@@ -11,15 +11,16 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.13.1
+- **Current Version**: v1.14.0 (v1.15.0 pending release)
 - **Branch**: master
-- **Status**: Clean working tree
-- **Last Update**: 2026-02-04
+- **Status**: Uncommitted changes (issue delete feature #66)
+- **Last Update**: 2026-02-21
 
 ### Recent Releases (seit v1.8.1)
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.14.0** | 2026-02-08 | feat | Issue linking support (#65) |
 | **v1.13.1** | 2026-02-04 | fix | AI prompt documentation for Custom Fields + AI Prompts |
 | **v1.13.0** | 2026-02-03 | feat | Custom fields (#64) + Connection-specific AI prompts (#63) |
 | **v1.12.4** | 2026-01-15 | fix | Epic show: query both parent and Epic Link fields (#62) |
@@ -36,6 +37,44 @@
 ---
 
 ## Neue Features seit v1.8.1
+
+### v1.15.0 (pending): Issue Delete (#66)
+
+**Command**: `budjira issue delete ISSUE-KEY`
+
+**Features:**
+- Delete Jira issues from the CLI
+- Confirmation prompt with issue summary before deletion
+- `--force / -f` flag to skip confirmation
+- `--delete-subtasks` flag to also delete subtasks
+- `--connection / -c` flag for connection override
+- Error handling: 404 → issue not found, 403 → permission denied
+
+**Usage:**
+```bash
+budjira issue delete PROJ-123
+budjira issue delete PROJ-123 --force
+budjira issue delete PROJ-123 --delete-subtasks --force
+```
+
+**Implementation:**
+- Service: `IssueService.delete()` in `budjira/services/issues.py`
+- CLI: `delete` command in `budjira/cli/issue.py`
+- Tests: 5 service tests + 6 CLI tests (all passing)
+
+---
+
+### v1.14.0: Issue Linking (#65)
+
+**Command**: `budjira issue link ISSUE-KEY [OPTIONS]`
+
+**Features:**
+- Create issue links (relates-to, blocks, is-blocked-by, clones, duplicates)
+- Multiple links in a single command
+- Link type validation against Jira instance
+- Links displayed in `budjira show` output
+
+---
 
 ### v1.13.0: Custom Fields + Connection-specific AI Prompts (#63, #64)
 
@@ -200,9 +239,9 @@ budjira/services/
 
 | Metrik | Wert |
 |--------|------|
-| **Total Tests** | 549 |
+| **Total Tests** | 583 |
 | **Skipped Tests** | 3 |
-| **Coverage** | 85.36% |
+| **Coverage** | 84% |
 | **Test Duration** | ~8s |
 
 ### Coverage by Module (Top)
@@ -220,8 +259,8 @@ budjira/tempo/client.py        90%
 ```
 
 ### Coverage Improvements Since v1.8.1
-- Total: 82% → 85.36% (+3.4%)
-- New tests: 423 → 549 (+126 tests)
+- Total: 82% → 84% (+2%)
+- New tests: 423 → 583 (+160 tests)
 
 ---
 
@@ -254,7 +293,7 @@ Keine aktiven Bugs. Bug #62 wurde in v1.12.4 gefixt.
 
 ```
 budjira/
-├── __init__.py              # Version: 1.13.1
+├── __init__.py              # Version: 1.14.0
 ├── __main__.py              # Entry point
 ├── cli/                     # Command-line interface
 │   ├── main.py             # Main CLI app, global flags (--format, --quiet)
@@ -264,7 +303,7 @@ budjira/
 │   ├── create.py           # Issue creation (+ --epic, --custom flags) ✨ UPDATED v1.13.0
 │   ├── dor.py              # Definition of Ready templates
 │   ├── epic.py             # Epic management (+ JSON output) ✨ UPDATED v1.11.0
-│   ├── issue.py            # Issue updates
+│   ├── issue.py            # Issue updates + delete ✨ UPDATED v1.15.0
 │   ├── search.py           # Issue search (JQL + filters)
 │   ├── show.py             # Issue detail view
 │   ├── tempo.py            # Tempo Timesheets (+ update-worklog) ✨ UPDATED v1.9.0
@@ -276,7 +315,7 @@ budjira/
 │   ├── base.py             # BaseService class
 │   ├── comments.py         # Comment operations
 │   ├── epics.py            # Epic operations
-│   ├── issues.py           # Issue operations
+│   ├── issues.py           # Issue operations (+ delete) ✨ UPDATED v1.15.0
 │   ├── labels.py           # Label operations
 │   ├── metadata.py         # Metadata operations
 │   ├── transitions.py      # Transition operations
@@ -329,6 +368,8 @@ budjira/
 | Epic Flag for Create | v1.12.0 | `budjira create issue --epic` |
 | Custom Fields | v1.13.0 | `budjira create issue --custom` |
 | Connection AI Prompts | v1.13.0 | `budjira ai usage-prompt --connection` |
+| Issue Linking | v1.14.0 | `budjira issue link` |
+| Issue Delete | v1.15.0 | `budjira issue delete` |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---
@@ -389,5 +430,5 @@ budjira/
 
 ---
 
-**Letzte Aktualisierung**: 2026-02-04
+**Letzte Aktualisierung**: 2026-02-21
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen

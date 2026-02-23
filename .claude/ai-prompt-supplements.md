@@ -6,10 +6,10 @@ This file contains manually curated sections for the AI usage prompt that cannot
 
 ## Version Tracking
 
-- **Last Updated:** 2025-10-26
-- **Commands Covered:** connect, search, create, update, ai, tempo, JSON output
+- **Last Updated:** 2026-02-21
+- **Commands Covered:** connect, search, create, update, delete, link, ai, tempo, JSON output
 - **Last Reviewed By:** Human developer
-- **Recent Changes:** Added JSON output format workflows (v1.7.0)
+- **Recent Changes:** Added issue delete workflow (v1.15.0), issue linking (v1.14.0)
 
 ## Common Workflows for AI Assistants
 
@@ -115,7 +115,26 @@ budjira tempo worklogs PROJ-123   # Tempo
 - End of day time tracking
 - Tracking time across multiple issues
 
-### 8. JSON Output for Automation and Reporting
+### 8. Delete Issues (Cleanup)
+```bash
+# Delete a single issue with confirmation
+budjira issue delete PROJ-123
+
+# Delete without confirmation (automation/scripting)
+budjira issue delete PROJ-123 --force
+
+# Delete issue and its subtasks
+budjira issue delete PROJ-123 --delete-subtasks --force
+```
+
+**When to use:**
+- Cleanup of test issues or duplicates
+- Removing accidentally created issues
+- Batch cleanup in scripting workflows
+
+**Note:** Requires 'Delete Issues' permission in Jira. Always confirms unless `--force` is used.
+
+### 9. JSON Output for Automation and Reporting
 ```bash
 # Export Tempo worklogs to JSON
 budjira --format json tempo worklogs --from 2025-10-01 --to 2025-10-31

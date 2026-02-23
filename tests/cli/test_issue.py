@@ -3,6 +3,8 @@
 from unittest.mock import MagicMock, patch
 
 from budjira.cli.main import app
+from budjira.utils.errors import InvalidIssueError
+from budjira.utils.errors import PermissionError as BudjiraPermissionError
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -233,3 +235,112 @@ class TestIssueUpdateTimeTracking:
 
         assert result.exit_code == 1
         assert "--work-comment requires --log-work" in result.stdout
+
+
+def _mock_connection() -> MagicMock:
+    """Create a mock connection for tests."""
+    mock = MagicMock()
+    mock.name = "test"
+    mock.url = "https://test.atlassian.net"
+    return mock
+
+
+def _mock_issue(key: str = "TEST-123", summary: str = "Test issue") -> MagicMock:
+    """Create a mock Issue for tests."""
+    mock = MagicMock()
+    mock.key = key
+    mock.summary = summary
+    return mock
+
+
+class TestIssueDelete:
+    """Tests for issue delete command."""
+
+    @patch("budjira.cli.issue.JiraClient")
+    @patch("budjira.cli.issue.get_active_connection")
+    def test_delete_with_confirmation(self, mock_get_conn: MagicMock, mock_jira_cls: MagicMock) -> None:
+        """Test successful delete with user confirmation."""
+        mock_get_conn.return_value = _mock_connection()
+        mock_client = MagicMock()
+        mock_jira_cls.from_connection.return_value = mock_client
+        mock_client.issues.get.return_value = _mock_issue()
+
+        result = runner.invoke(app, ["-q", "issue", "delete", "TEST-123"], input="y\n")
+
+        assert result.exit_code == 0
+        assert "Deleted issue TEST-123" in result.stdout
+        mock_client.issues.delete.assert_called_once_with("TEST-123", delete_subtasks=False)
+
+    @patch("budjira.cli.issue.JiraClient")
+    @patch("budjira.cli.issue.get_active_connection")
+    def test_delete_cancelled(self, mock_get_conn: MagicMock, mock_jira_cls: MagicMock) -> None:
+        """Test deletion cancelled by user."""
+        mock_get_conn.return_value = _mock_connection()
+        mock_client = MagicMock()
+        mock_jira_cls.from_connection.return_value = mock_client
+        mock_client.issues.get.return_value = _mock_issue()
+
+        result = runner.invoke(app, ["-q", "issue", "delete", "TEST-123"], input="n\n")
+
+        assert result.exit_code == 0
+        assert "Deletion cancelled" in result.stdout
+        mock_client.issues.delete.assert_not_called()
+
+    @patch("budjira.cli.issue.JiraClient")
+    @patch("budjira.cli.issue.get_active_connection")
+    def test_delete_force(self, mock_get_conn: MagicMock, mock_jira_cls: MagicMock) -> None:
+        """Test delete with --force flag skips confirmation."""
+        mock_get_conn.return_value = _mock_connection()
+        mock_client = MagicMock()
+        mock_jira_cls.from_connection.return_value = mock_client
+        mock_client.issues.get.return_value = _mock_issue()
+
+        result = runner.invoke(app, ["-q", "issue", "delete", "TEST-123", "--force"])
+
+        assert result.exit_code == 0
+        assert "Deleted issue TEST-123" in result.stdout
+        mock_client.issues.delete.assert_called_once_with("TEST-123", delete_subtasks=False)
+
+    @patch("budjira.cli.issue.JiraClient")
+    @patch("budjira.cli.issue.get_active_connection")
+    def test_delete_with_subtasks(self, mock_get_conn: MagicMock, mock_jira_cls: MagicMock) -> None:
+        """Test delete with --delete-subtasks flag."""
+        mock_get_conn.return_value = _mock_connection()
+        mock_client = MagicMock()
+        mock_jira_cls.from_connection.return_value = mock_client
+        mock_client.issues.get.return_value = _mock_issue()
+
+        result = runner.invoke(app, ["-q", "issue", "delete", "TEST-123", "--force", "--delete-subtasks"])
+
+        assert result.exit_code == 0
+        mock_client.issues.delete.assert_called_once_with("TEST-123", delete_subtasks=True)
+
+    @patch("budjira.cli.issue.JiraClient")
+    @patch("budjira.cli.issue.get_active_connection")
+    def test_delete_issue_not_found(self, mock_get_conn: MagicMock, mock_jira_cls: MagicMock) -> None:
+        """Test delete when issue does not exist."""
+        mock_get_conn.return_value = _mock_connection()
+        mock_client = MagicMock()
+        mock_jira_cls.from_connection.return_value = mock_client
+        mock_client.issues.get.side_effect = InvalidIssueError("Issue 'TEST-999' not found")
+
+        result = runner.invoke(app, ["-q", "issue", "delete", "TEST-999", "--force"])
+
+        assert result.exit_code == 1
+        assert "not found" in result.stdout
+        mock_client.issues.delete.assert_not_called()
+
+    @patch("budjira.cli.issue.JiraClient")
+    @patch("budjira.cli.issue.get_active_connection")
+    def test_delete_permission_denied(self, mock_get_conn: MagicMock, mock_jira_cls: MagicMock) -> None:
+        """Test delete when user lacks permission."""
+        mock_get_conn.return_value = _mock_connection()
+        mock_client = MagicMock()
+        mock_jira_cls.from_connection.return_value = mock_client
+        mock_client.issues.get.return_value = _mock_issue()
+        mock_client.issues.delete.side_effect = BudjiraPermissionError("Permission denied")
+
+        result = runner.invoke(app, ["-q", "issue", "delete", "TEST-123", "--force"])
+
+        assert result.exit_code == 1
+        assert "Permission denied" in result.stdout
