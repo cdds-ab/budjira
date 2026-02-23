@@ -177,7 +177,7 @@ class TestGetDefaultAiPromptTemplate:
         template = get_default_ai_prompt_template()
 
         assert template.version == "1.0"
-        assert len(template.sections) == 24  # All sections including v1.14.0 Issue Linking
+        assert len(template.sections) == 25  # All sections including v1.16.0 Workflow Profiles
 
     def test_default_template_all_enabled(self) -> None:
         """Test that all default sections are enabled."""

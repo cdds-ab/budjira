@@ -15,6 +15,7 @@ issue updates, epic management, and comprehensive time tracking.
 - Epic management with progress tracking
 - Comprehensive time tracking (worklogs and estimates)
 - Automatic update checking via GitHub Releases
+- Cross-instance workflow profiles (shadow ticket resolution, overbooking checks)
 - Rich terminal output with tables and colors
 
 ## Connection Management
@@ -967,6 +968,109 @@ budjira tempo accounts
 - Status (OPEN/CLOSED)
 - Account ID
 
+## Workflow Profiles (Cross-Instance)
+
+**NEW in v1.16.0** - Automate cross-instance workflows between a planning Jira and a booking Jira (Tempo-enabled).
+
+### Concept
+
+Workflow profiles connect two Jira instances:
+- **Planning instance**: Where issues are planned and estimated (e.g., "EK" project)
+- **Booking instance**: Where time is logged via Tempo (e.g., "K" project with shadow tickets)
+
+Shadow tickets in the booking instance mirror planning tickets (e.g., EK-123 has a shadow K-456 with "EK-123" in its summary).
+
+### Setup a Workflow Profile
+
+```bash
+budjira workflow setup
+```
+
+Interactive setup prompts for:
+- Profile name (e.g., "ek-to-k")
+- Planning connection name
+- Booking connection name (must have Tempo enabled)
+- Project mappings (e.g., EK -> K)
+- Shadow resolution strategy (default: summary search)
+- Overbooking policy (warn, confirm, or block)
+
+### Manage Profiles
+
+```bash
+# List all profiles
+budjira workflow list
+
+# Show profile details
+budjira workflow show ek-to-k
+
+# Remove profile
+budjira workflow remove ek-to-k
+```
+
+### Check Booking Status
+
+```bash
+budjira workflow status EK-123 --profile ek-to-k
+```
+
+Shows estimate (from planning) vs spent time (from booking/Tempo):
+- Planning issue summary and connection
+- Shadow ticket in booking instance
+- Estimate, spent, remaining time
+- Progress bar with percentage
+- Overbooking warning if applicable
+
+If the shadow ticket has not been synced yet, a helpful message is shown instead of an error.
+
+### Book Time via Workflow
+
+```bash
+budjira workflow book EK-123 2h --profile ek-to-k
+budjira workflow book EK-123 2h30m --profile ek-to-k --comment "Analysis work"
+budjira workflow book EK-123 3h --profile ek-to-k --started yesterday
+```
+
+Automated flow:
+1. Resolves shadow ticket in booking instance (EK-123 -> K-456)
+2. Fetches estimate from planning issue
+3. Checks current Tempo spent on shadow ticket
+4. Applies overbooking policy (warn/confirm/block)
+5. Logs time to shadow ticket via Tempo
+
+**Overbooking Policies:**
+- `warn`: Show warning but continue booking (default)
+- `confirm`: Ask for confirmation before booking
+- `block`: Refuse to book if estimate would be exceeded
+
+**If no estimate is set on the planning issue, overbooking checks are skipped.**
+
+### Configuration
+
+Profiles are stored in `~/.config/budjira/workflows.toml`:
+
+```toml
+[[profiles]]
+name = "ek-to-k"
+planning_connection = "ek-planning"
+booking_connection = "k-booking"
+shadow_strategy = "summary"
+overbooking_policy = "warn"
+
+[[profiles.project_mappings]]
+planning_project = "EK"
+booking_project = "K"
+```
+
+### JSON Output
+
+All workflow commands support `--format json`:
+
+```bash
+budjira --format json workflow list
+budjira --format json workflow show ek-to-k
+budjira --format json workflow status EK-123 --profile ek-to-k
+```
+
 ## Update Management
 
 ### Check for Updates
@@ -1215,6 +1319,31 @@ budjira --format json tempo worklogs --from 2025-10-01 --to 2025-10-31
 
 # 8. Delete incorrect worklog
 budjira tempo delete-worklog 999 --force
+```
+
+### 13. Cross-Instance Workflow (Planning + Booking)
+
+```bash
+# 1. Setup workflow profile (one-time)
+budjira workflow setup
+
+# 2. Check booking status before starting work
+budjira workflow status EK-123 --profile ek-to-k
+
+# 3. Book time to shadow ticket via workflow
+budjira workflow book EK-123 2h --profile ek-to-k --comment "Development work"
+
+# 4. Book time from yesterday
+budjira workflow book EK-456 3h30m --profile ek-to-k --started yesterday
+
+# 5. Check updated status after booking
+budjira workflow status EK-123 --profile ek-to-k
+
+# 6. List all workflow profiles
+budjira workflow list
+
+# 7. JSON output for reporting
+budjira --format json workflow status EK-123 --profile ek-to-k
 ```
 
 ## Error Handling

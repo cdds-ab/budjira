@@ -6,10 +6,10 @@ This file contains manually curated sections for the AI usage prompt that cannot
 
 ## Version Tracking
 
-- **Last Updated:** 2026-02-21
-- **Commands Covered:** connect, search, create, update, delete, link, ai, tempo, JSON output
+- **Last Updated:** 2026-02-23
+- **Commands Covered:** connect, search, create, update, delete, link, ai, tempo, workflow, JSON output
 - **Last Reviewed By:** Human developer
-- **Recent Changes:** Added issue delete workflow (v1.15.0), issue linking (v1.14.0)
+- **Recent Changes:** Added workflow profiles for cross-instance operations (v1.16.0), issue delete (v1.15.0), issue linking (v1.14.0)
 
 ## Common Workflows for AI Assistants
 
@@ -134,7 +134,42 @@ budjira issue delete PROJ-123 --delete-subtasks --force
 
 **Note:** Requires 'Delete Issues' permission in Jira. Always confirms unless `--force` is used.
 
-### 9. JSON Output for Automation and Reporting
+### 10. Cross-Instance Workflow (Planning + Booking)
+```bash
+# Setup workflow profile connecting planning + booking instances
+budjira workflow setup
+
+# Check how much time is booked vs estimated
+budjira workflow status EK-123 --profile ek-to-k
+
+# Book time — automatically resolves shadow ticket and logs via Tempo
+budjira workflow book EK-123 2h --profile ek-to-k --comment "Development"
+budjira workflow book EK-456 3h --profile ek-to-k --started yesterday
+
+# Manage profiles
+budjira workflow list
+budjira workflow show ek-to-k
+budjira workflow remove ek-to-k
+
+# JSON output for reporting
+budjira --format json workflow status EK-123 --profile ek-to-k
+```
+
+**When to use:**
+- Organization has separate Jira instances for planning and time booking
+- Shadow tickets in booking instance mirror planning tickets
+- Need to check estimate vs spent time across instances
+- Want overbooking protection (warn/confirm/block policies)
+- Automated cross-instance time logging via Tempo
+
+**Key concepts:**
+- **Shadow ticket**: Booking instance ticket that mirrors a planning ticket (found via JQL summary search)
+- **Overbooking policy**: Controls what happens when booking would exceed estimate (warn=default, confirm, block)
+- **Project mapping**: Maps planning project keys to booking project keys (e.g., EK -> K)
+
+**Note:** Booking connection must have Tempo enabled. If shadow ticket not found, a helpful message is shown (sync may be pending).
+
+### 11. JSON Output for Automation and Reporting
 ```bash
 # Export Tempo worklogs to JSON
 budjira --format json tempo worklogs --from 2025-10-01 --to 2025-10-31
@@ -215,6 +250,14 @@ budjira --format json tempo worklogs --from 2025-10-01 --no-epic
 4. **Authentication failures**: Guide user to regenerate API token
 5. **Tempo not enabled**: Run `budjira connect tempo-setup` if "Tempo is not enabled" error occurs
 6. **Missing Tempo token**: Verify Tempo API token is configured correctly
+
+### Workflow Profiles
+1. **Check if multi-instance setup**: Ask user if they have separate planning and booking Jira instances
+2. **Setup first**: Run `budjira workflow setup` to create a profile before using workflow commands
+3. **Shadow ticket sync**: If shadow not found, it may not have synced yet — suggest waiting or manual creation
+4. **Overbooking awareness**: Default policy is "warn" — inform user about overbooking but don't block
+5. **No estimate = no check**: If planning issue has no estimate, overbooking checks are skipped
+6. **Booking connection needs Tempo**: Ensure booking connection has Tempo enabled before workflow setup
 
 ### JSON Output
 1. **Use `--format json` for automation**: Machine-readable output for scripts and pipelines
