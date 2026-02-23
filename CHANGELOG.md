@@ -1,6 +1,23 @@
 # CHANGELOG
 
 
+## v1.16.0 (2026-02-23)
+
+### Features
+
+- Add workflow profiles for cross-instance Jira operations
+  ([#67](https://github.com/cdds-ab/budjira/pull/67),
+  [`f3282ac`](https://github.com/cdds-ab/budjira/commit/f3282acf2a999ab4d118c1b81f70ee9fab27c6c2))
+
+Add workflow profiles that connect a planning Jira instance with a booking instance (Tempo-enabled)
+  for automated cross-instance workflows.
+
+Features: - Shadow ticket resolution via JQL summary search - Booking status check (estimate vs
+  spent across instances) - Time booking with overbooking detection (warn/confirm/block policies) -
+  Profile management CLI (setup, list, show, remove, status, book) - TOML-based profile persistence
+  following existing patterns
+
+
 ## v1.15.0 (2026-02-23)
 
 ### Features
