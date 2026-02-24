@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v1.17.0 (2026-02-24)
+
+### Features
+
+- **tempo**: Enforce workflow booking policy on tempo log
+  ([#70](https://github.com/cdds-ab/budjira/pull/70),
+  [`ac88b2b`](https://github.com/cdds-ab/budjira/commit/ac88b2bb8758d4b35ba8f2ab56214097a77fa9e9))
+
+Block direct tempo log on planning connections when a workflow profile is configured. Suggests using
+  'workflow book' instead. Add --force flag to bypass the policy for edge cases.
+
+
 ## v1.16.3 (2026-02-24)
 
 ### Bug Fixes
