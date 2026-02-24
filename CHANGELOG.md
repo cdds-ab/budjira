@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v1.18.0 (2026-02-24)
+
+### Features
+
+- **sprint**: Add sprint query commands and workflow sprint overview
+  ([#71](https://github.com/cdds-ab/budjira/pull/71),
+  [`8724c05`](https://github.com/cdds-ab/budjira/commit/8724c05747705673ea645b9b47e968ec9c292b92))
+
+Add discoverable sprint commands in two tiers: - Tier 1: `sprint list` (state filter) and `sprint
+  show` (--mine, --status, --type) - Tier 2: `workflow sprint` cross-instance booking overview
+  (--unbooked, --mine)
+
+Includes board auto-detection, board_id connection config, JSON output, and updated AI usage prompt
+  documentation.
+
+
 ## v1.17.0 (2026-02-24)
 
 ### Features
