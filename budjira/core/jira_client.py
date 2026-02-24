@@ -20,6 +20,7 @@ from budjira.services import (
     LabelService,
     LinkService,
     MetadataService,
+    SprintService,
     TransitionService,
     WorklogService,
 )
@@ -98,6 +99,7 @@ class JiraClient:
         self.comments = CommentService(self._client)
         self.metadata = MetadataService(self._client)
         self.links = LinkService(self._client)
+        self.sprints = SprintService(self._client)
 
     @classmethod
     def from_connection(cls, connection: Connection) -> JiraClient:

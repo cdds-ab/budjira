@@ -121,6 +121,7 @@ issue updates, epic management, and comprehensive time tracking.
 - Epic management with progress tracking
 - Comprehensive time tracking (worklogs and estimates)
 - Automatic update checking via GitHub Releases
+- Sprint querying (list sprints, view sprint contents with filters)
 - Cross-instance workflow profiles (shadow ticket resolution, overbooking checks)
 - Rich terminal output with tables and colors""",
             order=0,
@@ -1236,6 +1237,131 @@ budjira --format json workflow status EK-123 --profile ek-to-k
             enabled=True,
         ),
         AiPromptSection(
+            title="Sprint Querying",
+            content="""## Sprint Querying
+
+**NEW in v1.17.0** - Query sprints and sprint contents from Scrum boards.
+
+### List Sprints
+
+```bash
+budjira sprint list [OPTIONS]
+```
+
+Show all sprints for a board, optionally filtered by state.
+
+**Options:**
+- `--state STATE`, `-s`: Filter by state (active, future, closed)
+- `--board ID`, `-b`: Board ID (auto-detected from project if not provided)
+- `--connection NAME`, `-c`: Use specific connection
+
+**Examples:**
+
+```bash
+# List all sprints (auto-detects board)
+budjira sprint list
+
+# List only active sprints
+budjira sprint list --state active
+
+# Use specific board
+budjira sprint list --board 42
+
+# JSON output
+budjira --format json sprint list
+```
+
+### Show Sprint Contents
+
+```bash
+budjira sprint show [SPRINT_NAME] [OPTIONS]
+```
+
+Display issues in a sprint. Defaults to the active sprint if no name given.
+
+**Options:**
+- `--mine`, `-m`: Show only issues assigned to me
+- `--status STATUS`: Filter by issue status (e.g., "In Progress")
+- `--type TYPE`, `-t`: Filter by issue type (e.g., Story, Bug)
+- `--board ID`, `-b`: Board ID (auto-detected if not provided)
+- `--connection NAME`, `-c`: Use specific connection
+
+**Examples:**
+
+```bash
+# Show active sprint contents
+budjira sprint show
+
+# Show only my issues in active sprint
+budjira sprint show --mine
+
+# Show specific sprint
+budjira sprint show "Sprint 42"
+
+# Filter by status and type
+budjira sprint show --status "In Progress" --type Bug
+
+# JSON output
+budjira --format json sprint show
+```
+
+**Output includes:**
+- Sprint header with name, state, and dates
+- Table of issues with: Key, Type, Status, Priority, Summary, Assignee
+
+### Board Configuration
+
+The board is resolved in this order:
+1. `--board` CLI flag (highest priority)
+2. `board_id` from connection config (set in connections.toml)
+3. Auto-detection from project (works when exactly one Scrum board exists)
+
+To configure a default board in `connections.toml`:
+```toml
+[[connections]]
+name = "my-project"
+board_id = 42
+```
+
+### Sprint Booking Overview (Workflow)
+
+```bash
+budjira workflow sprint [SPRINT_NAME] --profile PROFILE [OPTIONS]
+```
+
+Cross-instance sprint overview showing booking status for each issue.
+
+**Options:**
+- `--profile NAME`, `-p`: Workflow profile to use (required)
+- `--board ID`, `-b`: Board ID on planning instance
+- `--unbooked`, `-u`: Show only unbooked or partially booked issues
+- `--mine`, `-m`: Show only issues assigned to me
+
+**Examples:**
+
+```bash
+# Show sprint booking overview
+budjira workflow sprint --profile ek-to-k
+
+# Show only unbooked issues
+budjira workflow sprint --profile ek-to-k --unbooked
+
+# Show specific sprint
+budjira workflow sprint "Sprint 42" --profile ek-to-k --mine
+
+# JSON output for reporting
+budjira --format json workflow sprint --profile ek-to-k
+```
+
+**Output includes:**
+- Planning key and shadow ticket mapping
+- Estimate vs spent time per issue
+- Remaining time or overbooking indicator
+- Summary row with total spent / total estimate (percentage)""",
+            order=12.7,
+            enabled=True,
+        ),
+        AiPromptSection(
             title="Update Management",
             content="""## Update Management
 
@@ -1522,6 +1648,31 @@ budjira workflow list
 
 # 7. JSON output for reporting
 budjira --format json workflow status EK-123 --profile ek-to-k
+```
+
+### 14. Sprint Query Workflow
+
+```bash
+# 1. List available sprints
+budjira sprint list --state active
+
+# 2. View active sprint contents
+budjira sprint show
+
+# 3. Show only my issues in active sprint
+budjira sprint show --mine
+
+# 4. Show specific sprint filtered by status
+budjira sprint show "Sprint 42" --status "In Progress"
+
+# 5. Cross-instance sprint booking overview
+budjira workflow sprint --profile ek-to-k
+
+# 6. Show only unbooked sprint items
+budjira workflow sprint --profile ek-to-k --unbooked --mine
+
+# 7. JSON output for reporting
+budjira --format json sprint show
 ```""",
             order=16,
             enabled=True,
@@ -1583,7 +1734,9 @@ Located in `~/.config/budjira/`:
 5. **Respect quiet mode**: Add `-q` flag when parsing output programmatically
 6. **Connection override**: Use `--connection NAME` when user has multiple Jira instances
 7. **Custom fields**: Check connection config for required custom fields before creating issues
-8. **Project-specific prompts**: Use `budjira ai usage-prompt --connection NAME` for project-specific guidance""",
+8. **Project-specific prompts**: Use `budjira ai usage-prompt --connection NAME` for project-specific guidance
+9. **Sprint overview**: Use `budjira sprint show --mine` to quickly see user's current sprint work
+10. **Cross-instance sprint**: Use `budjira workflow sprint --profile NAME --unbooked` to find items needing time booking""",
             order=19,
             enabled=True,
         ),

@@ -56,6 +56,10 @@ class Connection(BaseModel):
         default_factory=dict,
         description="Custom field configurations mapped by friendly name",
     )
+    board_id: int | None = Field(
+        default=None,
+        description="Default board ID for sprint operations",
+    )
     ai_prompt: str | None = Field(
         default=None,
         description="Project-specific AI prompt to append to generated usage prompts",

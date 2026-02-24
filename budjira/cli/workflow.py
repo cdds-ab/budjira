@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
+
+if TYPE_CHECKING:
+    from budjira.models.sprint import Sprint
 
 import typer
 from rich.console import Console
@@ -414,6 +417,194 @@ def workflow_status(
                     )
                 else:
                     console.print(f"  Progress:  {bar} {pct_display}")
+
+    except (ShadowTicketNotFoundError, ShadowTicketAmbiguousError, WorkflowConfigError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from e
+    except BudjiraError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        console.print(f"[red]Unexpected error:[/red] {e}")
+        raise typer.Exit(1) from e
+
+
+@app.command("sprint")
+def workflow_sprint(
+    ctx: typer.Context,
+    sprint_name: Annotated[
+        str | None,
+        typer.Argument(help="Sprint name (default: active sprint)"),
+    ] = None,
+    profile_name: Annotated[
+        str,
+        typer.Option("--profile", "-p", help="Workflow profile to use"),
+    ] = "",
+    board: Annotated[
+        int | None,
+        typer.Option("--board", "-b", help="Board ID (auto-detected if not provided)"),
+    ] = None,
+    unbooked: Annotated[
+        bool,
+        typer.Option("--unbooked", "-u", help="Show only unbooked or partially booked issues"),
+    ] = False,
+    mine: Annotated[
+        bool,
+        typer.Option("--mine", "-m", help="Show only issues assigned to me"),
+    ] = False,
+) -> None:
+    """Show sprint booking overview across planning and booking instances.
+
+    Fetches sprint issues from the planning instance and shows their
+    booking status from the booking instance (via Tempo).
+
+    Examples:
+        budjira workflow sprint --profile ek-to-k
+        budjira workflow sprint --profile ek-to-k --mine
+        budjira workflow sprint "Sprint 42" --profile ek-to-k --unbooked
+        budjira --format json workflow sprint --profile ek-to-k
+    """
+    try:
+        if not profile_name:
+            console.print("[red]Error:[/red] --profile is required.")
+            raise typer.Exit(1)
+
+        output_format = ctx.obj.get("format", "table") if ctx.obj else "table"
+
+        service = WorkflowService.from_profile(profile_name)
+
+        # Detect board on planning instance
+        planning_conn = service.planning_jira.connection
+        board_id: int
+        if board is not None:
+            board_id = board
+        elif planning_conn.board_id is not None:
+            board_id = planning_conn.board_id
+        else:
+            # Auto-detect from first project mapping
+            if service.profile.project_mappings:
+                project_key = service.profile.project_mappings[0].planning_project
+            else:
+                project_key = planning_conn.project_key
+            detected = service.planning_jira.sprints.detect_board(project_key)
+            board_id = detected.id
+
+        # Find sprint
+        sprint: Sprint
+        if sprint_name:
+            sprint = service.planning_jira.sprints.find_sprint_by_name(board_id, sprint_name)
+        else:
+            active = service.planning_jira.sprints.get_active_sprint(board_id)
+            if not active:
+                console.print("[red]Error:[/red] No active sprint found. Specify a sprint name.")
+                raise typer.Exit(1)
+            sprint = active
+
+        if not OutputFormatter.is_json_format(output_format):
+            console.print(f"[cyan bold]Sprint Booking Overview: {sprint.name}[/cyan bold]")
+            date_info = ""
+            if sprint.start_date and sprint.end_date:
+                date_info = f" ({sprint.start_date} - {sprint.end_date})"
+            console.print(f"[dim]Profile: {profile_name}{date_info}[/dim]\n")
+
+        statuses = service.get_sprint_booking_overview(
+            sprint_id=sprint.id,
+            mine_only=mine,
+        )
+
+        # Apply unbooked filter
+        if unbooked:
+            statuses = [s for s in statuses if s.remaining_seconds is None or s.remaining_seconds > 0]
+
+        if OutputFormatter.is_json_format(output_format):
+            status_dicts = [
+                {
+                    "planning_issue_key": s.planning_issue_key,
+                    "planning_summary": s.planning_summary,
+                    "booking_issue_key": s.booking_issue_key,
+                    "estimate_seconds": s.estimate_seconds,
+                    "spent_seconds": s.spent_seconds,
+                    "remaining_seconds": s.remaining_seconds,
+                    "is_overbooked": s.is_overbooked,
+                    "overbooking_seconds": s.overbooking_seconds,
+                }
+                for s in statuses
+            ]
+
+            # Summary
+            total_estimate = sum(s.estimate_seconds or 0 for s in statuses)
+            total_spent = sum(s.spent_seconds for s in statuses)
+
+            OutputFormatter.output_json(
+                {
+                    "sprint": {
+                        "id": sprint.id,
+                        "name": sprint.name,
+                        "state": sprint.state.value,
+                    },
+                    "profile": profile_name,
+                    "total_issues": len(status_dicts),
+                    "summary": {
+                        "total_estimate_seconds": total_estimate,
+                        "total_spent_seconds": total_spent,
+                    },
+                    "issues": status_dicts,
+                }
+            )
+            return
+
+        if not statuses:
+            filter_msg = " matching your filters" if mine or unbooked else ""
+            console.print(f"[yellow]No issues{filter_msg} in this sprint.[/yellow]")
+            return
+
+        table = Table(show_header=True)
+        table.add_column("Planning", style="cyan")
+        table.add_column("Shadow", style="dim")
+        table.add_column("Summary")
+        table.add_column("Estimate", justify="right")
+        table.add_column("Spent", justify="right")
+        table.add_column("Remaining", justify="right")
+
+        total_estimate = 0
+        total_spent = 0
+
+        for s in statuses:
+            estimate_str = _format_seconds(s.estimate_seconds) if s.estimate_seconds is not None else "-"
+            spent_str = _format_seconds(s.spent_seconds) if s.spent_seconds > 0 else "-"
+
+            if s.is_overbooked:
+                remaining_str = f"[red]+{_format_seconds(s.overbooking_seconds)}[/red]"
+            elif s.remaining_seconds is not None:
+                remaining_str = _format_seconds(s.remaining_seconds)
+            else:
+                remaining_str = "-"
+
+            shadow_display = s.booking_issue_key or "[yellow]?[/yellow]"
+            summary = s.planning_summary[:40] + "..." if len(s.planning_summary) > 40 else s.planning_summary
+
+            table.add_row(
+                s.planning_issue_key,
+                shadow_display,
+                summary,
+                estimate_str,
+                spent_str,
+                remaining_str,
+            )
+
+            total_estimate += s.estimate_seconds or 0
+            total_spent += s.spent_seconds
+
+        console.print(table)
+
+        # Summary line
+        if total_estimate > 0:
+            pct = total_spent / total_estimate * 100
+            console.print(
+                f"\n[bold]Total:[/bold] {_format_seconds(total_spent)} / {_format_seconds(total_estimate)} ({pct:.0f}%)"
+            )
+        else:
+            console.print(f"\n[bold]Total spent:[/bold] {_format_seconds(total_spent)}")
 
     except (ShadowTicketNotFoundError, ShadowTicketAmbiguousError, WorkflowConfigError) as e:
         console.print(f"[red]Error:[/red] {e}")

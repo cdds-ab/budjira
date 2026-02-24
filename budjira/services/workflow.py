@@ -258,6 +258,47 @@ class WorkflowService:
             overbooking_seconds=overbooking_seconds,
         )
 
+    def get_sprint_booking_overview(
+        self,
+        sprint_id: int,
+        mine_only: bool = False,
+    ) -> list[BookingStatus]:
+        """Get booking status for all issues in a sprint.
+
+        Fetches sprint issues from the planning instance and resolves
+        booking status for each via the shadow ticket + Tempo.
+
+        Args:
+            sprint_id: Sprint ID to query
+            mine_only: If True, only return issues assigned to current user
+
+        Returns:
+            List of BookingStatus for each sprint issue
+        """
+        jql_filter = "assignee = currentUser()" if mine_only else None
+        issues = self.planning_jira.sprints.get_sprint_issues(sprint_id, jql_filter=jql_filter)
+
+        statuses: list[BookingStatus] = []
+        for issue in issues:
+            try:
+                status = self.get_booking_status(issue.key)
+                statuses.append(status)
+            except Exception as e:
+                logger.warning(f"Could not get booking status for {issue.key}: {e}")
+                statuses.append(
+                    BookingStatus(
+                        planning_issue_key=issue.key,
+                        planning_summary=issue.summary,
+                        booking_issue_key=None,
+                        estimate_seconds=issue.time_original_estimate,
+                        spent_seconds=0,
+                        remaining_seconds=issue.time_original_estimate,
+                        is_overbooked=False,
+                    )
+                )
+
+        return statuses
+
     def _check_overbooking(
         self,
         estimate_seconds: int | None,

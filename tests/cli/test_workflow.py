@@ -422,6 +422,172 @@ def test_workflow_book_shadow_not_found(mock_service_cls: Mock) -> None:
     assert "Shadow not found" in result.stdout
 
 
+# Sprint overview tests
+
+
+def test_workflow_sprint_help() -> None:
+    result = runner.invoke(app, ["workflow", "sprint", "--help"])
+    assert result.exit_code == 0
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_sprint_no_profile(mock_service_cls: Mock) -> None:
+    result = runner.invoke(app, ["-q", "workflow", "sprint"])
+    assert result.exit_code == 1
+    assert "profile" in result.stdout.lower()
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_sprint_table_output(mock_service_cls: Mock) -> None:
+    mock_service = MagicMock()
+    mock_service.profile = _make_profile()
+
+    # Mock planning connection
+    mock_planning_conn = MagicMock()
+    mock_planning_conn.board_id = 42
+    mock_service.planning_jira.connection = mock_planning_conn
+
+    # Mock sprint
+    from datetime import date
+
+    from budjira.models.sprint import Sprint, SprintState
+
+    mock_sprint = Sprint(
+        id=100,
+        name="Sprint 10",
+        state=SprintState.ACTIVE,
+        start_date=date(2025, 1, 15),
+        end_date=date(2025, 1, 29),
+    )
+    mock_service.planning_jira.sprints.get_active_sprint.return_value = mock_sprint
+
+    # Mock overview
+    mock_service.get_sprint_booking_overview.return_value = [
+        BookingStatus(
+            planning_issue_key="EK-1",
+            planning_summary="Task 1",
+            booking_issue_key="K-10",
+            estimate_seconds=7200,
+            spent_seconds=3600,
+            remaining_seconds=3600,
+        ),
+    ]
+
+    mock_service_cls.from_profile.return_value = mock_service
+
+    result = runner.invoke(app, ["-q", "workflow", "sprint", "--profile", "ek-to-k"])
+    assert result.exit_code == 0
+    assert "Sprint 10" in result.stdout
+    assert "EK-1" in result.stdout
+    assert "K-10" in result.stdout
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_sprint_json_output(mock_service_cls: Mock) -> None:
+    mock_service = MagicMock()
+    mock_service.profile = _make_profile()
+
+    mock_planning_conn = MagicMock()
+    mock_planning_conn.board_id = 42
+    mock_service.planning_jira.connection = mock_planning_conn
+
+    from datetime import date
+
+    from budjira.models.sprint import Sprint, SprintState
+
+    mock_sprint = Sprint(
+        id=100,
+        name="Sprint 10",
+        state=SprintState.ACTIVE,
+        start_date=date(2025, 1, 15),
+        end_date=date(2025, 1, 29),
+    )
+    mock_service.planning_jira.sprints.get_active_sprint.return_value = mock_sprint
+
+    mock_service.get_sprint_booking_overview.return_value = [
+        BookingStatus(
+            planning_issue_key="EK-1",
+            planning_summary="Task 1",
+            booking_issue_key="K-10",
+            estimate_seconds=7200,
+            spent_seconds=3600,
+            remaining_seconds=3600,
+        ),
+    ]
+    mock_service_cls.from_profile.return_value = mock_service
+
+    result = runner.invoke(app, ["-q", "--format", "json", "workflow", "sprint", "--profile", "ek-to-k"])
+    assert result.exit_code == 0
+    assert '"EK-1"' in result.stdout
+    assert '"Sprint 10"' in result.stdout
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_sprint_unbooked_filter(mock_service_cls: Mock) -> None:
+    mock_service = MagicMock()
+    mock_service.profile = _make_profile()
+
+    mock_planning_conn = MagicMock()
+    mock_planning_conn.board_id = 42
+    mock_service.planning_jira.connection = mock_planning_conn
+
+    from datetime import date
+
+    from budjira.models.sprint import Sprint, SprintState
+
+    mock_sprint = Sprint(
+        id=100,
+        name="Sprint 10",
+        state=SprintState.ACTIVE,
+        start_date=date(2025, 1, 15),
+        end_date=date(2025, 1, 29),
+    )
+    mock_service.planning_jira.sprints.get_active_sprint.return_value = mock_sprint
+
+    mock_service.get_sprint_booking_overview.return_value = [
+        BookingStatus(
+            planning_issue_key="EK-1",
+            planning_summary="Fully booked",
+            booking_issue_key="K-10",
+            estimate_seconds=7200,
+            spent_seconds=7200,
+            remaining_seconds=0,
+        ),
+        BookingStatus(
+            planning_issue_key="EK-2",
+            planning_summary="Partially booked",
+            booking_issue_key="K-20",
+            estimate_seconds=7200,
+            spent_seconds=3600,
+            remaining_seconds=3600,
+        ),
+    ]
+    mock_service_cls.from_profile.return_value = mock_service
+
+    result = runner.invoke(app, ["-q", "workflow", "sprint", "--profile", "ek-to-k", "--unbooked"])
+    assert result.exit_code == 0
+    # EK-2 should be shown (remaining > 0), EK-1 should be filtered out
+    assert "EK-2" in result.stdout
+    assert "EK-1" not in result.stdout
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_sprint_no_active_sprint(mock_service_cls: Mock) -> None:
+    mock_service = MagicMock()
+    mock_service.profile = _make_profile()
+
+    mock_planning_conn = MagicMock()
+    mock_planning_conn.board_id = 42
+    mock_service.planning_jira.connection = mock_planning_conn
+
+    mock_service.planning_jira.sprints.get_active_sprint.return_value = None
+    mock_service_cls.from_profile.return_value = mock_service
+
+    result = runner.invoke(app, ["-q", "workflow", "sprint", "--profile", "ek-to-k"])
+    assert result.exit_code == 1
+    assert "No active sprint" in result.stdout
+
+
 @patch("budjira.cli.workflow.WorkflowService")
 def test_workflow_book_overbooking_blocked(mock_service_cls: Mock) -> None:
     from budjira.utils.errors import OverbookingError

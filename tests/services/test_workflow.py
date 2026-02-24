@@ -278,6 +278,84 @@ class TestGetBookingStatus:
         assert status.is_overbooked is False
 
 
+class TestGetSprintBookingOverview:
+    """Test get_sprint_booking_overview."""
+
+    def test_basic_overview(self) -> None:
+        planning_jira = MagicMock()
+        booking_jira = MagicMock()
+        tempo_client = MagicMock()
+
+        # Planning issues in sprint
+        issue1 = MagicMock()
+        issue1.key = "EK-1"
+        issue1.summary = "Task 1"
+        issue1.time_original_estimate = 7200
+        issue2 = MagicMock()
+        issue2.key = "EK-2"
+        issue2.summary = "Task 2"
+        issue2.time_original_estimate = 3600
+
+        planning_jira.sprints.get_sprint_issues.return_value = [issue1, issue2]
+
+        # Planning issue details for get_booking_status
+        planning_jira.get_issue.side_effect = [issue1, issue2]
+
+        # Shadow ticket resolution
+        shadow1 = MagicMock()
+        shadow1.key = "K-10"
+        shadow2 = MagicMock()
+        shadow2.key = "K-20"
+        booking_jira.search_issues.side_effect = [[shadow1], [shadow2]]
+
+        shadow_jira1 = MagicMock()
+        shadow_jira1.id = "100"
+        shadow_jira2 = MagicMock()
+        shadow_jira2.id = "200"
+        booking_jira.client.issue.side_effect = [shadow_jira1, shadow_jira2]
+
+        worklog = MagicMock()
+        worklog.timeSpentSeconds = 3600
+        tempo_client.get_worklogs.return_value = [worklog]
+
+        service = _make_service(
+            planning_jira=planning_jira,
+            booking_jira=booking_jira,
+            tempo_client=tempo_client,
+        )
+        statuses = service.get_sprint_booking_overview(sprint_id=100)
+
+        assert len(statuses) == 2
+        assert statuses[0].planning_issue_key == "EK-1"
+        assert statuses[1].planning_issue_key == "EK-2"
+
+    def test_overview_with_mine_filter(self) -> None:
+        planning_jira = MagicMock()
+        planning_jira.sprints.get_sprint_issues.return_value = []
+
+        service = _make_service(planning_jira=planning_jira)
+        statuses = service.get_sprint_booking_overview(sprint_id=100, mine_only=True)
+
+        assert statuses == []
+        planning_jira.sprints.get_sprint_issues.assert_called_once_with(100, jql_filter="assignee = currentUser()")
+
+    def test_overview_handles_shadow_errors_gracefully(self) -> None:
+        planning_jira = MagicMock()
+        issue1 = MagicMock()
+        issue1.key = "EK-1"
+        issue1.summary = "Failing task"
+        issue1.time_original_estimate = 7200
+        planning_jira.sprints.get_sprint_issues.return_value = [issue1]
+        planning_jira.get_issue.side_effect = Exception("API error")
+
+        service = _make_service(planning_jira=planning_jira)
+        statuses = service.get_sprint_booking_overview(sprint_id=100)
+
+        assert len(statuses) == 1
+        assert statuses[0].planning_issue_key == "EK-1"
+        assert statuses[0].booking_issue_key is None
+
+
 class TestCheckOverbooking:
     """Test _check_overbooking."""
 

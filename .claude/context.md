@@ -11,15 +11,16 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.16.2
+- **Current Version**: v1.16.3 (v1.17.0 pending)
 - **Branch**: master
-- **Status**: 2 unpushed commits (fixes #68, #69)
-- **Last Update**: 2026-02-23
+- **Status**: Sprint query feature (#71) ready for release
+- **Last Update**: 2026-02-24
 
 ### Recent Releases (seit v1.8.1)
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.17.0** | 2026-02-24 | feat | Sprint query commands + workflow sprint overview (#71) |
 | **v1.16.2** | 2026-02-23 | fix | Handle divergent git history in install script |
 | **v1.16.1** | 2026-02-23 | fix | AI usage prompt for workflow profiles |
 | **v1.16.0** | 2026-02-23 | feat | Workflow profiles for cross-instance Jira operations (#67) |
@@ -40,6 +41,36 @@
 ---
 
 ## Neue Features seit v1.8.1
+
+### v1.17.0: Sprint Query Commands (#71)
+
+**Commands**: `budjira sprint list`, `budjira sprint show`, `budjira workflow sprint`
+
+**Features:**
+- **Sprint List**: List sprints for a board, filtered by state (active/future/closed)
+- **Sprint Show**: View sprint issues with filters (--mine, --status, --type)
+- **Workflow Sprint**: Cross-instance sprint booking overview (planning + booking)
+- Board auto-detection from project (single Scrum board)
+- `board_id` configuration in connections.toml
+- `--unbooked` filter for partially/unbooked issues
+- JSON output support for all commands
+- AI usage prompt updated with sprint documentation
+
+**New Files:**
+- `budjira/models/sprint.py` - SprintState, Board, Sprint, SprintSummary models
+- `budjira/services/sprints.py` - SprintService (boards, sprints, issues)
+- `budjira/cli/sprint.py` - Tier 1 CLI commands
+- `tests/models/test_sprint.py` - 19 model tests
+- `tests/services/test_sprints.py` - 17 service tests
+- `tests/cli/test_sprint.py` - 14 CLI tests
+
+**Modified Files:**
+- `budjira/models/connection.py` - Added `board_id` field
+- `budjira/services/workflow.py` - Added `get_sprint_booking_overview()`
+- `budjira/cli/workflow.py` - Added `workflow sprint` command
+- `budjira/models/ai_prompt.py` - Added Sprint Querying section
+
+---
 
 ### v1.15.0 (pending): Issue Delete (#66)
 
@@ -242,10 +273,10 @@ budjira/services/
 
 | Metrik | Wert |
 |--------|------|
-| **Total Tests** | 672 |
+| **Total Tests** | 738 |
 | **Skipped Tests** | 3 |
-| **Coverage** | 85% |
-| **Test Duration** | ~9s |
+| **Coverage** | 85.7% |
+| **Test Duration** | ~11s |
 
 ### Coverage by Module (Top)
 ```
@@ -263,7 +294,7 @@ budjira/tempo/client.py        90%
 
 ### Coverage Improvements Since v1.8.1
 - Total: 82% → 85% (+3%)
-- New tests: 423 → 672 (+249 tests)
+- New tests: 423 → 738 (+315 tests)
 
 ---
 
@@ -311,6 +342,7 @@ budjira/
 │   ├── issue.py            # Issue updates + delete ✨ UPDATED v1.15.0
 │   ├── search.py           # Issue search (JQL + filters)
 │   ├── show.py             # Issue detail view
+│   ├── sprint.py           # ✨ NEW v1.17.0 - Sprint query commands
 │   ├── tempo.py            # Tempo Timesheets (+ update-worklog) ✨ UPDATED v1.9.0
 │   ├── update.py           # Self-update commands
 │   ├── workflow.py         # ✨ NEW v1.16.0 - Workflow profiles (cross-instance)
@@ -325,6 +357,7 @@ budjira/
 │   ├── labels.py           # Label operations
 │   ├── metadata.py         # Metadata operations
 │   ├── transitions.py      # Transition operations
+│   ├── sprints.py          # ✨ NEW v1.17.0 - Sprint/board operations
 │   ├── workflow.py         # ✨ NEW v1.16.0 - Cross-instance workflow operations
 │   └── worklogs.py         # Worklog operations
 ├── tempo/                   # Tempo Timesheets integration
@@ -333,10 +366,11 @@ budjira/
 ├── models/                  # Pydantic data models
 │   ├── ai_prompt.py        # AI prompt models
 │   ├── config.py           # GlobalConfig
-│   ├── connection.py       # Connection, ConnectionList (+ custom_fields, ai_prompt) ✨ UPDATED v1.13.0
+│   ├── connection.py       # Connection, ConnectionList (+ board_id, custom_fields, ai_prompt) ✨ UPDATED v1.17.0
 │   ├── custom_field.py     # ✨ NEW v1.13.0 - CustomFieldConfig model
 │   ├── dor.py              # DoR templates
-│   └── issue.py            # Issue, Comment, Attachment, WorkLog
+│   ├── issue.py            # Issue, Comment, Attachment, WorkLog
+│   └── sprint.py           # ✨ NEW v1.17.0 - Sprint, Board, SprintSummary models
 ├── config/                  # Configuration management
 │   ├── settings.py         # Settings singleton
 │   └── credentials.py      # Secure credential storage
@@ -378,6 +412,8 @@ budjira/
 | Issue Linking | v1.14.0 | `budjira issue link` |
 | Issue Delete | v1.15.0 | `budjira issue delete` |
 | Workflow Profiles | v1.16.0 | `budjira workflow *` |
+| Sprint Querying | v1.17.0 | `budjira sprint list`, `sprint show` |
+| Workflow Sprint | v1.17.0 | `budjira workflow sprint` |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---
@@ -438,5 +474,5 @@ budjira/
 
 ---
 
-**Letzte Aktualisierung**: 2026-02-23
+**Letzte Aktualisierung**: 2026-02-24
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
