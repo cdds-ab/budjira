@@ -990,3 +990,137 @@ def test_tempo_update_worklog_authentication_error(mock_tempo_connection, mock_t
 
     assert result.exit_code == 1
     assert "Tempo authentication failed" in result.stdout
+
+
+class TestWorkflowPolicyCheck:
+    """Test workflow booking policy enforcement in tempo log (#70)."""
+
+    def _make_mock_settings(self) -> MagicMock:
+        """Create mock settings with a workflow profile."""
+        from budjira.models.workflow import (
+            OverbookingPolicy,
+            ProjectMapping,
+            ShadowTicketStrategy,
+            WorkflowProfile,
+            WorkflowProfileList,
+        )
+
+        profile = WorkflowProfile(
+            name="test-workflow",
+            planning_connection="planning-conn",
+            booking_connection="booking-conn",
+            project_mappings=[
+                ProjectMapping(planning_project="PLAN", booking_project="BOOK"),
+            ],
+            shadow_strategy=ShadowTicketStrategy.SUMMARY_SEARCH,
+            overbooking_policy=OverbookingPolicy.WARN,
+        )
+        mock_settings = MagicMock()
+        mock_settings.workflows = WorkflowProfileList(profiles=[profile])
+        return mock_settings
+
+    def test_blocks_direct_booking_on_planning_connection(
+        self, mock_tempo_connection, mock_tempo_client, mock_jira_client
+    ):
+        """Direct tempo log on planning connection should be blocked."""
+        mock_settings = self._make_mock_settings()
+
+        with (
+            patch("budjira.cli.tempo.get_settings", return_value=mock_settings),
+            patch("budjira.cli.tempo.get_active_connection") as mock_get_conn,
+        ):
+            mock_conn = MagicMock()
+            mock_conn.name = "planning-conn"
+            mock_get_conn.return_value = mock_conn
+
+            result = runner.invoke(app, ["tempo", "log", "PLAN-123", "2h", "--connection", "planning-conn"])
+
+            assert result.exit_code == 1
+            assert "Direct booking is not allowed" in result.stdout
+            assert "workflow book" in result.stdout
+            assert "test-workflow" in result.stdout
+
+    def test_allows_booking_on_non_planning_connection(
+        self, mock_tempo_connection, mock_tempo_client, mock_jira_client
+    ):
+        """Tempo log on a non-planning connection should proceed normally."""
+        mock_settings = self._make_mock_settings()
+        mock_tempo_client.create_worklog.return_value = TempoWorklog(
+            self="https://api.tempo.io/worklogs/1",
+            tempoWorklogId=1,
+            issue=TempoIssue(self="https://api.tempo.io/issues/123", key="OTHER-123"),
+            timeSpentSeconds=7200,
+            startDate=date(2025, 10, 25),
+            createdAt=datetime(2025, 10, 25, 9, 0),
+            updatedAt=datetime(2025, 10, 25, 9, 0),
+            author=TempoAuthor(
+                self="https://api.tempo.io/users/1",
+                accountId="557058:abc",
+                displayName="Test User",
+            ),
+        )
+
+        with patch("budjira.cli.tempo.get_settings", return_value=mock_settings):
+            result = runner.invoke(app, ["tempo", "log", "OTHER-123", "2h"])
+
+            assert result.exit_code == 0
+
+    def test_force_flag_bypasses_policy(self, mock_tempo_connection, mock_tempo_client, mock_jira_client):
+        """--force should bypass the workflow policy check."""
+        mock_settings = self._make_mock_settings()
+        mock_tempo_client.create_worklog.return_value = TempoWorklog(
+            self="https://api.tempo.io/worklogs/1",
+            tempoWorklogId=1,
+            issue=TempoIssue(self="https://api.tempo.io/issues/123", key="PLAN-123"),
+            timeSpentSeconds=7200,
+            startDate=date(2025, 10, 25),
+            createdAt=datetime(2025, 10, 25, 9, 0),
+            updatedAt=datetime(2025, 10, 25, 9, 0),
+            author=TempoAuthor(
+                self="https://api.tempo.io/users/1",
+                accountId="557058:abc",
+                displayName="Test User",
+            ),
+        )
+
+        with (
+            patch("budjira.cli.tempo.get_settings", return_value=mock_settings),
+            patch("budjira.cli.tempo.get_active_connection") as mock_get_conn,
+        ):
+            mock_conn = mock_tempo_connection
+            mock_conn.name = "planning-conn"
+            mock_get_conn.return_value = mock_conn
+
+            result = runner.invoke(
+                app,
+                ["tempo", "log", "PLAN-123", "2h", "--connection", "planning-conn", "--force"],
+            )
+
+            assert result.exit_code == 0
+            mock_tempo_client.create_worklog.assert_called_once()
+
+    def test_no_profiles_allows_booking(self, mock_tempo_connection, mock_tempo_client, mock_jira_client):
+        """When no workflow profiles exist, booking should proceed normally."""
+        from budjira.models.workflow import WorkflowProfileList
+
+        mock_settings = MagicMock()
+        mock_settings.workflows = WorkflowProfileList(profiles=[])
+        mock_tempo_client.create_worklog.return_value = TempoWorklog(
+            self="https://api.tempo.io/worklogs/1",
+            tempoWorklogId=1,
+            issue=TempoIssue(self="https://api.tempo.io/issues/123", key="PLAN-123"),
+            timeSpentSeconds=7200,
+            startDate=date(2025, 10, 25),
+            createdAt=datetime(2025, 10, 25, 9, 0),
+            updatedAt=datetime(2025, 10, 25, 9, 0),
+            author=TempoAuthor(
+                self="https://api.tempo.io/users/1",
+                accountId="557058:abc",
+                displayName="Test User",
+            ),
+        )
+
+        with patch("budjira.cli.tempo.get_settings", return_value=mock_settings):
+            result = runner.invoke(app, ["tempo", "log", "PLAN-123", "2h"])
+
+            assert result.exit_code == 0

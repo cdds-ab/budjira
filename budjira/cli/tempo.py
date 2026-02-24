@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.table import Table
 
 from budjira.config.credentials import CredentialStore
+from budjira.config.settings import get_settings
 from budjira.core.jira_client import JiraClient
 from budjira.tempo.client import TempoClient
 from budjira.utils.connection import get_active_connection
@@ -26,6 +27,58 @@ from budjira.utils.time_parser import parse_time_string
 
 console = Console()
 app = typer.Typer(help="Tempo Timesheets integration commands")
+
+
+def _check_workflow_policy(issue_key: str, connection_name: str | None) -> None:
+    """Check if issue belongs to a workflow profile's planning side.
+
+    If the issue's project key matches a planning project in any workflow profile,
+    block the direct booking and suggest using 'workflow book' instead.
+
+    Args:
+        issue_key: Jira issue key (e.g., PLAN-123)
+        connection_name: Active connection name (if specified)
+
+    Raises:
+        typer.Exit: If booking is blocked by workflow policy
+    """
+    settings = get_settings()
+    profiles = settings.workflows.profiles
+    if not profiles:
+        return
+
+    # Extract project key from issue key
+    parts = issue_key.split("-", 1)
+    if len(parts) != 2:
+        return
+    project_key = parts[0].upper()
+
+    # Resolve active connection name for comparison
+    if connection_name is None:
+        try:
+            active_conn = get_active_connection()
+            connection_name = active_conn.name
+        except BudjiraError:
+            return
+
+    # Check all workflow profiles
+    for profile in profiles:
+        if profile.planning_connection != connection_name:
+            continue
+        for mapping in profile.project_mappings:
+            if mapping.planning_project.upper() == project_key:
+                console.print(
+                    f"[red]⛔[/red] [bold]{issue_key}[/bold] belongs to project "
+                    f"[cyan]{project_key}[/cyan] which is the planning side of "
+                    f"workflow profile [cyan]'{profile.name}'[/cyan]. "
+                    f"Direct booking is not allowed.",
+                )
+                console.print(
+                    f"\n[dim]Use instead:[/dim] "
+                    f"[cyan]budjira workflow book {issue_key} <time> "
+                    f"--profile {profile.name}[/cyan]",
+                )
+                raise typer.Exit(1)
 
 
 def get_tempo_client(connection_name: str | None = None) -> TempoClient:
@@ -92,10 +145,21 @@ def tempo_log_worklog(
             envvar="BUDJIRA_CONNECTION",
         ),
     ] = None,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            "-f",
+            help="Bypass workflow policy check (allow direct booking on planning connection)",
+        ),
+    ] = False,
 ) -> None:
     """Log work to Tempo Timesheets.
 
     Create a worklog entry in Tempo with time tracking and optional billing account.
+
+    If the issue belongs to a workflow profile's planning side, direct booking
+    is blocked. Use 'budjira workflow book' instead, or --force to bypass.
 
     Examples:
 
@@ -107,8 +171,15 @@ def tempo_log_worklog(
 
         # Log work with specific datetime
         budjira tempo log PROJ-123 2h --started "2025-10-24 14:00"
+
+        # Bypass workflow policy
+        budjira tempo log PLAN-123 2h --force
     """
     try:
+        # Check workflow booking policy (unless --force)
+        if not force:
+            _check_workflow_policy(issue_key, connection_name)
+
         # Get active connection
         connection = get_active_connection(connection_name)
 
