@@ -1,6 +1,34 @@
 # CHANGELOG
 
 
+## v1.16.3 (2026-02-24)
+
+### Bug Fixes
+
+- **connect**: Validate authentication in connect test command
+  ([#68](https://github.com/cdds-ab/budjira/pull/68),
+  [`8437b75`](https://github.com/cdds-ab/budjira/commit/8437b75ee51ce288b86677e3eeb64fa7d6f7922d))
+
+Use current_user() instead of server_info() as primary connection check, since server_info() does
+  not require authentication on many Jira instances. Expired or invalid tokens are now correctly
+  detected and reported.
+
+- **workflow**: Handle Tempo API 400 on overbooking check
+  ([#69](https://github.com/cdds-ab/budjira/pull/69),
+  [`1b7b1c6`](https://github.com/cdds-ab/budjira/commit/1b7b1c6aa9b42421fcbb4ced6fb5832bfd0a33d1))
+
+Gracefully handle Tempo API errors when querying existing worklogs for shadow tickets. Falls back to
+  0 spent seconds instead of crashing, allowing the booking to proceed.
+
+### Documentation
+
+- Update project context to v1.16.2
+  ([`7f278f7`](https://github.com/cdds-ab/budjira/commit/7f278f73ad493ad9c2947d5f8448f2c863f0bb49))
+
+Update version, release history, bug fixes (#68, #69), test statistics (672 tests, 85% coverage),
+  and module structure (workflow service).
+
+
 ## v1.16.2 (2026-02-23)
 
 ### Bug Fixes
