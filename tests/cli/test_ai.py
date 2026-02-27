@@ -3,11 +3,17 @@
 # mypy: disable-error-code="arg-type"
 # Pydantic models accept strings for HttpUrl fields during validation
 
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from budjira.cli.main import app
 from budjira.models.connection import Connection, ConnectionList
+from budjira.models.project_metadata import (
+    FieldMetadata,
+    IssueTypeMetadata,
+    ProjectMetadata,
+)
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -249,3 +255,96 @@ Always set the 'affected_system' custom field.
         # Should NOT include project-specific content
         assert "Project-Specific:" not in result.stdout
         assert "This should not appear" not in result.stdout
+
+
+class TestUsagePromptWithMetadata:
+    """Test usage-prompt command with project metadata integration."""
+
+    @patch("budjira.cli.ai.MetadataCache")
+    @patch("budjira.cli.ai.get_settings")
+    def test_usage_prompt_includes_metadata(
+        self,
+        mock_get_settings: MagicMock,
+        mock_cache_class: MagicMock,
+    ) -> None:
+        """Test that --connection includes discovered project metadata."""
+        connection = Connection(
+            name="meta-project",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+        )
+        connection_list = ConnectionList(connections=[connection])
+
+        mock_template = MagicMock()
+        mock_template.render.return_value = "# budjira AI Usage Guide\n\nBase content here."
+
+        mock_settings = MagicMock()
+        mock_settings.connections = connection_list
+        mock_settings.ai_prompt_template = mock_template
+        mock_get_settings.return_value = mock_settings
+
+        # Mock metadata cache
+        metadata = ProjectMetadata(
+            project_key="TEST",
+            project_name="Test Project",
+            issue_types=[
+                IssueTypeMetadata(
+                    id="1",
+                    name="Change Request",
+                    fields=[
+                        FieldMetadata(field_id="summary", name="Summary", required=True),
+                        FieldMetadata(field_id="priority", name="Priority", required=True),
+                    ],
+                ),
+                IssueTypeMetadata(id="2", name="Bug"),
+            ],
+            priorities=["FK1", "FK2", "FK3"],
+            components=["Backend", "Frontend"],
+            fetched_at=datetime.now(tz=timezone.utc),
+        )
+        mock_cache_instance = MagicMock()
+        mock_cache_instance.load.return_value = metadata
+        mock_cache_class.return_value = mock_cache_instance
+
+        result = runner.invoke(app, ["-q", "ai", "usage-prompt", "--connection", "meta-project", "--plain"])
+
+        assert result.exit_code == 0
+        assert "Discovered Project Metadata" in result.stdout
+        assert "Change Request" in result.stdout
+        assert "Summary" in result.stdout
+        assert "FK1" in result.stdout
+        assert "Backend" in result.stdout
+
+    @patch("budjira.cli.ai.MetadataCache")
+    @patch("budjira.cli.ai.get_settings")
+    def test_usage_prompt_without_metadata(
+        self,
+        mock_get_settings: MagicMock,
+        mock_cache_class: MagicMock,
+    ) -> None:
+        """Test that --connection works when no metadata is cached."""
+        connection = Connection(
+            name="no-meta",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+        )
+        connection_list = ConnectionList(connections=[connection])
+
+        mock_template = MagicMock()
+        mock_template.render.return_value = "# budjira AI Usage Guide\n\nBase content here."
+
+        mock_settings = MagicMock()
+        mock_settings.connections = connection_list
+        mock_settings.ai_prompt_template = mock_template
+        mock_get_settings.return_value = mock_settings
+
+        mock_cache_instance = MagicMock()
+        mock_cache_instance.load.return_value = None
+        mock_cache_class.return_value = mock_cache_instance
+
+        result = runner.invoke(app, ["-q", "ai", "usage-prompt", "--connection", "no-meta", "--plain"])
+
+        assert result.exit_code == 0
+        assert "Discovered Project Metadata" not in result.stdout

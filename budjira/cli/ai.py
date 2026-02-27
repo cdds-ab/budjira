@@ -8,6 +8,7 @@ import typer
 from rich.console import Console
 from rich.markdown import Markdown
 
+from budjira.config.metadata_cache import MetadataCache
 from budjira.config.settings import get_settings
 
 if TYPE_CHECKING:
@@ -39,7 +40,53 @@ def _generate_usage_prompt(connection: Connection | None = None) -> str:
     if connection is not None and connection.ai_prompt:
         base_prompt += f"\n\n# Project-Specific: {connection.name}\n\n{connection.ai_prompt}"
 
+    # Append discovered project metadata if available
+    if connection is not None:
+        metadata_section = _generate_metadata_section(connection)
+        if metadata_section:
+            base_prompt += metadata_section
+
     return base_prompt
+
+
+def _generate_metadata_section(connection: Connection) -> str:
+    """Generate markdown section from cached project metadata.
+
+    Args:
+        connection: Connection to load metadata for
+
+    Returns:
+        Markdown string with metadata, or empty string if no metadata
+    """
+    try:
+        settings = get_settings()
+        cache = MetadataCache(settings.cache_dir)
+        metadata = cache.load(connection)
+        if metadata is None:
+            return ""
+
+        lines = [
+            f"\n\n# Discovered Project Metadata: {connection.name} ({metadata.project_key})",
+        ]
+
+        if metadata.issue_types:
+            lines.append("\n## Available Issue Types")
+            for it in metadata.issue_types:
+                required_fields = [f.name for f in it.fields if f.required]
+                if required_fields:
+                    lines.append(f"- {it.name} (required: {', '.join(required_fields)})")
+                else:
+                    lines.append(f"- {it.name}")
+
+        if metadata.priorities:
+            lines.append(f"\n## Priorities\n{', '.join(metadata.priorities)}")
+
+        if metadata.components:
+            lines.append(f"\n## Components\n{', '.join(metadata.components)}")
+
+        return "\n".join(lines)
+    except Exception:
+        return ""
 
 
 @app.command("usage-prompt")

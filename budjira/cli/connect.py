@@ -21,6 +21,38 @@ app = typer.Typer(
 console = Console()
 
 
+def _auto_sync_metadata(connection: Connection) -> None:
+    """Attempt to sync project metadata after connection setup.
+
+    Failure is non-blocking: shows a warning but doesn't prevent connection creation.
+
+    Args:
+        connection: Connection to sync metadata for
+    """
+    try:
+        from budjira.config.metadata_cache import MetadataCache
+        from budjira.core.jira_client import JiraClient
+
+        console.print("\n[dim]Syncing project metadata...[/dim]")
+        client = JiraClient.from_connection(connection)
+        metadata = client.metadata.fetch_project_metadata(connection.project_key)
+
+        settings = get_settings()
+        cache = MetadataCache(settings.cache_dir)
+        cache.save(connection, metadata)
+
+        type_count = len(metadata.issue_types)
+        priority_count = len(metadata.priorities)
+        component_count = len(metadata.components)
+        console.print(
+            f"[green]✓[/green] Project metadata synced: "
+            f"{type_count} issue types, {priority_count} priorities, {component_count} components"
+        )
+    except Exception as e:
+        console.print(f"[yellow]⚠[/yellow] Could not sync project metadata: {e}", style="yellow")
+        console.print("[dim]Run 'budjira project sync' later to fetch metadata.[/dim]")
+
+
 @app.command("add")
 def add_connection(
     name: str = typer.Option(None, "--name", "-n", help="Connection name"),
@@ -113,6 +145,9 @@ def add_connection(
         console.print(f"  URL:          {connection.url}")
         console.print(f"  Email:        {connection.email}")
         console.print(f"  Project:      {connection.project_key}")
+
+        # Auto-sync project metadata
+        _auto_sync_metadata(connection)
 
         console.print("\n[dim]To use this connection:[/dim]")
         console.print(f"[dim]  • For single command: budjira search --connection {name}[/dim]")

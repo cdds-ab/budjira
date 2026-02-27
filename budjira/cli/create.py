@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from budjira.config.metadata_cache import MetadataCache
 from budjira.config.settings import get_settings
 from budjira.core.jira_client import JiraClient
 from budjira.models.issue import IssueType, Priority
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from budjira.models.connection import Connection
     from budjira.models.custom_field import CustomFieldConfig
     from budjira.models.issue import Issue
+    from budjira.models.project_metadata import ProjectMetadata
 
 app = typer.Typer(
     name="create",
@@ -29,6 +31,23 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 console = Console()
+
+
+def _load_project_metadata(connection: Connection) -> ProjectMetadata | None:
+    """Load cached project metadata for a connection.
+
+    Args:
+        connection: Active Jira connection
+
+    Returns:
+        ProjectMetadata if available, None otherwise
+    """
+    try:
+        settings = get_settings()
+        cache = MetadataCache(settings.cache_dir)
+        return cache.load(connection)
+    except Exception:
+        return None
 
 
 def _get_summary_input(interactive: bool, summary: str | None) -> str:
@@ -46,18 +65,26 @@ def _get_summary_input(interactive: bool, summary: str | None) -> str:
     return summary or ""
 
 
-def _get_issue_type_input(interactive: bool, issue_type: str | None) -> str:
+def _get_issue_type_input(interactive: bool, issue_type: str | None, metadata: ProjectMetadata | None = None) -> str:
     """Get issue type from user input.
+
+    Uses discovered project metadata if available, otherwise falls back
+    to hardcoded IssueType enum values.
 
     Args:
         interactive: Whether to prompt interactively
         issue_type: Pre-provided issue type value
+        metadata: Optional cached project metadata
 
     Returns:
         Issue type
     """
     if interactive and issue_type is None:
-        issue_types_str = ", ".join([t.value for t in IssueType])
+        if metadata and metadata.issue_types:
+            type_names = metadata.get_issue_type_names()
+            issue_types_str = ", ".join(type_names)
+        else:
+            issue_types_str = ", ".join([t.value for t in IssueType])
         return str(Prompt.ask(f"Issue type ({issue_types_str})", default="Task"))
     return issue_type or ""
 
@@ -109,19 +136,28 @@ def _get_description_input(
     return None
 
 
-def _get_priority_input(interactive: bool, priority: str | None) -> str | None:
+def _get_priority_input(interactive: bool, priority: str | None, metadata: ProjectMetadata | None = None) -> str | None:
     """Get priority from user input.
+
+    Uses discovered project metadata if available, otherwise falls back
+    to hardcoded Priority enum values.
 
     Args:
         interactive: Whether to prompt interactively
         priority: Pre-provided priority value
+        metadata: Optional cached project metadata
 
     Returns:
         Priority or None
     """
     if interactive and priority is None and Confirm.ask("Set priority?", default=False):
-        priorities_str = ", ".join([p.value for p in Priority])
-        return str(Prompt.ask(f"Priority ({priorities_str})", default="Medium"))
+        if metadata and metadata.priorities:
+            priorities_str = ", ".join(metadata.priorities)
+            default = metadata.priorities[0] if metadata.priorities else "Medium"
+        else:
+            priorities_str = ", ".join([p.value for p in Priority])
+            default = "Medium"
+        return str(Prompt.ask(f"Priority ({priorities_str})", default=default))
     return priority
 
 
@@ -510,7 +546,7 @@ def issue(
         None,
         "--type",
         "-t",
-        help=f"Issue type ({', '.join([t.value for t in IssueType])})",
+        help=f"Issue type (uses project metadata if available, otherwise: {', '.join([t.value for t in IssueType])})",
     ),
     description: str = typer.Option(
         None,
@@ -527,7 +563,8 @@ def issue(
     priority: str = typer.Option(
         None,
         "--priority",
-        help=f"Priority level ({', '.join([p.value for p in Priority])})",
+        help="Priority level (uses project metadata if available, otherwise: "
+        f"{', '.join([p.value for p in Priority])})",
     ),
     assignee: str = typer.Option(
         None,
@@ -616,11 +653,14 @@ def issue(
         project_key = project or active_connection.project_key
         custom_field_configs = active_connection.custom_fields
 
+        # Load project metadata for discovered types/priorities
+        project_metadata = _load_project_metadata(active_connection)
+
         # Gather inputs (interactive or command-line provided)
         summary = _get_summary_input(interactive, summary)
-        issue_type = _get_issue_type_input(interactive, issue_type)
+        issue_type = _get_issue_type_input(interactive, issue_type, project_metadata)
         description = _get_description_input(interactive, description, issue_type, skip_dor, settings)  # type: ignore[assignment]
-        priority = _get_priority_input(interactive, priority)  # type: ignore[assignment]
+        priority = _get_priority_input(interactive, priority, project_metadata)  # type: ignore[assignment]
         assignee = _get_assignee_input(interactive, assignee)  # type: ignore[assignment]
         labels = _get_labels_input(interactive, labels)
         epic = _get_epic_input(interactive, epic)  # type: ignore[assignment]

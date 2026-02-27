@@ -14,6 +14,7 @@ from budjira.cli import (
     dor,
     epic,
     issue,
+    project,
     search,
     show,
     sprint,
@@ -47,6 +48,7 @@ app.add_typer(create.app, name="create")
 app.add_typer(dor.app, name="dor")
 app.add_typer(epic.app, name="epic")
 app.add_typer(issue.app, name="issue")
+app.add_typer(project.app, name="project")
 app.add_typer(search.app, name="search")
 app.add_typer(sprint.app, name="sprint")
 app.add_typer(tempo.app, name="tempo")

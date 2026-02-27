@@ -1406,3 +1406,85 @@ class TestCreateWithCustomFields:
         assert call_kwargs["labels"] == ["urgent"]
         assert call_kwargs["customfield_10001"] == {"value": "Infrastructure"}
         assert "timetracking" in call_kwargs
+
+
+class TestCreateWithProjectMetadata:
+    """Test create command with project metadata integration."""
+
+    @patch("budjira.cli.create._load_project_metadata")
+    @patch("budjira.cli.create.Prompt")
+    @patch("budjira.cli.create.Confirm")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_interactive_shows_discovered_issue_types(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_confirm: Mock,
+        mock_prompt: Mock,
+        mock_load_metadata: Mock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test that interactive mode shows discovered issue types from metadata."""
+        from datetime import datetime, timezone
+
+        from budjira.models.project_metadata import IssueTypeMetadata, ProjectMetadata
+
+        mock_get_active_connection.return_value = mock_connection
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        # Provide project metadata with custom types
+        mock_load_metadata.return_value = ProjectMetadata(
+            project_key="TEST",
+            project_name="Test",
+            issue_types=[
+                IssueTypeMetadata(id="1", name="Change Request"),
+                IssueTypeMetadata(id="2", name="Service Request"),
+            ],
+            priorities=["FK1", "FK2", "FK3"],
+            fetched_at=datetime.now(tz=timezone.utc),
+        )
+
+        # Mock prompts
+        mock_prompt.ask.side_effect = ["New issue", "Change Request"]
+        mock_confirm.ask.return_value = False
+
+        result = runner.invoke(app, [])
+
+        assert result.exit_code == 0
+        # Verify Prompt.ask was called with discovered types
+        type_prompt_call = mock_prompt.ask.call_args_list[1]
+        assert "Change Request" in type_prompt_call[0][0]
+        assert "Service Request" in type_prompt_call[0][0]
+
+    @patch("budjira.cli.create._load_project_metadata")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_non_interactive_works_without_metadata(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_load_metadata: Mock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test that non-interactive mode works when no metadata is cached."""
+        mock_get_active_connection.return_value = mock_connection
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        mock_load_metadata.return_value = None
+
+        result = runner.invoke(
+            app,
+            ["New bug", "--type", "Bug", "--no-interactive"],
+        )
+
+        assert result.exit_code == 0
+        assert "Issue created successfully" in result.stdout
