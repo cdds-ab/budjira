@@ -1,6 +1,30 @@
 # CHANGELOG
 
 
+## v1.19.0 (2026-02-27)
+
+### Documentation
+
+- Update AI usage prompt for cross-instance ID resolution
+  ([`8b3828e`](https://github.com/cdds-ab/budjira/commit/8b3828e04c751d1a424031111ddf7a9d9129d700))
+
+### Features
+
+- **project**: Auto-discover Jira project metadata
+  ([#73](https://github.com/cdds-ab/budjira/pull/73),
+  [`19f8542`](https://github.com/cdds-ab/budjira/commit/19f854219999a41d7db0683bbbc2c985e508b49e))
+
+Fetch issue types, priorities, and components from the Jira API and cache them locally as JSON. This
+  allows budjira to work with custom project configurations (e.g., "Change Request", "FK1-FK4")
+  instead of relying on hardcoded enums.
+
+- Add ProjectMetadata models and JSON-based MetadataCache - Add `budjira project sync/show/clear`
+  CLI commands - Extend MetadataService with fetch_project_metadata (createmeta API) - Auto-sync
+  metadata on `connect add` (non-blocking) - Use cached metadata in `create issue` for type/priority
+  selection - Enrich AI usage prompt with discovered project metadata - Graceful degradation: falls
+  back to hardcoded enums when no cache
+
+
 ## v1.18.1 (2026-02-27)
 
 ### Bug Fixes
