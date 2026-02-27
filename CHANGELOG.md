@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v1.18.1 (2026-02-27)
+
+### Bug Fixes
+
+- **workflow**: Resolve cross-instance Tempo API issue ID correctly
+  ([#72](https://github.com/cdds-ab/budjira/pull/72),
+  [`8ba3098`](https://github.com/cdds-ab/budjira/commit/8ba309868bc24ff186eb8e82b0df8655692aa6b8))
+
+Extract _get_booking_issue_id helper for consistent ID resolution from the booking Jira instance.
+  Guard against None issue ID in tempo update-worklog by falling back to Jira API lookup. Add debug
+  logging to Tempo client error handler and validate Tempo-returned IDs after worklog creation. Add
+  id field to Issue model.
+
+
 ## v1.18.0 (2026-02-24)
 
 ### Features
