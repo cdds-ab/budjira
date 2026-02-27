@@ -1057,6 +1057,7 @@ budjira tempo update-worklog WORKLOG_ID [OPTIONS]
 - **Confirmation preview**: Shows before/after comparison (unless --force)
 - **Preserves worklog ID**: No need to delete and recreate
 - **Efficient**: Single API call instead of two
+- **Automatic ID resolution**: If Tempo returns a worklog without a valid issue ID, budjira resolves it from the Jira API automatically
 
 **Examples:**
 
@@ -1142,6 +1143,8 @@ Workflow profiles connect two Jira instances:
 - **Booking instance**: Where time is logged via Tempo (e.g., "K" project with shadow tickets)
 
 Shadow tickets in the booking instance mirror planning tickets (e.g., EK-123 has a shadow K-456 with "EK-123" in its summary).
+
+**Cross-instance ID resolution** (v1.19.0): Issue IDs are always resolved from the booking Jira instance to ensure Tempo API calls use the correct internal ID. Mismatches between Tempo-stored and Jira-resolved IDs are logged as warnings.
 
 ### Setup a Workflow Profile
 

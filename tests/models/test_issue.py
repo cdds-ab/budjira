@@ -127,6 +127,29 @@ class TestIssue:
         assert issue.status == "To Do"
         assert issue.priority == "High"
 
+    def test_create_issue_with_id(self) -> None:
+        """Test issue creation with internal Jira ID."""
+        issue = Issue(
+            id=12345,
+            key="PROJ-123",
+            summary="Test issue with ID",
+            issue_type="Bug",
+            status="To Do",
+            project_key="PROJ",
+        )
+        assert issue.id == 12345
+
+    def test_create_issue_id_defaults_to_none(self) -> None:
+        """Test that issue id defaults to None."""
+        issue = Issue(
+            key="PROJ-123",
+            summary="Test issue",
+            issue_type="Bug",
+            status="To Do",
+            project_key="PROJ",
+        )
+        assert issue.id is None
+
     def test_create_minimal_issue(self) -> None:
         """Test issue with minimal required fields."""
         issue = Issue(
@@ -142,6 +165,46 @@ class TestIssue:
         assert issue.assignee is None
         assert issue.labels == []
         assert issue.components == []
+
+    def test_from_jira_issue_populates_id(self) -> None:
+        """Test that from_jira_issue populates internal Jira ID."""
+        jira_issue = MagicMock()
+        jira_issue.id = "67890"
+        jira_issue.key = "TEST-789"
+        jira_issue.fields.summary = "Test"
+        jira_issue.fields.issuetype.name = "Task"
+        jira_issue.fields.status.name = "Open"
+        jira_issue.fields.assignee = None
+        jira_issue.fields.reporter = None
+        jira_issue.fields.priority = None
+        jira_issue.fields.created = None
+        jira_issue.fields.updated = None
+        jira_issue.fields.labels = []
+        jira_issue.fields.components = []
+        del jira_issue.fields.description
+
+        issue = Issue.from_jira_issue(jira_issue)
+        assert issue.id == 67890
+
+    def test_from_jira_issue_id_none_when_missing(self) -> None:
+        """Test that from_jira_issue handles missing id gracefully."""
+        jira_issue = MagicMock()
+        jira_issue.id = None
+        jira_issue.key = "TEST-789"
+        jira_issue.fields.summary = "Test"
+        jira_issue.fields.issuetype.name = "Task"
+        jira_issue.fields.status.name = "Open"
+        jira_issue.fields.assignee = None
+        jira_issue.fields.reporter = None
+        jira_issue.fields.priority = None
+        jira_issue.fields.created = None
+        jira_issue.fields.updated = None
+        jira_issue.fields.labels = []
+        jira_issue.fields.components = []
+        del jira_issue.fields.description
+
+        issue = Issue.from_jira_issue(jira_issue)
+        assert issue.id is None
 
     def test_from_jira_issue(self) -> None:
         """Test creating Issue from jira library issue object."""

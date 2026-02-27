@@ -533,11 +533,12 @@ budjira tempo accounts
 - ✅ Full Tempo Cloud API support
 - ✅ Worklog creation with time tracking
 - ✅ Worklog listing with filters
-- ✅ Worklog updates (time, date, comment)
+- ✅ Worklog updates (time, date, comment) with automatic issue ID resolution
 - ✅ Worklog deletion
 - ✅ Tempo Accounts listing for billing
 - ✅ Automatic connection detection
 - ✅ Secure token storage
+- ✅ Cross-instance workflow support (planning + booking Jira with Tempo)
 
 **When to use Tempo vs. Standard Jira:**
 - Use `budjira tempo` commands when your organization uses Tempo for time tracking

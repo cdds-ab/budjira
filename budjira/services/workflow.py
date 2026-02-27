@@ -133,6 +133,38 @@ class WorkflowService:
             f"Configured mappings: {available or '(none)'}"
         )
 
+    def _get_booking_issue_id(self, shadow_key: str) -> int:
+        """Fetch the internal Jira issue ID from the booking instance.
+
+        Validates the response to ensure we got the expected issue.
+
+        Args:
+            shadow_key: Issue key on the booking instance (e.g., K-456)
+
+        Returns:
+            Internal numeric Jira issue ID
+
+        Raises:
+            JiraAPIError: If the issue cannot be fetched
+        """
+        shadow_issue = self.booking_jira.client.issue(shadow_key)
+        shadow_issue_id = int(shadow_issue.id)
+        if hasattr(shadow_issue, "key") and shadow_issue.key != shadow_key:
+            logger.warning(
+                "Requested %s but got %s (ID: %d) from %s",
+                shadow_key,
+                shadow_issue.key,
+                shadow_issue_id,
+                self.booking_jira.connection.url,
+            )
+        logger.debug(
+            "Resolved %s → internal ID %d on %s",
+            shadow_key,
+            shadow_issue_id,
+            self.booking_jira.connection.url,
+        )
+        return shadow_issue_id
+
     def resolve_shadow_ticket(self, planning_issue_key: str) -> str:
         """Find the shadow ticket in the booking instance.
 
@@ -221,17 +253,18 @@ class WorkflowService:
             )
 
         # Fetch Tempo worklogs for shadow ticket
-        shadow_issue = self.booking_jira.client.issue(shadow_key)
-        shadow_issue_id = int(shadow_issue.id)
+        shadow_issue_id = self._get_booking_issue_id(shadow_key)
 
         try:
             worklogs = self.tempo_client.get_worklogs(issue_id=shadow_issue_id, limit=1000)
             spent_seconds = sum(w.timeSpentSeconds for w in worklogs)
-        except JiraAPIError:
+        except JiraAPIError as e:
             logger.warning(
-                "Could not fetch Tempo worklogs for %s (ID: %d), assuming 0 spent",
+                "Could not fetch Tempo worklogs for %s (ID: %d) on %s: %s",
                 shadow_key,
                 shadow_issue_id,
+                self.booking_jira.connection.url,
+                e,
             )
             spent_seconds = 0
 
@@ -379,17 +412,18 @@ class WorkflowService:
         estimate_seconds = planning_issue.time_original_estimate
 
         # Fetch current Tempo spent on shadow
-        shadow_issue = self.booking_jira.client.issue(shadow_key)
-        shadow_issue_id = int(shadow_issue.id)
+        shadow_issue_id = self._get_booking_issue_id(shadow_key)
 
         try:
             worklogs = self.tempo_client.get_worklogs(issue_id=shadow_issue_id, limit=1000)
             spent_seconds = sum(w.timeSpentSeconds for w in worklogs)
-        except JiraAPIError:
+        except JiraAPIError as e:
             logger.warning(
-                "Could not fetch Tempo worklogs for %s (ID: %d), assuming 0 spent",
+                "Could not fetch Tempo worklogs for %s (ID: %d) on %s: %s",
                 shadow_key,
                 shadow_issue_id,
+                self.booking_jira.connection.url,
+                e,
             )
             spent_seconds = 0
 
@@ -427,6 +461,15 @@ class WorkflowService:
             author_account_id=author_account_id,
             description=comment,
         )
+
+        # Validate Tempo-returned issue ID matches what we sent
+        if worklog.issue.id is not None and worklog.issue.id != shadow_issue_id:
+            logger.warning(
+                "Tempo stored issue ID %d but we sent %d for %s — subsequent queries may fail",
+                worklog.issue.id,
+                shadow_issue_id,
+                shadow_key,
+            )
 
         console.print(
             f"[green]Logged {time_spent} to {shadow_key} via Tempo (Worklog ID: {worklog.tempoWorklogId})[/green]"

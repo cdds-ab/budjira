@@ -121,6 +121,15 @@ class TempoClient:
                     error_msg = error_data.get("message", str(e))
                 except ValueError:
                     error_msg = str(e)
+                logger.debug(
+                    "Tempo API %s %s failed (%d): %s | params=%s body=%s",
+                    method,
+                    endpoint,
+                    e.response.status_code,
+                    error_msg,
+                    params,
+                    json_data,
+                )
                 raise JiraAPIError(f"Tempo API error: {error_msg}") from e
         except requests.exceptions.RequestException as e:
             raise JiraAPIError(f"Failed to connect to Tempo API: {e}") from e

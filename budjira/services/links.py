@@ -97,7 +97,7 @@ class LinkService(BaseJiraService):
         link_types = self.get_link_types()
         if link_type not in link_types:
             available = ", ".join(link_types.keys())
-            raise ValueError(f"Invalid link type '{link_type}'. " f"Available types: {available}")
+            raise ValueError(f"Invalid link type '{link_type}'. Available types: {available}")
 
         # Prepare link data
         link_data: dict[str, Any] = {

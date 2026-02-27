@@ -573,6 +573,17 @@ def tempo_update_worklog(
         # Fetch current worklog to get existing values
         current_worklog = tempo_client.get_worklog(worklog_id)
 
+        # Resolve issue ID: prefer Jira API lookup over Tempo's stored ID
+        issue_id = current_worklog.issue.id
+        if issue_id is None and current_worklog.issue.key:
+            connection = get_active_connection(connection_name)
+            jira_client = JiraClient.from_connection(connection)
+            jira_issue = jira_client.client.issue(current_worklog.issue.key)
+            issue_id = int(jira_issue.id)
+        elif issue_id is None:
+            console.print("[red]Error:[/red] Worklog has no associated issue. Cannot update.")
+            raise typer.Exit(1)
+
         # Prepare update data (only changed fields)
         update_data: dict[str, str | int] = {}
 
@@ -644,7 +655,7 @@ def tempo_update_worklog(
         # Perform update (always preserve issueId and authorAccountId)
         updated_worklog = tempo_client.update_worklog(
             worklog_id=worklog_id,
-            issue_id=current_worklog.issue.id,
+            issue_id=issue_id,
             author_account_id=current_worklog.author.accountId,
             **update_data,  # type: ignore[arg-type]
         )

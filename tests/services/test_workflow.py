@@ -65,6 +65,56 @@ class TestFormatSeconds:
         assert _format_seconds(0) == "0m"
 
 
+class TestGetBookingIssueId:
+    """Test _get_booking_issue_id helper."""
+
+    def test_resolves_issue_id(self) -> None:
+        booking_jira = MagicMock()
+        shadow_jira_issue = MagicMock()
+        shadow_jira_issue.id = "67890"
+        shadow_jira_issue.key = "K-456"
+        booking_jira.client.issue.return_value = shadow_jira_issue
+
+        service = _make_service(booking_jira=booking_jira)
+        result = service._get_booking_issue_id("K-456")
+
+        assert result == 67890
+        booking_jira.client.issue.assert_called_once_with("K-456")
+
+    def test_warns_on_key_mismatch(self, caplog: pytest.LogCaptureFixture) -> None:
+        booking_jira = MagicMock()
+        booking_jira.connection.url = "https://booking.atlassian.net"
+        shadow_jira_issue = MagicMock()
+        shadow_jira_issue.id = "67890"
+        shadow_jira_issue.key = "K-999"  # Different from what we asked
+        booking_jira.client.issue.return_value = shadow_jira_issue
+
+        service = _make_service(booking_jira=booking_jira)
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = service._get_booking_issue_id("K-456")
+
+        assert result == 67890
+        assert "Requested K-456 but got K-999" in caplog.text
+
+    def test_logs_connection_url(self, caplog: pytest.LogCaptureFixture) -> None:
+        booking_jira = MagicMock()
+        booking_jira.connection.url = "https://booking.atlassian.net"
+        shadow_jira_issue = MagicMock()
+        shadow_jira_issue.id = "67890"
+        shadow_jira_issue.key = "K-456"
+        booking_jira.client.issue.return_value = shadow_jira_issue
+
+        service = _make_service(booking_jira=booking_jira)
+        import logging
+
+        with caplog.at_level(logging.DEBUG):
+            service._get_booking_issue_id("K-456")
+
+        assert "https://booking.atlassian.net" in caplog.text
+
+
 class TestGetBookingProject:
     """Test _get_booking_project."""
 
@@ -201,6 +251,7 @@ class TestGetBookingStatus:
         booking_jira.search_issues.return_value = [shadow_result]
         shadow_jira_issue = MagicMock()
         shadow_jira_issue.id = "67890"
+        shadow_jira_issue.key = "K-456"
         booking_jira.client.issue.return_value = shadow_jira_issue
 
         tempo_client = MagicMock()
@@ -216,6 +267,40 @@ class TestGetBookingStatus:
         assert status.spent_seconds == 0
         assert status.booking_issue_key == "K-456"
         assert status.estimate_seconds == 28800
+
+    def test_tempo_api_error_logs_connection_url(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Tempo API error warning should include connection URL (#72)."""
+        import logging
+
+        planning_jira = MagicMock()
+        planning_issue = MagicMock()
+        planning_issue.time_original_estimate = 28800
+        planning_issue.summary = "Task"
+        planning_jira.get_issue.return_value = planning_issue
+
+        booking_jira = MagicMock()
+        booking_jira.connection.url = "https://booking.atlassian.net"
+        shadow_result = MagicMock()
+        shadow_result.key = "K-456"
+        booking_jira.search_issues.return_value = [shadow_result]
+        shadow_jira_issue = MagicMock()
+        shadow_jira_issue.id = "67890"
+        shadow_jira_issue.key = "K-456"
+        booking_jira.client.issue.return_value = shadow_jira_issue
+
+        tempo_client = MagicMock()
+        tempo_client.get_worklogs.side_effect = JiraAPIError("400 Bad Request")
+
+        service = _make_service(
+            planning_jira=planning_jira,
+            booking_jira=booking_jira,
+            tempo_client=tempo_client,
+        )
+        with caplog.at_level(logging.WARNING):
+            service.get_booking_status("EK-123")
+
+        assert "https://booking.atlassian.net" in caplog.text
+        assert "400 Bad Request" in caplog.text
 
     def test_overbooked_status(self) -> None:
         planning_jira = MagicMock()
@@ -412,6 +497,7 @@ class TestBookTime:
         booking_jira.search_issues.return_value = [shadow_result]
         shadow_jira_issue = MagicMock()
         shadow_jira_issue.id = "67890"
+        shadow_jira_issue.key = "K-456"
         booking_jira.client.issue.return_value = shadow_jira_issue
         booking_jira.client.myself.return_value = {"accountId": "abc123"}
 
@@ -448,6 +534,7 @@ class TestBookTime:
         booking_jira.search_issues.return_value = [shadow_result]
         shadow_jira_issue = MagicMock()
         shadow_jira_issue.id = "67890"
+        shadow_jira_issue.key = "K-456"
         booking_jira.client.issue.return_value = shadow_jira_issue
         booking_jira.client.myself.return_value = {"accountId": "abc123"}
 
@@ -478,6 +565,43 @@ class TestBookTime:
         with pytest.raises(ShadowTicketNotFoundError):
             service.book_time("EK-999", "1h")
 
+    def test_booking_warns_on_id_mismatch_after_create(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Tempo-returned issue ID should be validated against what we sent (#72)."""
+        import logging
+
+        planning_jira = MagicMock()
+        planning_issue = MagicMock()
+        planning_issue.time_original_estimate = 28800
+        planning_issue.summary = "Fix bug"
+        planning_jira.get_issue.return_value = planning_issue
+
+        booking_jira = MagicMock()
+        shadow_result = MagicMock()
+        shadow_result.key = "K-456"
+        booking_jira.search_issues.return_value = [shadow_result]
+        shadow_jira_issue = MagicMock()
+        shadow_jira_issue.id = "67890"
+        shadow_jira_issue.key = "K-456"
+        booking_jira.client.issue.return_value = shadow_jira_issue
+        booking_jira.client.myself.return_value = {"accountId": "abc123"}
+
+        tempo_client = MagicMock()
+        tempo_client.get_worklogs.return_value = []
+        mock_worklog = MagicMock()
+        mock_worklog.tempoWorklogId = 12345
+        mock_worklog.issue.id = 99999  # Different from what we sent (67890)
+        tempo_client.create_worklog.return_value = mock_worklog
+
+        service = _make_service(
+            planning_jira=planning_jira,
+            booking_jira=booking_jira,
+            tempo_client=tempo_client,
+        )
+        with caplog.at_level(logging.WARNING):
+            service.book_time("EK-123", "2h")
+
+        assert "Tempo stored issue ID 99999 but we sent 67890" in caplog.text
+
     def test_booking_succeeds_on_tempo_worklog_query_error(self) -> None:
         """Tempo API 400 on overbooking check should not block booking (regression #69)."""
         planning_jira = MagicMock()
@@ -492,6 +616,7 @@ class TestBookTime:
         booking_jira.search_issues.return_value = [shadow_result]
         shadow_jira_issue = MagicMock()
         shadow_jira_issue.id = "67890"
+        shadow_jira_issue.key = "K-456"
         booking_jira.client.issue.return_value = shadow_jira_issue
         booking_jira.client.myself.return_value = {"accountId": "abc123"}
 
@@ -499,6 +624,7 @@ class TestBookTime:
         tempo_client.get_worklogs.side_effect = JiraAPIError("Tempo API error: 400 Bad Request")
         mock_worklog = MagicMock()
         mock_worklog.tempoWorklogId = 555
+        mock_worklog.issue.id = 67890
         tempo_client.create_worklog.return_value = mock_worklog
 
         service = _make_service(

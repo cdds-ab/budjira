@@ -224,13 +224,11 @@ class IssueService(BaseJiraService):
         except JIRAError as e:
             if e.status_code == 404:
                 raise InvalidIssueError(
-                    f"Issue '{issue_key}' not found. "
-                    f"Check that the issue exists and you have permission to view it."
+                    f"Issue '{issue_key}' not found. Check that the issue exists and you have permission to view it."
                 ) from e
             elif e.status_code == 403:
                 raise PermissionError(
-                    f"Permission denied deleting issue '{issue_key}'. "
-                    f"You need the 'Delete Issues' permission in Jira."
+                    f"Permission denied deleting issue '{issue_key}'. You need the 'Delete Issues' permission in Jira."
                 ) from e
             else:
                 self._handle_jira_error(e, "Delete issue", issue_key=issue_key)

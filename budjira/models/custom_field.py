@@ -70,7 +70,7 @@ class CustomFieldConfig(BaseModel):
         """Validate that field_id matches Jira custom field pattern."""
         if not CUSTOM_FIELD_ID_PATTERN.match(v):
             raise ValueError(
-                f"Invalid field_id '{v}'. Must match pattern 'customfield_<number>' " f"(e.g., 'customfield_10001')"
+                f"Invalid field_id '{v}'. Must match pattern 'customfield_<number>' (e.g., 'customfield_10001')"
             )
         return v
 

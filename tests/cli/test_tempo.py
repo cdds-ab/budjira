@@ -992,6 +992,76 @@ def test_tempo_update_worklog_authentication_error(mock_tempo_connection, mock_t
     assert "Tempo authentication failed" in result.stdout
 
 
+def test_tempo_update_worklog_null_issue_id_resolves_from_jira(
+    mock_tempo_connection, mock_tempo_client, mock_jira_client
+):
+    """Test update-worklog resolves issue ID from Jira when Tempo returns None (#72)."""
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    # Mock current worklog with None issue.id but valid key
+    current_worklog = TempoWorklog(
+        self="https://api.tempo.io/worklogs/642",
+        tempoWorklogId=642,
+        issue=TempoIssue(self="https://api.tempo.io/issues/123", key="TEST-123", id=None),
+        timeSpentSeconds=7200,
+        startDate=date(2025, 11, 2),
+        startTime="09:00:00",
+        description="Test work",
+        createdAt=datetime(2025, 11, 2, 9, 0),
+        updatedAt=datetime(2025, 11, 2, 9, 0),
+        author=TempoAuthor(self="https://api.tempo.io/users/1", accountId="557058:abc123"),
+    )
+
+    updated_worklog = current_worklog.model_copy(update={"timeSpentSeconds": 3600})
+
+    mock_tempo_client.get_worklog.return_value = current_worklog
+    mock_tempo_client.update_worklog.return_value = updated_worklog
+
+    # Mock Jira API issue() call for ID resolution
+    mock_issue = MagicMock()
+    mock_issue.id = "12345"
+    mock_issue.key = "TEST-123"
+    mock_jira_client.from_connection.return_value.client.issue.return_value = mock_issue
+
+    result = runner.invoke(app, ["tempo", "update-worklog", "642", "--time-spent", "1h", "--force"])
+
+    assert result.exit_code == 0
+    assert "Updated Tempo worklog 642" in result.stdout
+
+    # Verify update was called with the resolved issue_id
+    mock_tempo_client.update_worklog.assert_called_once()
+    call_kwargs = mock_tempo_client.update_worklog.call_args[1]
+    assert call_kwargs["issue_id"] == 12345
+
+
+def test_tempo_update_worklog_null_issue_id_and_no_key(mock_tempo_connection, mock_tempo_client):
+    """Test update-worklog fails gracefully when both issue.id and issue.key are None (#72)."""
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    # Mock current worklog with None issue.id AND None issue.key
+    current_worklog = TempoWorklog(
+        self="https://api.tempo.io/worklogs/642",
+        tempoWorklogId=642,
+        issue=TempoIssue(self="https://api.tempo.io/issues/123", key=None, id=None),
+        timeSpentSeconds=7200,
+        startDate=date(2025, 11, 2),
+        startTime="09:00:00",
+        createdAt=datetime(2025, 11, 2, 9, 0),
+        updatedAt=datetime(2025, 11, 2, 9, 0),
+        author=TempoAuthor(self="https://api.tempo.io/users/1", accountId="557058:abc123"),
+    )
+
+    mock_tempo_client.get_worklog.return_value = current_worklog
+
+    result = runner.invoke(app, ["tempo", "update-worklog", "642", "--time-spent", "1h", "--force"])
+
+    assert result.exit_code == 1
+    assert "no associated issue" in result.stdout
+
+    # Verify update was NOT called
+    mock_tempo_client.update_worklog.assert_not_called()
+
+
 class TestWorkflowPolicyCheck:
     """Test workflow booking policy enforcement in tempo log (#70)."""
 

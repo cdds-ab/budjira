@@ -76,6 +76,7 @@ class IssueLink(BaseModel):
 class Issue(BaseModel):
     """Jira issue model."""
 
+    id: int | None = Field(default=None, description="Internal Jira issue ID")
     key: str = Field(..., description="Issue key (e.g., PROJ-123)")
     summary: str = Field(..., description="Issue summary/title")
     description: str | None = Field(default=None, description="Issue description")
@@ -141,7 +142,9 @@ class Issue(BaseModel):
         Returns:
             Dictionary with basic field values
         """
+        issue_id = int(jira_issue.id) if hasattr(jira_issue, "id") and jira_issue.id is not None else None
         return {
+            "id": issue_id,
             "key": jira_issue.key,
             "summary": fields.summary,
             "description": fields.description if hasattr(fields, "description") else None,
