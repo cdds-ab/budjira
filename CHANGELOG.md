@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v1.19.1 (2026-03-08)
+
+### Refactoring
+
+- **ci**: Use org-wide reusable issue sanitizer workflow
+  ([`03f50b7`](https://github.com/cdds-ab/budjira/commit/03f50b71397021019471d1108fb4d853f982228b))
+
+Replace inline sanitizer with caller to cdds-ab/.github reusable workflow. Centralizes sensitive
+  data patterns and removes cleartext names from this repository.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v1.19.0 (2026-02-27)
 
 ### Documentation
