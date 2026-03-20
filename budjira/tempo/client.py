@@ -219,7 +219,7 @@ class TempoClient:
         if to_date:
             params["to"] = to_date.isoformat()
         if issue_id:
-            params["issue"] = issue_id
+            params["issueId"] = issue_id
         if project_key:
             params["project"] = project_key
         if account_id:

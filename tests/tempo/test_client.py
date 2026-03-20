@@ -174,7 +174,7 @@ def test_get_worklogs_with_filters(mock_request, tempo_client):
 
     call_kwargs = mock_request.call_args[1]
     params = call_kwargs["params"]
-    assert params["issue"] == 12345
+    assert params["issueId"] == 12345
     assert params["project"] == "PROJ"
     assert params["accountId"] == "557058:abc"
     assert params["limit"] == 100
