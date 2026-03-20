@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v1.19.2 (2026-03-20)
+
+### Bug Fixes
+
+- **tempo**: Use correct query parameter 'issueId' for GET /worklogs
+  ([#76](https://github.com/cdds-ab/budjira/pull/76),
+  [`eade6a9`](https://github.com/cdds-ab/budjira/commit/eade6a9e6688837a7811b739bcc3e85db701c0a3))
+
+Tempo API v4 expects 'issueId' (camelCase), not 'issue'. The wrong parameter caused 400 errors and
+  broke overbooking detection.
+
+
 ## v1.19.1 (2026-03-08)
 
 ### Refactoring
