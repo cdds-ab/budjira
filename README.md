@@ -432,8 +432,12 @@ budjira worklog add PROJ-123 1h30m --comment "Code review"
 budjira worklog add PROJ-123 3h --started "2025-10-24 14:00" --comment "Implemented feature"
 budjira worklog add PROJ-123 2h --started "yesterday" --comment "Bug fixing"
 
-# List all worklogs for an issue
+# List all worklogs for an issue (shows worklog IDs)
 budjira worklog list PROJ-123
+
+# Delete a worklog entry
+budjira worklog delete PROJ-123 12345
+budjira worklog delete PROJ-123 12345 --force   # Skip confirmation
 
 # Set time estimates when creating issues
 budjira create issue "Add login feature" \

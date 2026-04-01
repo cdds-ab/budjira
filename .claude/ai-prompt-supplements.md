@@ -105,15 +105,21 @@ budjira worklog add PROJ-123 2h --comment "Bug fixing"
 # OR for Tempo users
 budjira tempo log PROJ-123 2h --comment "Bug fixing"
 
-# View logged time
+# View logged time (shows worklog IDs)
 budjira worklog list PROJ-123    # Standard Jira
 budjira tempo worklogs PROJ-123   # Tempo
+
+# Delete wrong worklog entry
+budjira worklog delete PROJ-123 12345         # Standard Jira (with confirmation)
+budjira worklog delete PROJ-123 12345 --force # Standard Jira (skip confirmation)
+budjira tempo delete-worklog 12345 --force    # Tempo
 ```
 
 **When to use:**
 - Daily time logging
 - End of day time tracking
 - Tracking time across multiple issues
+- Correcting accidentally logged worklogs
 
 ### 8. Delete Issues (Cleanup)
 ```bash
