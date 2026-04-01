@@ -260,6 +260,154 @@ class TestWorklogAddCommand:
         mock_get_conn.assert_called_once_with("my-connection")
 
 
+class TestWorklogDeleteCommand:
+    """Tests for 'budjira worklog delete' command."""
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_delete_worklog_with_force(
+        self,
+        mock_get_conn,
+        mock_jira_client_class,
+        mock_connection,
+    ):
+        """Test deleting worklog with --force flag."""
+        mock_get_conn.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["worklog", "delete", "TEST-123", "10001", "--force"],
+        )
+
+        assert result.exit_code == 0
+        assert "Deleted worklog 10001 from TEST-123" in result.stdout
+        mock_client.delete_worklog.assert_called_once_with("TEST-123", "10001")
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_delete_worklog_with_confirmation(
+        self,
+        mock_get_conn,
+        mock_jira_client_class,
+        mock_connection,
+    ):
+        """Test deleting worklog with confirmation prompt."""
+        mock_get_conn.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.get_worklogs.return_value = [
+            {
+                "id": "10001",
+                "author": "John Doe",
+                "timeSpent": "2h",
+                "comment": "Test work",
+            },
+        ]
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["worklog", "delete", "TEST-123", "10001"],
+            input="y\n",
+        )
+
+        assert result.exit_code == 0
+        assert "Deleted worklog 10001 from TEST-123" in result.stdout
+        mock_client.delete_worklog.assert_called_once_with("TEST-123", "10001")
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_delete_worklog_cancelled(
+        self,
+        mock_get_conn,
+        mock_jira_client_class,
+        mock_connection,
+    ):
+        """Test cancelling worklog deletion."""
+        mock_get_conn.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.get_worklogs.return_value = [
+            {"id": "10001", "author": "John Doe", "timeSpent": "2h"},
+        ]
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["worklog", "delete", "TEST-123", "10001"],
+            input="n\n",
+        )
+
+        assert result.exit_code == 0
+        assert "Deletion cancelled" in result.stdout
+        mock_client.delete_worklog.assert_not_called()
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_delete_worklog_issue_not_found(
+        self,
+        mock_get_conn,
+        mock_jira_client_class,
+        mock_connection,
+    ):
+        """Test deleting worklog from non-existent issue."""
+        mock_get_conn.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.delete_worklog.side_effect = InvalidIssueError("Issue not found")
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["worklog", "delete", "NOTFOUND-999", "10001", "--force"],
+        )
+
+        assert result.exit_code == 1
+        assert "Invalid Issue" in result.stdout
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_delete_worklog_permission_denied(
+        self,
+        mock_get_conn,
+        mock_jira_client_class,
+        mock_connection,
+    ):
+        """Test deleting worklog with permission denied."""
+        mock_get_conn.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.delete_worklog.side_effect = PermissionError("Permission denied")
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["worklog", "delete", "TEST-123", "10001", "--force"],
+        )
+
+        assert result.exit_code == 1
+        assert "Permission Denied" in result.stdout
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_delete_worklog_with_connection_flag(
+        self,
+        mock_get_conn,
+        mock_jira_client_class,
+        mock_connection,
+    ):
+        """Test deleting worklog with --connection flag."""
+        mock_get_conn.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["worklog", "delete", "TEST-123", "10001", "--force", "--connection", "my-conn"],
+        )
+
+        assert result.exit_code == 0
+        mock_get_conn.assert_called_once_with("my-conn")
+
+
 class TestWorklogListCommand:
     """Tests for 'budjira worklog list' command."""
 

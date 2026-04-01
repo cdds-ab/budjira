@@ -129,3 +129,54 @@ class WorklogService(BaseJiraService):
             raise
         except Exception as e:
             raise JiraAPIError(f"Unexpected error fetching worklogs: {e}") from e
+
+    def delete(self, issue_key: str, worklog_id: str) -> None:
+        """Delete a work log entry from an issue.
+
+        Args:
+            issue_key: Issue key (e.g., PROJ-123)
+            worklog_id: Worklog ID to delete
+
+        Raises:
+            InvalidIssueError: If issue or worklog not found
+            PermissionError: If user lacks permission to delete worklog
+            JiraAPIError: If deletion fails
+        """
+        try:
+            self._log_operation("Delete worklog", issue_key=issue_key, worklog_id=worklog_id)
+
+            issue = self.client.issue(issue_key)
+            worklogs = self.client.worklogs(issue)
+
+            # Find the worklog to delete
+            target = None
+            for wl in worklogs:
+                if str(wl.id) == str(worklog_id):
+                    target = wl
+                    break
+
+            if target is None:
+                raise InvalidIssueError(
+                    f"Worklog '{worklog_id}' not found on issue '{issue_key}'. "
+                    f"Use 'budjira worklog list {issue_key}' to see available worklogs."
+                )
+
+            target.delete()
+            self._logger.info(f"Successfully deleted worklog {worklog_id} from {issue_key}")
+
+        except JIRAError as e:
+            if e.status_code == 404:
+                raise InvalidIssueError(
+                    f"Issue '{issue_key}' not found. Check that the issue exists and you have permission to view it."
+                ) from e
+            elif e.status_code == 403:
+                raise PermissionError(
+                    f"Permission denied deleting worklog from issue '{issue_key}'. "
+                    f"You may only delete your own worklogs."
+                ) from e
+            else:
+                self._handle_jira_error(e, "Delete worklog", issue_key=issue_key, worklog_id=worklog_id)
+        except (InvalidIssueError, PermissionError, JiraAPIError):
+            raise
+        except Exception as e:
+            raise JiraAPIError(f"Unexpected error deleting worklog: {e}") from e

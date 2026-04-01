@@ -119,6 +119,80 @@ def add_worklog(
         raise typer.Exit(1) from e
 
 
+@app.command(name="delete")
+def delete_worklog(
+    issue_key: Annotated[
+        str,
+        typer.Argument(help="Issue key (e.g., PROJ-123)"),
+    ],
+    worklog_id: Annotated[
+        str,
+        typer.Argument(help="Worklog ID to delete (use 'worklog list' to find IDs)"),
+    ],
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Skip confirmation prompt"),
+    ] = False,
+    connection_name: Annotated[
+        str | None,
+        typer.Option(
+            "--connection",
+            help="Connection to use (overrides default)",
+            envvar="BUDJIRA_CONNECTION",
+        ),
+    ] = None,
+) -> None:
+    """Delete a work log entry from an issue.
+
+    Remove a worklog entry by its ID. Use 'budjira worklog list' to find worklog IDs.
+
+    Examples:
+
+        # Delete worklog with confirmation
+        budjira worklog delete PROJ-123 12345
+
+        # Delete worklog without confirmation
+        budjira worklog delete PROJ-123 12345 --force
+    """
+    try:
+        connection = get_active_connection(connection_name)
+        client = JiraClient.from_connection(connection)
+
+        # Show worklog details before confirmation
+        if not force:
+            worklogs = client.get_worklogs(issue_key)
+            target = next((wl for wl in worklogs if str(wl.get("id")) == str(worklog_id)), None)
+            if target:
+                console.print(f"Worklog [cyan]{worklog_id}[/cyan] on [cyan]{issue_key}[/cyan]:")
+                console.print(f"  Author: {target.get('author', 'Unknown')}")
+                console.print(f"  Time:   {target.get('timeSpent', '?')}")
+                if target.get("comment"):
+                    console.print(f"  Comment: {target['comment']}")
+            confirm = typer.confirm("Delete this worklog?")
+            if not confirm:
+                console.print("[yellow]Deletion cancelled[/yellow]")
+                return
+
+        client.delete_worklog(issue_key, worklog_id)
+        console.print(f"✅ [green]Deleted worklog {worklog_id} from {issue_key}[/green]")
+
+    except ConnectionError as e:
+        console.print(f"[red]Connection Error:[/red] {e}")
+        raise typer.Exit(1) from e
+    except AuthenticationError as e:
+        console.print(f"[red]Authentication Error:[/red] {e}")
+        raise typer.Exit(1) from e
+    except InvalidIssueError as e:
+        console.print(f"[red]Invalid Issue:[/red] {e}")
+        raise typer.Exit(1) from e
+    except PermissionError as e:
+        console.print(f"[red]Permission Denied:[/red] {e}")
+        raise typer.Exit(1) from e
+    except BudjiraError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from e
+
+
 @app.command(name="list")
 def list_worklogs(
     issue_key: Annotated[
@@ -156,6 +230,7 @@ def list_worklogs(
 
         # Create table
         table = Table(title=f"Work Logs for {issue_key}", show_header=True)
+        table.add_column("ID", style="dim")
         table.add_column("Author", style="cyan")
         table.add_column("Time Spent", style="green")
         table.add_column("Started", style="blue")
@@ -163,6 +238,7 @@ def list_worklogs(
 
         # Add rows
         for wl in worklogs:
+            wl_id = str(wl.get("id", ""))
             author = wl.get("author", "Unknown")
             time_spent = wl.get("timeSpent", "0m")
             started = wl.get("started", "")
@@ -182,7 +258,7 @@ def list_worklogs(
 
             comment = wl.get("comment", "")
 
-            table.add_row(author, time_spent, started_fmt, comment)
+            table.add_row(wl_id, author, time_spent, started_fmt, comment)
 
         console.print(table)
         console.print(f"\n[green]Total: {len(worklogs)} work log(s)[/green]")

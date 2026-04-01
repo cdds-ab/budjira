@@ -225,6 +225,13 @@ class JiraClient:
         """
         return self.worklogs.list(issue_key)
 
+    def delete_worklog(self, issue_key: str, worklog_id: str) -> None:
+        """Delete a work log entry from an issue.
+
+        DEPRECATED: Use client.worklogs.delete() instead.
+        """
+        self.worklogs.delete(issue_key, worklog_id)
+
     # ==================== Epic Operations (delegate to EpicService) ====================
 
     def get_epic_issues(self, epic_key: str) -> list[Issue]:
