@@ -11,16 +11,21 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.16.3 (v1.17.0 pending)
+- **Current Version**: v1.19.2
 - **Branch**: master
-- **Status**: Sprint query feature (#71) ready for release
-- **Last Update**: 2026-02-24
+- **Status**: Clean, all features released
+- **Last Update**: 2026-04-01
 
 ### Recent Releases (seit v1.8.1)
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
-| **v1.17.0** | 2026-02-24 | feat | Sprint query commands + workflow sprint overview (#71) |
+| **v1.19.2** | 2026-04-01 | chore | Version bump |
+| **v1.19.1** | 2026-04-01 | fix | Tempo: correct query parameter 'issueId' for GET /worklogs (#76) |
+| **v1.19.0** | 2026-03-01 | feat | Auto-discover Jira project metadata (#73) |
+| **v1.18.1** | 2026-03-01 | fix | Cross-instance Tempo API issue ID resolution (#72) |
+| **v1.18.0** | 2026-03-01 | feat | Sprint query commands + workflow sprint overview (#71) |
+| **v1.17.0** | 2026-02-24 | feat | Tempo: enforce workflow booking policy on tempo log (#70) |
 | **v1.16.2** | 2026-02-23 | fix | Handle divergent git history in install script |
 | **v1.16.1** | 2026-02-23 | fix | AI usage prompt for workflow profiles |
 | **v1.16.0** | 2026-02-23 | feat | Workflow profiles for cross-instance Jira operations (#67) |
@@ -273,10 +278,10 @@ budjira/services/
 
 | Metrik | Wert |
 |--------|------|
-| **Total Tests** | 738 |
+| **Total Tests** | 794 |
 | **Skipped Tests** | 3 |
-| **Coverage** | 85.7% |
-| **Test Duration** | ~11s |
+| **Coverage** | 85.93% |
+| **Test Duration** | ~17s |
 
 ### Coverage by Module (Top)
 ```
@@ -300,10 +305,19 @@ budjira/tempo/client.py        90%
 
 ## Offene GitHub Issues
 
-### Bugs (Fixed, unpushed)
-- **#68** - `connect test` erkennt abgelaufene Tokens nicht → Fixed in `8437b75`
-- **#69** - `workflow book` Tempo API 400 beim Overbooking-Check → Fixed in `1b7b1c6`
-- Bug #62 wurde in v1.12.4 gefixt.
+### Bugs (alle released)
+- **#68** - `connect test` erkennt abgelaufene Tokens nicht → Fixed v1.16.2
+- **#69** - `workflow book` Tempo API 400 beim Overbooking-Check → Fixed v1.16.3
+- **#72** - Cross-instance Tempo API issue ID → Fixed v1.18.1
+- **#76** - Tempo query parameter 'issueId' for GET /worklogs → Fixed v1.19.1
+
+### Feature Issues (released)
+- **#71** - Sprint query commands → Released v1.18.0
+- **#73** - Auto-discover Jira project metadata → Released v1.19.0
+
+### In Progress / Open
+- **#74** - Local-first release workflow (in Planung)
+- **#75** - AI prompt optimization (nicht gestartet)
 
 ### Refactoring-Backlog (39 Issues)
 
@@ -329,7 +343,7 @@ budjira/tempo/client.py        90%
 
 ```
 budjira/
-├── __init__.py              # Version: 1.16.2
+├── __init__.py              # Version: 1.19.2
 ├── __main__.py              # Entry point
 ├── cli/                     # Command-line interface
 │   ├── main.py             # Main CLI app, global flags (--format, --quiet)
@@ -341,11 +355,12 @@ budjira/
 │   ├── epic.py             # Epic management (+ JSON output) ✨ UPDATED v1.11.0
 │   ├── issue.py            # Issue updates + delete ✨ UPDATED v1.15.0
 │   ├── search.py           # Issue search (JQL + filters)
+│   ├── project.py          # ✨ NEW v1.19.0 - Project metadata commands
 │   ├── show.py             # Issue detail view
-│   ├── sprint.py           # ✨ NEW v1.17.0 - Sprint query commands
-│   ├── tempo.py            # Tempo Timesheets (+ update-worklog) ✨ UPDATED v1.9.0
+│   ├── sprint.py           # Sprint query commands
+│   ├── tempo.py            # Tempo Timesheets (+ update-worklog)
 │   ├── update.py           # Self-update commands
-│   ├── workflow.py         # ✨ NEW v1.16.0 - Workflow profiles (cross-instance)
+│   ├── workflow.py         # Workflow profiles (cross-instance)
 │   └── worklog.py          # Worklog commands
 ├── core/                    # Core business logic (lightweight after refactoring)
 │   └── jira_client.py      # Jira API wrapper (delegates to services)
@@ -355,10 +370,10 @@ budjira/
 │   ├── epics.py            # Epic operations
 │   ├── issues.py           # Issue operations (+ delete) ✨ UPDATED v1.15.0
 │   ├── labels.py           # Label operations
-│   ├── metadata.py         # Metadata operations
+│   ├── metadata.py         # Metadata operations (+ project metadata v1.19.0)
 │   ├── transitions.py      # Transition operations
-│   ├── sprints.py          # ✨ NEW v1.17.0 - Sprint/board operations
-│   ├── workflow.py         # ✨ NEW v1.16.0 - Cross-instance workflow operations
+│   ├── sprints.py          # Sprint/board operations
+│   ├── workflow.py         # Cross-instance workflow operations
 │   └── worklogs.py         # Worklog operations
 ├── tempo/                   # Tempo Timesheets integration
 │   ├── client.py           # TempoClient - REST API
@@ -366,14 +381,16 @@ budjira/
 ├── models/                  # Pydantic data models
 │   ├── ai_prompt.py        # AI prompt models
 │   ├── config.py           # GlobalConfig
-│   ├── connection.py       # Connection, ConnectionList (+ board_id, custom_fields, ai_prompt) ✨ UPDATED v1.17.0
-│   ├── custom_field.py     # ✨ NEW v1.13.0 - CustomFieldConfig model
+│   ├── connection.py       # Connection, ConnectionList (+ board_id, custom_fields, ai_prompt)
+│   ├── custom_field.py     # CustomFieldConfig model
 │   ├── dor.py              # DoR templates
 │   ├── issue.py            # Issue, Comment, Attachment, WorkLog
-│   └── sprint.py           # ✨ NEW v1.17.0 - Sprint, Board, SprintSummary models
+│   ├── project_metadata.py # ✨ NEW v1.19.0 - Project metadata models
+│   └── sprint.py           # Sprint, Board, SprintSummary models
 ├── config/                  # Configuration management
 │   ├── settings.py         # Settings singleton
-│   └── credentials.py      # Secure credential storage
+│   ├── credentials.py      # Secure credential storage
+│   └── metadata_cache.py   # ✨ NEW v1.19.0 - Project metadata cache
 └── utils/                   # Utilities
     ├── banner.py           # ASCII art banner (fixed width calculation)
     ├── connection.py       # Connection resolution
@@ -414,6 +431,10 @@ budjira/
 | Workflow Profiles | v1.16.0 | `budjira workflow *` |
 | Sprint Querying | v1.17.0 | `budjira sprint list`, `sprint show` |
 | Workflow Sprint | v1.17.0 | `budjira workflow sprint` |
+| Booking Policy Enforcement | v1.17.0 | `budjira tempo log` (workflow) |
+| Cross-instance Tempo Fix | v1.18.1 | `budjira workflow book` |
+| Project Metadata | v1.19.0 | `budjira project sync/show/clear` |
+| Tempo issueId Fix | v1.19.1 | `budjira tempo worklogs` |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---
@@ -437,8 +458,8 @@ budjira/
 ## Nächste Schritte
 
 ### Immediate
-- [x] ~~**Bug #62**: Epic show missing child issues~~ (Fixed in v1.12.4)
-- [ ] Review remaining refactoring issues
+- [ ] **#74**: Local-first release workflow (in Planung)
+- [ ] **#75**: AI prompt optimization
 
 ### Short-term
 - [ ] Dependabot/Renovate configuration (#49)
@@ -474,5 +495,5 @@ budjira/
 
 ---
 
-**Letzte Aktualisierung**: 2026-02-24
+**Letzte Aktualisierung**: 2026-04-01
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
