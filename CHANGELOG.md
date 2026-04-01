@@ -1,6 +1,26 @@
 # CHANGELOG
 
 
+## v1.20.0 (2026-04-01)
+
+### Documentation
+
+- Update AI prompt and README for worklog delete command
+  ([`ad99501`](https://github.com/cdds-ab/budjira/commit/ad9950129d7db7f49ee3aefdf164426b174e954d))
+
+- Update project context to v1.19.2
+  ([`f002a9d`](https://github.com/cdds-ab/budjira/commit/f002a9db19cdd61c9b2043cca93c7b36c547610f))
+
+### Features
+
+- **worklog**: Add worklog delete command ([#77](https://github.com/cdds-ab/budjira/pull/77),
+  [`d22f281`](https://github.com/cdds-ab/budjira/commit/d22f28104487c09445af835aaf800677b053db9e))
+
+Add `budjira worklog delete ISSUE-KEY WORKLOG-ID` to remove native Jira worklogs from the CLI.
+  Includes confirmation prompt with worklog details, --force flag to skip, and ID column in worklog
+  list output.
+
+
 ## v1.19.2 (2026-03-20)
 
 ### Bug Fixes
