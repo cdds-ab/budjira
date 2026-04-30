@@ -11,15 +11,16 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.19.2
+- **Current Version**: v1.20.0
 - **Branch**: master
-- **Status**: Clean, all features released
-- **Last Update**: 2026-04-01
+- **Status**: Local-first release workflow live (cz bump owns versioning)
+- **Last Update**: 2026-04-30
 
 ### Recent Releases (seit v1.8.1)
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.20.0** | 2026-04-01 | feat | Worklog delete command (#77) |
 | **v1.19.2** | 2026-04-01 | chore | Version bump |
 | **v1.19.1** | 2026-04-01 | fix | Tempo: correct query parameter 'issueId' for GET /worklogs (#76) |
 | **v1.19.0** | 2026-03-01 | feat | Auto-discover Jira project metadata (#73) |

@@ -189,8 +189,7 @@ All errors produce helpful, actionable messages in English:
 - **Type Checking**: `mypy` with strict settings
 - **Security**: `bandit` (security vulnerability scanning)
 - **Coverage**: `pytest-cov` (minimum 70% required)
-- **Commits**: `commitizen` (conventional commits)
-- **Releases**: `python-semantic-release` (automated versioning)
+- **Commits & Releases**: `commitizen` (conventional commits + local-first version bumps)
 
 ## Security & Privacy
 
@@ -389,37 +388,56 @@ raise InvalidIssueError(
 
 ## Release Workflow
 
-### Semantic Versioning
+### Local-First Releases (since 2026-04-30)
 
-Uses `python-semantic-release` for fully automated releases:
+Versions are bumped **locally** with Commitizen. CI only builds and
+publishes once a `v*` tag is pushed — it never creates commits or tags
+itself, so `origin/master` cannot move ahead of your local branch
+because of a release.
 
-1. **Commit with conventional format** (enforced by Commitizen)
-2. **Push to main branch** (or merge PR)
-3. **GitHub Actions runs:**
-   - Analyzes commits since last release
-   - Determines version bump (major.minor.patch)
-   - Generates CHANGELOG.md
-   - Creates Git tag
-   - Builds wheel and sdist
-   - Publishes to PyPI (Trusted Publishing)
-   - Creates GitHub Release with notes
+**Step-by-step:**
 
-**Version Bump Rules:**
-- `feat:` → minor version (0.1.0 → 0.2.0)
-- `fix:` → patch version (0.1.0 → 0.1.1)
-- `feat!:` or `BREAKING CHANGE:` → major version (0.1.0 → 1.0.0)
+```bash
+# 1. Commit your code with conventional-commit messages
+git commit -m "feat(...): ..."
 
-### GitHub Actions
+# 2. Bump version locally (writes pyproject.toml + budjira/__init__.py,
+#    creates a chore(release) commit, creates a v<version> tag,
+#    updates CHANGELOG.md)
+uv run cz bump
 
-**Current action versions (verified for 2025):**
-- `actions/checkout@v5`
-- `actions/setup-python@v6` (with built-in pip caching)
-- `actions/cache@v4` (for uv cache)
+# 3. Push commit and tag together
+git push --follow-tags
 
-**Workflows:**
-- `.github/workflows/ci.yml` - Run on push/PR (lint, test, security)
-- `.github/workflows/release.yml` - Run on push to main (semantic release)
-- `.github/workflows/publish.yml` - Run on release (PyPI publish)
+# 4. CI picks up the tag, builds wheel + sdist, creates the GitHub
+#    Release with auto-generated notes from PRs since the previous tag
+```
+
+**Version Bump Rules** (commitizen, conventional-commits):
+- `feat:` → minor version (1.20.0 → 1.21.0)
+- `fix:`, `perf:`, `refactor:`, `style:` → patch version (1.20.0 → 1.20.1)
+- `feat!:` or `BREAKING CHANGE:` → major version (1.20.0 → 2.0.0)
+- `chore:`, `docs:`, `ci:`, `build:`, `test:` → no bump
+
+**Useful checks before bumping:**
+
+```bash
+uv run cz bump --dry-run    # Preview the next version + changelog entry
+uv run cz version --project # Show current version
+```
+
+If `cz bump --dry-run` says "no commits found to bump", there is nothing
+releasable since the last tag — that is expected after pure docs/chore
+commits.
+
+### CI Workflows
+
+- `.github/workflows/ci.yml` — runs on every push/PR to master and develop
+  (lint, type-check, security, tests across Python 3.10–3.13, build)
+- `.github/workflows/release.yml` — runs **only on `v*` tag push**. Verifies
+  tag matches `pyproject.toml` version, builds the package, creates a
+  GitHub Release with auto-generated notes and the build artifacts.
+- `.github/workflows/issue-sanitize.yml` — issue PII scrubbing.
 
 ## Installation Methods
 
@@ -637,7 +655,7 @@ This section provides structured checklists for repeatable, high-quality develop
 - [ ] **.claude/ai-prompt-supplements.md** extended if new workflows
 - [ ] **CLAUDE.md** updated if architectural changes
 - [ ] Inline code comments added for complex logic
-- [ ] CHANGELOG.md NOT updated (automatic via semantic-release)
+- [ ] CHANGELOG.md NOT updated by hand (commitizen writes it during `cz bump`)
 
 #### Phase 5: Pre-Commit Checks
 **Automatic (via pre-commit hooks):**
@@ -656,26 +674,24 @@ This section provides structured checklists for repeatable, high-quality develop
 - [ ] No commented-out code blocks
 - [ ] No `# type: ignore` without explanation comment
 
-#### Phase 6: Commit & Push
+#### Phase 6: Commit, Bump & Push
 - [ ] Conventional Commit message prepared:
   - `feat:` for new features (MINOR bump: 1.4.0 → 1.5.0)
-  - `fix:` for bug fixes (PATCH bump: 1.4.0 → 1.4.1)
-  - `test:` for test additions (PATCH bump)
-  - `docs:` for documentation only (NO bump)
+  - `fix:` / `perf:` / `refactor:` / `style:` for fixes (PATCH bump: 1.4.0 → 1.4.1)
+  - `docs:` / `chore:` / `ci:` / `build:` / `test:` for non-releasable changes (NO bump)
   - `feat!:` or `fix!:` for breaking changes (MAJOR bump)
 - [ ] **NO Claude attribution** in commit message
 - [ ] Imperative mood ("Add feature" not "Added feature")
 - [ ] Describes WHAT and WHY, not HOW
 - [ ] Commit message is concise (1-2 sentences in subject)
-- [ ] Commit pushed to master branch
-- [ ] GitHub Actions CI passes (green checkmark)
+- [ ] Commit pushed to master, CI green
+- [ ] If a release is intended: `uv run cz bump` locally, then `git push --follow-tags`
 
 #### Phase 7: Post-Release
-- [ ] Semantic release created automatically (if `feat`/`fix` commit)
-- [ ] Release notes reviewed on GitHub Releases
+- [ ] CI Release workflow ran on the tag (green checkmark on `gh run list`)
+- [ ] GitHub Release page shows auto-generated notes + dist artifacts
 - [ ] **.claude/context.md** updated with new version number
 - [ ] Related GitHub Issue closed with link to release
-- [ ] `uv.lock` synced if needed (`uv sync`)
 
 ---
 
@@ -839,7 +855,7 @@ A feature is considered **DONE** when ALL of the following are met:
 - [ ] Conventional commit message (no Claude attribution)
 - [ ] Pushed to master
 - [ ] CI/CD pipeline green
-- [ ] Semantic release created (if `feat`/`fix`)
+- [ ] If releasable: `uv run cz bump` + `git push --follow-tags` to trigger Release workflow
 - [ ] GitHub Issue closed with release link
 
 ---
@@ -916,7 +932,7 @@ Then:
 
 ### Post-Release Checklist
 
-After semantic-release creates a new release (automatic on push to master):
+After `cz bump && git push --follow-tags` and the Release workflow has run on the tag:
 
 #### Verify Release
 - [ ] Check GitHub Release created: `gh release list`
