@@ -46,7 +46,6 @@ dev = [
     "bandit>=1.8.0",
     "commitizen>=4.9.1",
     "pre-commit>=4.0.1",
-    "python-semantic-release>=10.4.1",
     "radon>=6.0.1",
 ]
 
@@ -198,43 +197,6 @@ version_files = [
 tag_format = "v$version"
 update_changelog_on_bump = true
 major_version_zero = true
-
-# Semantic Release configuration
-[tool.semantic_release]
-version_variables = ["budjira/__init__.py:__version__"]
-version_toml = ["pyproject.toml:project.version"]
-branch = "master"
-upload_to_pypi = false
-upload_to_release = true
-hvcs = "github"
-commit_message = "chore(release): bump version to {version}"
-
-[tool.semantic_release.commit_parser_options]
-allowed_tags = [
-    "build",
-    "chore",
-    "ci",
-    "docs",
-    "feat",
-    "fix",
-    "perf",
-    "style",
-    "refactor",
-    "test",
-]
-minor_tags = ["feat"]
-patch_tags = ["fix", "perf", "style", "refactor"]
-
-[tool.semantic_release.changelog]
-exclude_commit_patterns = [
-    "^chore",
-    "^ci",
-    "^build",
-    "^style",
-]
-
-[tool.semantic_release.changelog.environment]
-keep_trailing_newline = true
 
 [dependency-groups]
 dev = [
