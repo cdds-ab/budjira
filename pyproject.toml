@@ -190,7 +190,7 @@ skips = ["B101"]  # assert_used - we use asserts in tests
 # Commitizen configuration
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.1.0"
+version = "1.20.0"
 version_files = [
     "pyproject.toml:version",
     "budjira/__init__.py:__version__",
