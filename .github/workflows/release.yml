@@ -2,16 +2,14 @@ name: Release
 
 on:
   push:
-    branches:
-      - master
+    tags:
+      - 'v*'
 
 jobs:
   release:
-    name: Semantic Release
+    name: Build and Publish Release
     runs-on: ubuntu-latest
-    concurrency: release
     permissions:
-      id-token: write
       contents: write
 
     steps:
@@ -19,7 +17,6 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -32,30 +29,24 @@ jobs:
       - name: Add uv to PATH
         run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Install dependencies
+      - name: Verify tag matches package version
         run: |
-          uv sync --all-extras
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(grep -E '^version = ' pyproject.toml | head -1 | sed -E 's/version = "(.+)"/\1/')
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package version $PKG_VERSION"
+            exit 1
+          fi
+          echo "✓ Tag $GITHUB_REF_NAME matches package version $PKG_VERSION"
 
-      - name: Build package (before semantic release)
+      - name: Build package
         run: uv build
 
-      - name: Python Semantic Release
-        id: release
-        uses: python-semantic-release/python-semantic-release@v9.15.2
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          build: false
-
-      # PyPI publishing disabled - using GitHub releases and curl install script instead
-      # - name: Publish package distributions to PyPI
-      #   uses: pypa/gh-action-pypi-publish@release/v1
-      #   if: steps.release.outputs.released == 'true'
-      #   with:
-      #     password: ${{ secrets.PYPI_API_TOKEN }}
-
-      - name: Publish package distributions to GitHub Releases
-        uses: python-semantic-release/publish-action@v9.15.2
-        if: steps.release.outputs.released == 'true'
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ steps.release.outputs.tag }}
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            dist/*
