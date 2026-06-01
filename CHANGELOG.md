@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.21.1 (2026-06-01)
+
+### Fix
+
+- **sprint**: support team-managed boards and skip detection with --sprint-id (#87)
+
 ## v1.21.0 (2026-06-01)
 
 ### Feat
