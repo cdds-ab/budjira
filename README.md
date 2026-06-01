@@ -212,6 +212,9 @@ budjira create issue "User authentication" --type Story --epic PROJ-100
 budjira create issue "Story 1" --type Story --epic PROJ-100 --no-interactive
 budjira create issue "Story 2" --type Story --epic PROJ-100 --no-interactive
 budjira create issue "Story 3" --type Story --epic PROJ-100 --no-interactive
+
+# Create a sub-task under a parent issue
+budjira create issue "Implement login form" --type Subtask --parent PROJ-123 --no-interactive
 ```
 
 **Epic Linking:**
@@ -219,6 +222,13 @@ budjira create issue "Story 3" --type Story --epic PROJ-100 --no-interactive
 - Eliminates need for separate update step
 - Perfect for creating multiple stories for same epic
 - Works in both interactive and non-interactive modes
+
+**Sub-tasks:**
+- Use `--parent PROJ-123` to create a sub-task under a parent issue
+- The sub-task type name differs per instance (`Subtask` or `Sub-task`); budjira
+  detects sub-task types from cached project metadata (`budjira project show`)
+- Creating a sub-task without `--parent` fails fast with a clear error instead of a
+  cryptic Jira API response
 
 ### 6. Definition of Ready (DoR) Templates
 

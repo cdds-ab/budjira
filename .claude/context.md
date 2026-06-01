@@ -317,6 +317,7 @@ budjira/tempo/client.py        90%
 - **#73** - Auto-discover Jira project metadata → Released v1.19.0
 
 ### In Progress / Open
+- **#85** - Sub-task creation via `--parent` → implementiert, Release ausstehend (blockierte Epic>Story>Sub-task-Buchung)
 - **#78** - Sprint move + lifecycle (move/create/start/close) → implementiert, Release ausstehend
 - **#74** - Local-first release workflow → erledigt (v1.20.0, cz bump)
 - **#75** - AI prompt optimization (nicht gestartet)
@@ -433,6 +434,7 @@ budjira/
 | Workflow Profiles | v1.16.0 | `budjira workflow *` |
 | Sprint Querying | v1.17.0 | `budjira sprint list`, `sprint show` |
 | Sprint Management | pending | `budjira sprint move/create/start/close` |
+| Sub-task Creation | pending | `budjira create issue --type Subtask --parent KEY` |
 | Workflow Sprint | v1.17.0 | `budjira workflow sprint` |
 | Booking Policy Enforcement | v1.17.0 | `budjira tempo log` (workflow) |
 | Cross-instance Tempo Fix | v1.18.1 | `budjira workflow book` |

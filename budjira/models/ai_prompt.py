@@ -465,7 +465,13 @@ budjira create issue "Issue summary" --no-interactive [OPTIONS]
 - `--label TAG`: Add label (can be used multiple times)
 - `--project KEY`: Override default project
 - `--epic KEY`: Link to epic during creation
+- `--parent KEY`: Parent issue key for sub-tasks (required when the type is a sub-task)
 - `--custom NAME=VALUE`: Set custom field (repeatable, requires configuration)
+
+**Sub-tasks:** Use `--parent PROJ-123` to create a sub-task under a parent issue.
+The sub-task type name varies per instance (often `Subtask`, sometimes `Sub-task`);
+budjira detects sub-task types via cached project metadata (`budjira project show`)
+and fails fast with a clear message if a sub-task is created without `--parent`.
 
 **Examples:**
 
@@ -489,6 +495,12 @@ budjira create issue "Add export functionality" \\
 # Quick task creation
 budjira create issue "Update documentation" \\
   --type Task \\
+  --no-interactive
+
+# Sub-task under a parent issue (Epic > Story > Sub-task workflows)
+budjira create issue "Implement login form" \\
+  --type Subtask \\
+  --parent PROJ-123 \\
   --no-interactive
 
 # With custom fields (requires configuration in connections.toml)
