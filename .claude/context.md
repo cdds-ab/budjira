@@ -317,7 +317,8 @@ budjira/tempo/client.py        90%
 - **#73** - Auto-discover Jira project metadata → Released v1.19.0
 
 ### In Progress / Open
-- **#87** - Sprint support for team-managed projects (board type `simple`) + `--sprint-id` skips board detection → fix, Release 1.21.1 ausstehend
+- **#89** - `issue delete` crash beim Pre-Delete-Fetch (`PropertyHolder has no attribute`) → fix: `_parse_basic_fields` null-safe für partielle Fetches (`fields=["summary"]`), Release 1.21.2 ausstehend
+- **#87** - Sprint support for team-managed projects (board type `simple`) + `--sprint-id` skips board detection → released v1.21.1
 - **#85** - Sub-task creation via `--parent` → released v1.21.0 (blockierte Epic>Story>Sub-task-Buchung)
 - **#78** - Sprint move + lifecycle (move/create/start/close) → implementiert, Release ausstehend
 - **#74** - Local-first release workflow → erledigt (v1.20.0, cz bump)
