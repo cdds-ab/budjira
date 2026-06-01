@@ -344,6 +344,22 @@ Use `uv run cz commit` for interactive commit creation.
 
 **If hooks fail, the commit is rejected.** Fix issues before committing.
 
+**Hooks must never write files (check-only rule):** pre-commit stashes unstaged
+changes for the duration of a commit. A hook that *modifies and stages* a file
+which also has stashed unstaged changes makes pre-commit's stash restore fail
+(`patch does not apply`), silently stranding your work in a backup patch under
+`~/.cache/pre-commit/`. The `check-ai-prompt-freshness` hook (`scripts/check_ai_prompt.py`)
+therefore only *detects* staleness and prints a reminder — it does **not**
+regenerate `.claude/ai-usage-prompt.md`. Regenerate that file manually and commit
+it separately:
+
+```bash
+uv run budjira -q ai usage-prompt --plain > .claude/ai-usage-prompt.md
+```
+
+If you add a new hook, keep it check-only (validate and fail with a message);
+never have it rewrite tracked files in place.
+
 ### CI/CD Pipeline Consistency
 
 **Critical:** CI and pre-commit hooks are perfectly synchronized to ensure "if pre-commit passes locally → CI passes" ✅
