@@ -121,7 +121,7 @@ def _get_description_input(
 
     if use_dor:
         template = settings.dor_templates.get_template(issue_type or "")
-        if template and Confirm.ask(f"Use DoR template for {issue_type}?", default=True):
+        if template is not None and Confirm.ask(f"Use DoR template for {issue_type}?", default=True):
             console.print(f"\n[dim]Opening editor with DoR template for {issue_type}...[/dim]")
             return open_editor(
                 initial_content=template.template_text,
