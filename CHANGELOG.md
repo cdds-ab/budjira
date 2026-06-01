@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v1.21.0 (2026-06-01)
+
+### Feat
+
+- **create**: support sub-task creation via --parent (#85)
+- **sprint**: add move/create/start/close commands (#78)
+
+### Fix
+
+- **types**: resolve mypy strict errors in issue delete and DoR prompt
+
 ## v1.20.0 (2026-04-01)
 
 ### Documentation
