@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from jira.exceptions import JIRAError
 
@@ -218,7 +218,10 @@ class IssueService(BaseJiraService):
         """
         try:
             self._log_operation("Delete issue", issue_key=issue_key, delete_subtasks=delete_subtasks)
-            self.client.issue(issue_key).delete(deleteSubtasks=delete_subtasks)
+            # jira's Resource.delete is inherited untyped (unlike the overridden Issue.update). cast() keeps this
+            # clean across mypy environments: with jira installed the call would otherwise raise no-untyped-call,
+            # while in the jira-less CI mypy env a type: ignore would be flagged unused.
+            cast(Any, self.client.issue(issue_key)).delete(deleteSubtasks=delete_subtasks)
             self._logger.info(f"Deleted issue {issue_key}")
 
         except JIRAError as e:

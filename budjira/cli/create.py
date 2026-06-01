@@ -121,7 +121,7 @@ def _get_description_input(
 
     if use_dor:
         template = settings.dor_templates.get_template(issue_type or "")
-        if template and Confirm.ask(f"Use DoR template for {issue_type}?", default=True):
+        if template is not None and Confirm.ask(f"Use DoR template for {issue_type}?", default=True):
             console.print(f"\n[dim]Opening editor with DoR template for {issue_type}...[/dim]")
             return open_editor(
                 initial_content=template.template_text,
@@ -205,6 +205,50 @@ def _get_epic_input(interactive: bool, epic: str | None) -> str | None:
     if interactive and epic is None and Confirm.ask("Link to an epic?", default=False):
         return str(Prompt.ask("Epic key (e.g., PROJ-100)"))
     return epic
+
+
+def _is_subtask_type(issue_type: str, metadata: ProjectMetadata | None) -> bool:
+    """Determine whether an issue type is a sub-task type.
+
+    Prefers the authoritative ``subtask`` flag from project metadata, which is
+    robust to naming differences between instances (e.g. 'Subtask' vs
+    'Sub-task'). Falls back to a normalized name heuristic when metadata is
+    unavailable.
+
+    Args:
+        issue_type: Issue type name as entered by the user
+        metadata: Cached project metadata, if available
+
+    Returns:
+        True if the issue type represents a sub-task
+    """
+    if metadata:
+        for it in metadata.issue_types:
+            if it.name.lower() == issue_type.lower():
+                return it.subtask
+    return issue_type.lower().replace("-", "").replace(" ", "") == "subtask"
+
+
+def _get_parent_input(
+    interactive: bool,
+    parent: str | None,
+    issue_type: str,
+    metadata: ProjectMetadata | None,
+) -> str | None:
+    """Prompt for a parent issue key when creating a sub-task without one.
+
+    Args:
+        interactive: Whether to prompt interactively
+        parent: Pre-provided parent issue key
+        issue_type: Resolved issue type
+        metadata: Cached project metadata, if available
+
+    Returns:
+        Parent issue key or None
+    """
+    if parent is None and interactive and _is_subtask_type(issue_type, metadata):
+        return str(Prompt.ask("Parent issue key (required for sub-tasks, e.g., PROJ-123)"))
+    return parent
 
 
 def _parse_custom_fields(
@@ -407,6 +451,27 @@ def _validate_required_fields(summary: str, issue_type: str) -> None:
         raise typer.Exit(1)
 
 
+def _validate_parent(parent: str | None, issue_type: str, metadata: ProjectMetadata | None) -> None:
+    """Validate that sub-task creation has a parent issue.
+
+    Fails fast with an actionable message instead of letting Jira reject the
+    request with the cryptic "parent issue key or id not specified" error.
+
+    Args:
+        parent: Parent issue key, if provided
+        issue_type: Resolved issue type
+        metadata: Cached project metadata, if available
+
+    Raises:
+        BudjiraError: If a sub-task is created without a parent
+    """
+    if not parent and _is_subtask_type(issue_type, metadata):
+        raise BudjiraError(
+            f"Issue type '{issue_type}' is a sub-task and requires a parent issue. "
+            f"Provide it with --parent PROJ-123."
+        )
+
+
 def _validate_dor(description: str | None, issue_type: str, skip_dor: bool, settings: Settings) -> None:
     """Validate description against DoR template if enabled.
 
@@ -458,6 +523,18 @@ def _prepare_time_tracking(original_estimate: str | None, remaining_estimate: st
             timetracking["remainingEstimate"] = remaining_estimate
         extra_fields["timetracking"] = timetracking
     return extra_fields
+
+
+def _prepare_parent_field(parent: str | None) -> dict[str, Any]:
+    """Prepare the parent field for sub-task creation.
+
+    Args:
+        parent: Parent issue key (e.g., PROJ-123)
+
+    Returns:
+        Dictionary with the Jira parent field, or empty if no parent
+    """
+    return {"parent": {"key": parent}} if parent else {}
 
 
 def _link_to_epic_if_specified(client: JiraClient, issue_key: str, epic: str | None) -> str | None:
@@ -611,6 +688,11 @@ def issue(
         "-e",
         help="Epic key to link this issue to (e.g., PROJ-100)",
     ),
+    parent: str = typer.Option(
+        None,
+        "--parent",
+        help="Parent issue key for sub-tasks (e.g., PROJ-123)",
+    ),
     custom: list[str] = typer.Option(
         None,
         "--custom",
@@ -635,6 +717,9 @@ def issue(
 
         # Link to epic during creation
         budjira create issue "User authentication" --type Story --epic PROJ-100
+
+        # Create a sub-task under a parent issue
+        budjira create issue "Implement login form" --type Subtask --parent PROJ-123 --no-interactive
 
         # Create multiple stories for same epic
         budjira create issue "Story 1" --type Story --epic PROJ-100 --no-interactive
@@ -664,6 +749,7 @@ def issue(
         assignee = _get_assignee_input(interactive, assignee)  # type: ignore[assignment]
         labels = _get_labels_input(interactive, labels)
         epic = _get_epic_input(interactive, epic)  # type: ignore[assignment]
+        parent = _get_parent_input(interactive, parent, issue_type, project_metadata)  # type: ignore[assignment]
 
         # Handle custom fields
         custom_values = _parse_custom_fields(custom, custom_field_configs)
@@ -674,6 +760,7 @@ def issue(
 
         # Validate
         _validate_required_fields(summary, issue_type)
+        _validate_parent(parent, issue_type, project_metadata)
         _validate_dor(description, issue_type, skip_dor, settings)
 
         # Create issue
@@ -681,6 +768,9 @@ def issue(
         console.print(f"\n[dim]Creating {issue_type} in project {project_key}...[/dim]")
 
         extra_fields = _prepare_time_tracking(original_estimate, remaining_estimate)
+
+        # Add parent field for sub-tasks
+        extra_fields.update(_prepare_parent_field(parent))
 
         # Add custom fields to extra_fields
         if custom_values and custom_field_configs:

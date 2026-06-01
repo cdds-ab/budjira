@@ -1488,3 +1488,142 @@ class TestCreateWithProjectMetadata:
 
         assert result.exit_code == 0
         assert "Issue created successfully" in result.stdout
+
+
+class TestIsSubtaskType:
+    """Unit tests for _is_subtask_type helper."""
+
+    def test_metadata_flag_wins(self) -> None:
+        from datetime import datetime, timezone
+
+        from budjira.cli.create import _is_subtask_type
+        from budjira.models.project_metadata import IssueTypeMetadata, ProjectMetadata
+
+        metadata = ProjectMetadata(
+            project_key="TEST",
+            project_name="Test",
+            issue_types=[
+                IssueTypeMetadata(id="1", name="Story", subtask=False),
+                # Instance uses a non-standard label but marks it as a subtask
+                IssueTypeMetadata(id="2", name="Work Item", subtask=True),
+            ],
+            priorities=[],
+            fetched_at=datetime.now(tz=timezone.utc),
+        )
+        assert _is_subtask_type("Work Item", metadata) is True
+        assert _is_subtask_type("Story", metadata) is False
+
+    def test_heuristic_fallback_without_metadata(self) -> None:
+        from budjira.cli.create import _is_subtask_type
+
+        # Both common spellings normalize to "subtask"
+        assert _is_subtask_type("Subtask", None) is True
+        assert _is_subtask_type("Sub-task", None) is True
+        assert _is_subtask_type("sub task", None) is True
+        assert _is_subtask_type("Story", None) is False
+
+
+class TestCreateSubtask:
+    """Test sub-task creation via --parent (#85)."""
+
+    @patch("budjira.cli.create._load_project_metadata")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_subtask_with_parent_passes_parent_field(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_load_metadata: Mock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        mock_get_active_connection.return_value = mock_connection
+        mock_load_metadata.return_value = None
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["Work block", "--type", "Subtask", "--parent", "TEST-123", "--no-interactive"],
+        )
+
+        assert result.exit_code == 0
+        kwargs = mock_client.create_issue.call_args.kwargs
+        assert kwargs["parent"] == {"key": "TEST-123"}
+
+    @patch("budjira.cli.create._load_project_metadata")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_subtask_without_parent_fails_fast(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_load_metadata: Mock,
+        mock_connection: Connection,
+    ) -> None:
+        mock_get_active_connection.return_value = mock_connection
+        mock_load_metadata.return_value = None
+
+        mock_client = MagicMock()
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["Work block", "--type", "Subtask", "--no-interactive"],
+        )
+
+        assert result.exit_code == 1
+        assert "requires a parent" in result.stdout
+        # Must fail before hitting the API
+        mock_client.create_issue.assert_not_called()
+
+    @patch("budjira.cli.create._load_project_metadata")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_non_subtask_does_not_require_parent(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_load_metadata: Mock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        mock_get_active_connection.return_value = mock_connection
+        mock_load_metadata.return_value = None
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(app, ["A story", "--type", "Story", "--no-interactive"])
+
+        assert result.exit_code == 0
+        # No parent field should be passed for a regular type
+        assert "parent" not in mock_client.create_issue.call_args.kwargs
+
+    @patch("budjira.cli.create.Prompt")
+    def test_interactive_prompts_for_parent_on_subtask(self, mock_prompt: Mock) -> None:
+        from budjira.cli.create import _get_parent_input
+
+        mock_prompt.ask.return_value = "TEST-999"
+        result = _get_parent_input(interactive=True, parent=None, issue_type="Subtask", metadata=None)
+        assert result == "TEST-999"
+        mock_prompt.ask.assert_called_once()
+
+    @patch("budjira.cli.create.Prompt")
+    def test_interactive_does_not_prompt_for_non_subtask(self, mock_prompt: Mock) -> None:
+        from budjira.cli.create import _get_parent_input
+
+        result = _get_parent_input(interactive=True, parent=None, issue_type="Story", metadata=None)
+        assert result is None
+        mock_prompt.ask.assert_not_called()
+
+    @patch("budjira.cli.create.Prompt")
+    def test_explicit_parent_skips_prompt(self, mock_prompt: Mock) -> None:
+        from budjira.cli.create import _get_parent_input
+
+        result = _get_parent_input(interactive=True, parent="TEST-1", issue_type="Subtask", metadata=None)
+        assert result == "TEST-1"
+        mock_prompt.ask.assert_not_called()

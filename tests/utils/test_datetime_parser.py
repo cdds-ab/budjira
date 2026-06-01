@@ -137,3 +137,21 @@ class TestParseDatetimeString:
         past_str = past.strftime("%Y-%m-%d %H:%M:%S")
         result = parse_datetime_string(past_str)
         assert result <= datetime.now()
+
+    def test_future_allowed_when_flag_set(self) -> None:
+        """Future dates are accepted when allow_future=True (e.g. sprint dates)."""
+        future = datetime.now() + timedelta(days=30)
+        future_str = future.strftime("%Y-%m-%d")
+        result = parse_datetime_string(future_str, allow_future=True)
+        assert result.date() == future.date()
+
+    def test_parse_relative_tomorrow(self) -> None:
+        """'tomorrow' resolves to the next day at midnight when future is allowed."""
+        result = parse_datetime_string("tomorrow", allow_future=True)
+        expected = (datetime.now() + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        assert result == expected
+
+    def test_tomorrow_rejected_without_future_flag(self) -> None:
+        """'tomorrow' is rejected when future dates are not allowed."""
+        with pytest.raises(ValidationError, match="cannot be in the future"):
+            parse_datetime_string("tomorrow")

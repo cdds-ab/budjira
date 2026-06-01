@@ -11,6 +11,7 @@ from rich.table import Table
 from budjira.core.jira_client import JiraClient
 from budjira.models.sprint import Sprint, SprintState
 from budjira.utils.connection import get_active_connection
+from budjira.utils.datetime_parser import parse_datetime_string
 from budjira.utils.errors import BudjiraError
 from budjira.utils.formatter import OutputFormatter
 
@@ -75,6 +76,46 @@ def _resolve_sprint(
             f"No active sprint found on board {board_id}. Specify a sprint name or use --state to filter."
         )
     return active
+
+
+def _resolve_target(
+    client: JiraClient,
+    board_id: int,
+    sprint_name: str | None,
+    sprint_id: int | None,
+    allow_active: bool,
+) -> Sprint:
+    """Resolve a target sprint by ID, name, or (optionally) the active sprint.
+
+    Args:
+        client: Jira client
+        board_id: Board ID (used for name lookup / active sprint)
+        sprint_id: Explicit sprint ID (highest priority)
+        sprint_name: Sprint name (case-insensitive partial match)
+        allow_active: If True and neither id nor name given, fall back to the
+            active sprint; otherwise require an explicit target
+
+    Returns:
+        Resolved Sprint
+
+    Raises:
+        BudjiraError: If no target can be resolved
+    """
+    if sprint_id is not None:
+        return client.sprints.get_sprint(sprint_id)
+    if sprint_name:
+        return client.sprints.find_sprint_by_name(board_id, sprint_name)
+    if allow_active:
+        return _resolve_sprint(client, board_id, None)
+    raise BudjiraError("No sprint specified. Provide a sprint name or use --sprint-id.")
+
+
+def _emit_error(ctx: typer.Context, error: BudjiraError) -> None:
+    """Render a BudjiraError respecting the active output format."""
+    if OutputFormatter.is_json_format(ctx.obj.get("format", "table") if ctx.obj else "table"):
+        OutputFormatter.output_json({"error": str(error)})
+    else:
+        console.print(f"[red]Error:[/red] {error}")
 
 
 @app.command("list")
@@ -169,10 +210,7 @@ def sprint_list(
         console.print(table)
 
     except BudjiraError as e:
-        if OutputFormatter.is_json_format(ctx.obj.get("format", "table") if ctx.obj else "table"):
-            OutputFormatter.output_json({"error": str(e)})
-        else:
-            console.print(f"[red]Error:[/red] {e}")
+        _emit_error(ctx, e)
         raise typer.Exit(1) from e
 
 
@@ -313,8 +351,293 @@ def sprint_show(
         console.print(table)
 
     except BudjiraError as e:
-        if OutputFormatter.is_json_format(ctx.obj.get("format", "table") if ctx.obj else "table"):
-            OutputFormatter.output_json({"error": str(e)})
-        else:
-            console.print(f"[red]Error:[/red] {e}")
+        _emit_error(ctx, e)
+        raise typer.Exit(1) from e
+
+
+def _sprint_result(sprint: Sprint) -> dict[str, object]:
+    """Build a JSON-serializable result dict for a sprint write operation."""
+    return {
+        "id": sprint.id,
+        "name": sprint.name,
+        "state": sprint.state.value,
+        "start_date": sprint.start_date.isoformat() if sprint.start_date else None,
+        "end_date": sprint.end_date.isoformat() if sprint.end_date else None,
+        "board_id": sprint.board_id,
+    }
+
+
+@app.command("move")
+def sprint_move(
+    ctx: typer.Context,
+    issue_keys: Annotated[
+        list[str],
+        typer.Argument(help="One or more issue keys to move (e.g., PROJ-1 PROJ-2)"),
+    ],
+    to: Annotated[
+        str | None,
+        typer.Option("--to", "-t", help="Target sprint name (case-insensitive)"),
+    ] = None,
+    sprint_id: Annotated[
+        int | None,
+        typer.Option("--sprint-id", help="Target sprint ID (alternative to --to)"),
+    ] = None,
+    board: Annotated[
+        int | None,
+        typer.Option("--board", "-b", help="Board ID (auto-detected if not provided)"),
+    ] = None,
+    connection: Annotated[
+        str | None,
+        typer.Option("--connection", "-c", help="Connection name"),
+    ] = None,
+) -> None:
+    """Move issues into a sprint.
+
+    Assigns one or more issues to a target sprint, identified by name (--to)
+    or ID (--sprint-id). The operation is additive (no confirmation needed).
+
+    Examples:
+
+        budjira sprint move PROJ-123 --to "Sprint 42"
+        budjira sprint move PROJ-1 PROJ-2 PROJ-3 --to "Sprint 42"
+        budjira sprint move PROJ-123 --sprint-id 100
+    """
+    try:
+        output_format = ctx.obj.get("format", "table") if ctx.obj else "table"
+        is_json = OutputFormatter.is_json_format(output_format)
+
+        if to is None and sprint_id is None:
+            raise BudjiraError("Specify a target sprint with --to NAME or --sprint-id ID.")
+
+        conn = get_active_connection(connection)
+        if not is_json:
+            console.print(f"[dim]Using connection: {conn.name}[/dim]\n")
+
+        client = JiraClient.from_connection(conn)
+        board_id = _resolve_board_id(client, board, conn.board_id, conn.project_key)
+        sprint = _resolve_target(client, board_id, to, sprint_id, allow_active=False)
+
+        client.sprints.move_issues(sprint.id, issue_keys)
+
+        if is_json:
+            OutputFormatter.output_json(
+                {"moved": issue_keys, "sprint": _sprint_result(sprint)},
+            )
+            return
+
+        moved = ", ".join(issue_keys)
+        console.print(f"[green]Moved {len(issue_keys)} issue(s) into '{sprint.name}':[/green] {moved}")
+
+    except BudjiraError as e:
+        _emit_error(ctx, e)
+        raise typer.Exit(1) from e
+
+
+@app.command("create")
+def sprint_create(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Argument(help="Sprint name")],
+    start: Annotated[
+        str | None,
+        typer.Option("--start", help="Start date (ISO, 'today', 'yesterday')"),
+    ] = None,
+    end: Annotated[
+        str | None,
+        typer.Option("--end", help="End date (ISO, 'today', 'yesterday')"),
+    ] = None,
+    goal: Annotated[
+        str | None,
+        typer.Option("--goal", "-g", help="Sprint goal"),
+    ] = None,
+    board: Annotated[
+        int | None,
+        typer.Option("--board", "-b", help="Board ID (auto-detected if not provided)"),
+    ] = None,
+    connection: Annotated[
+        str | None,
+        typer.Option("--connection", "-c", help="Connection name"),
+    ] = None,
+) -> None:
+    """Create a new (future) sprint on a board.
+
+    Dates are optional and can be set later when starting the sprint.
+
+    Examples:
+
+        budjira sprint create "Sprint 43"
+        budjira sprint create "Sprint 43" --start today --end 2026-06-14
+        budjira sprint create "Sprint 43" --goal "Ship the API"
+    """
+    try:
+        output_format = ctx.obj.get("format", "table") if ctx.obj else "table"
+        is_json = OutputFormatter.is_json_format(output_format)
+
+        conn = get_active_connection(connection)
+        if not is_json:
+            console.print(f"[dim]Using connection: {conn.name}[/dim]\n")
+
+        client = JiraClient.from_connection(conn)
+        board_id = _resolve_board_id(client, board, conn.board_id, conn.project_key)
+
+        start_dt = parse_datetime_string(start, allow_future=True) if start else None
+        end_dt = parse_datetime_string(end, allow_future=True) if end else None
+
+        sprint = client.sprints.create_sprint(
+            board_id=board_id,
+            name=name,
+            start_date=start_dt,
+            end_date=end_dt,
+            goal=goal,
+        )
+
+        if is_json:
+            OutputFormatter.output_json(_sprint_result(sprint))
+            return
+
+        console.print(f"[green]Created sprint '{sprint.name}' (ID: {sprint.id}) on board {board_id}.[/green]")
+
+    except BudjiraError as e:
+        _emit_error(ctx, e)
+        raise typer.Exit(1) from e
+
+
+@app.command("start")
+def sprint_start(
+    ctx: typer.Context,
+    sprint_name: Annotated[
+        str | None,
+        typer.Argument(help="Sprint name to start"),
+    ] = None,
+    sprint_id: Annotated[
+        int | None,
+        typer.Option("--sprint-id", help="Sprint ID (alternative to name)"),
+    ] = None,
+    start: Annotated[
+        str | None,
+        typer.Option("--start", help="Start date (required if the sprint has none)"),
+    ] = None,
+    end: Annotated[
+        str | None,
+        typer.Option("--end", help="End date (required if the sprint has none)"),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Skip confirmation prompt"),
+    ] = False,
+    board: Annotated[
+        int | None,
+        typer.Option("--board", "-b", help="Board ID (auto-detected if not provided)"),
+    ] = None,
+    connection: Annotated[
+        str | None,
+        typer.Option("--connection", "-c", help="Connection name"),
+    ] = None,
+) -> None:
+    """Start a sprint (transition it to the active state).
+
+    Jira requires the sprint to have a start and end date. Provide --start and
+    --end if the sprint does not have them yet.
+
+    Examples:
+
+        budjira sprint start "Sprint 43" --start today --end 2026-06-14
+        budjira sprint start --sprint-id 100 --force
+    """
+    try:
+        output_format = ctx.obj.get("format", "table") if ctx.obj else "table"
+        is_json = OutputFormatter.is_json_format(output_format)
+
+        conn = get_active_connection(connection)
+        if not is_json:
+            console.print(f"[dim]Using connection: {conn.name}[/dim]\n")
+
+        client = JiraClient.from_connection(conn)
+        board_id = _resolve_board_id(client, board, conn.board_id, conn.project_key)
+        sprint = _resolve_target(client, board_id, sprint_name, sprint_id, allow_active=False)
+
+        if not force:
+            if is_json:
+                raise BudjiraError("Confirmation required. Re-run with --force in JSON mode.")
+            if not typer.confirm(f"Start sprint '{sprint.name}' (ID: {sprint.id})?"):
+                console.print("[yellow]Aborted.[/yellow]")
+                raise typer.Exit(0)
+
+        start_dt = parse_datetime_string(start, allow_future=True) if start else None
+        end_dt = parse_datetime_string(end, allow_future=True) if end else None
+        updated = client.sprints.start_sprint(sprint.id, start_date=start_dt, end_date=end_dt)
+
+        if is_json:
+            OutputFormatter.output_json(_sprint_result(updated))
+            return
+
+        console.print(f"[green]Started sprint '{updated.name}' (ID: {updated.id}).[/green]")
+
+    except BudjiraError as e:
+        _emit_error(ctx, e)
+        raise typer.Exit(1) from e
+
+
+@app.command("close")
+def sprint_close(
+    ctx: typer.Context,
+    sprint_name: Annotated[
+        str | None,
+        typer.Argument(help="Sprint name to close (default: active sprint)"),
+    ] = None,
+    sprint_id: Annotated[
+        int | None,
+        typer.Option("--sprint-id", help="Sprint ID (alternative to name)"),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Skip confirmation prompt"),
+    ] = False,
+    board: Annotated[
+        int | None,
+        typer.Option("--board", "-b", help="Board ID (auto-detected if not provided)"),
+    ] = None,
+    connection: Annotated[
+        str | None,
+        typer.Option("--connection", "-c", help="Connection name"),
+    ] = None,
+) -> None:
+    """Close a sprint (transition it to the closed state).
+
+    Defaults to the active sprint when no name or ID is given.
+
+    Examples:
+
+        budjira sprint close
+        budjira sprint close "Sprint 42"
+        budjira sprint close --sprint-id 100 --force
+    """
+    try:
+        output_format = ctx.obj.get("format", "table") if ctx.obj else "table"
+        is_json = OutputFormatter.is_json_format(output_format)
+
+        conn = get_active_connection(connection)
+        if not is_json:
+            console.print(f"[dim]Using connection: {conn.name}[/dim]\n")
+
+        client = JiraClient.from_connection(conn)
+        board_id = _resolve_board_id(client, board, conn.board_id, conn.project_key)
+        sprint = _resolve_target(client, board_id, sprint_name, sprint_id, allow_active=True)
+
+        if not force:
+            if is_json:
+                raise BudjiraError("Confirmation required. Re-run with --force in JSON mode.")
+            if not typer.confirm(f"Close sprint '{sprint.name}' (ID: {sprint.id})?"):
+                console.print("[yellow]Aborted.[/yellow]")
+                raise typer.Exit(0)
+
+        updated = client.sprints.close_sprint(sprint.id)
+
+        if is_json:
+            OutputFormatter.output_json(_sprint_result(updated))
+            return
+
+        console.print(f"[green]Closed sprint '{updated.name}' (ID: {updated.id}).[/green]")
+
+    except BudjiraError as e:
+        _emit_error(ctx, e)
         raise typer.Exit(1) from e

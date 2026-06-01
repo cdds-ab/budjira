@@ -212,6 +212,9 @@ budjira create issue "User authentication" --type Story --epic PROJ-100
 budjira create issue "Story 1" --type Story --epic PROJ-100 --no-interactive
 budjira create issue "Story 2" --type Story --epic PROJ-100 --no-interactive
 budjira create issue "Story 3" --type Story --epic PROJ-100 --no-interactive
+
+# Create a sub-task under a parent issue
+budjira create issue "Implement login form" --type Subtask --parent PROJ-123 --no-interactive
 ```
 
 **Epic Linking:**
@@ -219,6 +222,13 @@ budjira create issue "Story 3" --type Story --epic PROJ-100 --no-interactive
 - Eliminates need for separate update step
 - Perfect for creating multiple stories for same epic
 - Works in both interactive and non-interactive modes
+
+**Sub-tasks:**
+- Use `--parent PROJ-123` to create a sub-task under a parent issue
+- The sub-task type name differs per instance (`Subtask` or `Sub-task`); budjira
+  detects sub-task types from cached project metadata (`budjira project show`)
+- Creating a sub-task without `--parent` fails fast with a clear error instead of a
+  cryptic Jira API response
 
 ### 6. Definition of Ready (DoR) Templates
 
@@ -362,7 +372,39 @@ budjira --format json epic show PROJ-100
 - **Time Analysis**: Analyze time tracking data for effort estimation
 - **Automation**: Use in CI/CD pipelines or scripts
 
-### 9. Check for Updates
+### 9. Manage Sprints
+
+Query sprints, move issues between them, and drive the sprint lifecycle from
+the CLI. The board is auto-detected (or set `board_id` in `connections.toml`).
+
+```bash
+# List sprints (optionally filter by state)
+budjira sprint list
+budjira sprint list --state active
+
+# Show the contents of a sprint (defaults to the active sprint)
+budjira sprint show
+budjira sprint show "Sprint 42" --mine
+
+# Move issues into a sprint (by name or ID)
+budjira sprint move PROJ-1 PROJ-2 --to "Sprint 42"
+budjira sprint move PROJ-123 --sprint-id 100
+
+# Create a new (future) sprint; dates are optional
+budjira sprint create "Sprint 43" --start today --end 2026-06-14 --goal "Ship the API"
+
+# Start a sprint (requires start + end dates)
+budjira sprint start "Sprint 43" --start today --end 2026-06-14
+
+# Close a sprint (defaults to the active sprint)
+budjira sprint close --force
+```
+
+> **Note:** Creating, starting, and closing sprints requires Jira board-admin
+> permissions. `move` only needs permission to edit the issues. `start` and
+> `close` ask for confirmation unless you pass `--force`.
+
+### 10. Check for Updates
 
 budjira automatically checks for updates every 24 hours and notifies you when a new version is available.
 
@@ -397,7 +439,7 @@ source ~/.bashrc
 
 **Why?** Unauthenticated requests are limited to 60/hour. Authenticated requests get 5,000/hour.
 
-### 10. AI Integration
+### 11. AI Integration
 
 Generate comprehensive usage guides for AI assistants.
 

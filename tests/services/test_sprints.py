@@ -1,5 +1,6 @@
 """Tests for SprintService."""
 
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -240,3 +241,97 @@ class TestFindSprintByName:
 
         with pytest.raises(JiraAPIError, match="Multiple sprints match"):
             service.find_sprint_by_name(42, "Sprint 1")
+
+
+class TestGetSprint:
+    """Tests for SprintService.get_sprint."""
+
+    def test_returns_sprint(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        mock_jira_client.sprint.return_value = _make_jira_sprint(100, "Sprint 10", "active")
+
+        sprint = service.get_sprint(100)
+        assert sprint.id == 100
+        assert sprint.name == "Sprint 10"
+        mock_jira_client.sprint.assert_called_once_with(100)
+
+    def test_not_found(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        from budjira.utils.errors import InvalidIssueError
+
+        mock_jira_client.sprint.side_effect = JIRAError(status_code=404, text="Not found")
+        with pytest.raises(InvalidIssueError, match="not found"):
+            service.get_sprint(999)
+
+
+class TestMoveIssues:
+    """Tests for SprintService.move_issues."""
+
+    def test_moves_issues(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        service.move_issues(100, ["TEST-1", "TEST-2"])
+        mock_jira_client.add_issues_to_sprint.assert_called_once_with(sprint_id=100, issue_keys=["TEST-1", "TEST-2"])
+
+    def test_permission_error(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        mock_jira_client.add_issues_to_sprint.side_effect = JIRAError(status_code=403, text="Forbidden")
+        with pytest.raises(PermissionError):
+            service.move_issues(100, ["TEST-1"])
+
+
+class TestCreateSprint:
+    """Tests for SprintService.create_sprint."""
+
+    def test_creates_sprint(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        mock_jira_client.create_sprint.return_value = _make_jira_sprint(200, "Sprint 20", "future")
+
+        sprint = service.create_sprint(42, "Sprint 20")
+        assert sprint.id == 200
+        assert sprint.name == "Sprint 20"
+        mock_jira_client.create_sprint.assert_called_once_with(
+            name="Sprint 20", board_id=42, startDate=None, endDate=None, goal=None
+        )
+
+    def test_creates_sprint_with_dates_and_goal(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        mock_jira_client.create_sprint.return_value = _make_jira_sprint(200, "Sprint 20", "future")
+
+        start = datetime(2026, 6, 1, 0, 0, 0)
+        end = datetime(2026, 6, 14, 0, 0, 0)
+        service.create_sprint(42, "Sprint 20", start_date=start, end_date=end, goal="Ship it")
+
+        mock_jira_client.create_sprint.assert_called_once_with(
+            name="Sprint 20",
+            board_id=42,
+            startDate=start.isoformat(),
+            endDate=end.isoformat(),
+            goal="Ship it",
+        )
+
+    def test_permission_error(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        mock_jira_client.create_sprint.side_effect = JIRAError(status_code=403, text="Forbidden")
+        with pytest.raises(PermissionError):
+            service.create_sprint(42, "Sprint 20")
+
+
+class TestSprintStateTransitions:
+    """Tests for SprintService.start_sprint and close_sprint."""
+
+    def test_start_sprint(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        mock_jira_client.sprint.return_value = _make_jira_sprint(100, "Sprint 10", "active")
+        start = datetime(2026, 6, 1, 0, 0, 0)
+        end = datetime(2026, 6, 14, 0, 0, 0)
+
+        sprint = service.start_sprint(100, start_date=start, end_date=end)
+        assert sprint.state.value == "active"
+        mock_jira_client.update_sprint.assert_called_once_with(
+            id=100, state="active", startDate=start.isoformat(), endDate=end.isoformat()
+        )
+        mock_jira_client.sprint.assert_called_once_with(100)
+
+    def test_close_sprint(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        mock_jira_client.sprint.return_value = _make_jira_sprint(100, "Sprint 10", "closed")
+
+        sprint = service.close_sprint(100)
+        assert sprint.state.value == "closed"
+        mock_jira_client.update_sprint.assert_called_once_with(id=100, state="closed", startDate=None, endDate=None)
+
+    def test_start_sprint_error(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        mock_jira_client.update_sprint.side_effect = JIRAError(status_code=400, text="No dates set")
+        with pytest.raises(JiraAPIError):
+            service.start_sprint(100)

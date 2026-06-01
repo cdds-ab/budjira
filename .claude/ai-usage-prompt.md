@@ -725,7 +725,6 @@ budjira worklog list ISSUE-KEY
 Display all worklog entries for an issue.
 
 **Output includes:**
-- Worklog ID
 - Author
 - Time spent
 - Started date/time
@@ -734,28 +733,7 @@ Display all worklog entries for an issue.
 **Example:**
 ```bash
 budjira worklog list PROJ-123
-# Shows table with ID, author, time, started, comment
-```
-
-### Delete Worklog Entry
-
-```bash
-budjira worklog delete ISSUE-KEY WORKLOG_ID [OPTIONS]
-```
-
-Delete a native Jira worklog entry by its ID. Use `budjira worklog list` to find worklog IDs.
-
-**Options:**
-- `--force`, `-f`: Skip confirmation prompt
-- `--connection`, `-c`: Connection to use
-
-**Examples:**
-```bash
-# Delete with confirmation (shows worklog details first)
-budjira worklog delete PROJ-123 12345
-
-# Delete without confirmation
-budjira worklog delete PROJ-123 12345 --force
+# Shows table of all worklog entries
 ```
 
 ### Time Estimates
@@ -1429,11 +1407,8 @@ budjira issue update PROJ-456 --remaining-estimate 6h
 # 4. Log more work
 budjira worklog add PROJ-456 3h --comment "Implemented core functionality"
 
-# 5. View all logged time (shows worklog IDs)
+# 5. View all logged time
 budjira worklog list PROJ-456
-
-# 5b. Delete wrong worklog entry
-budjira worklog delete PROJ-456 12345 --force
 
 # 6. Final work log and complete
 budjira issue update PROJ-456 \

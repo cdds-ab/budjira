@@ -1,26 +1,33 @@
 #!/usr/bin/env python3
-"""Pre-commit hook to regenerate AI prompt documentation.
+"""Pre-commit hook: warn when the AI usage prompt is out of date.
 
-This script checks if CLI command files have been modified and automatically
-regenerates the .claude/ai-usage-prompt.md file to keep it in sync.
+This hook NEVER writes or stages files. Regenerating ``.claude/ai-usage-prompt.md``
+from inside a hook is unsafe: pre-commit stashes unstaged changes for the
+duration of a commit, and a hook that rewrites a file which also has stashed
+unstaged changes makes pre-commit's stash *restore* fail -- it cannot re-apply
+its patch and silently strands the developer's work in a backup patch under
+``~/.cache/pre-commit/``. That is exactly the "wild stasher" data-loss this
+project hit.
 
-Exit codes:
-    0: Success (prompt regenerated)
-    1: Error in script execution
+So this hook only DETECTS staleness and prints an actionable reminder.
+Regeneration stays an explicit, manual step:
+
+    uv run budjira -q ai usage-prompt --plain > .claude/ai-usage-prompt.md
+
+Exit code: always 0 (non-blocking reminder -- never aborts the commit).
 """
 
 import sys
 from pathlib import Path
-from subprocess import run  # nosec B404 - Using subprocess for git/budjira commands (trusted)
+from subprocess import run  # nosec B404 - subprocess for git/budjira commands (trusted)
+
+PROMPT_FILE = Path(".claude/ai-usage-prompt.md")
+REGEN_COMMAND = "uv run budjira -q ai usage-prompt --plain > .claude/ai-usage-prompt.md"
 
 
 def get_staged_files() -> list[str]:
-    """Get list of staged files from git.
-
-    Returns:
-        List of staged file paths
-    """
-    result = run(  # nosec B603 B607 - Running git command with fixed args (safe)
+    """Return the list of staged file paths."""
+    result = run(  # nosec B603 B607 - fixed git args (safe)
         ["git", "diff", "--cached", "--name-only"],
         capture_output=True,
         text=True,
@@ -30,116 +37,65 @@ def get_staged_files() -> list[str]:
 
 
 def check_cli_changes(staged_files: list[str]) -> bool:
-    """Check if any CLI command files were modified.
+    """Return True if a staged change can affect the generated AI prompt."""
+    cli_patterns = ("budjira/cli/", "budjira/models/")
 
-    Args:
-        staged_files: List of staged file paths
-
-    Returns:
-        True if CLI files were modified, False otherwise
-    """
-    cli_patterns = [
-        "budjira/cli/",
-        "budjira/models/",
-    ]
-
-    # Don't regenerate if only the AI prompt itself changed
+    # Ignore a change that only touches the prompt itself.
     non_prompt_changes = [f for f in staged_files if not f.endswith("ai-usage-prompt.md")]
-    if not non_prompt_changes:
-        return False
-
-    for file_path in non_prompt_changes:
-        if any(pattern in file_path for pattern in cli_patterns) and file_path.endswith(".py"):
-            return True
-    return False
+    return any(f.endswith(".py") and any(p in f for p in cli_patterns) for f in non_prompt_changes)
 
 
-def regenerate_ai_prompt() -> bool:
-    """Regenerate the AI usage prompt file.
+def generate_expected_prompt() -> str | None:
+    """Generate the current prompt in memory. Returns None if generation fails."""
+    result = run(  # nosec B603 B607 - controlled command (safe)
+        ["uv", "run", "budjira", "-q", "ai", "usage-prompt", "--plain"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    content = result.stdout
+    return content if content.endswith("\n") else content + "\n"
 
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        # Check if .claude directory exists
-        claude_dir = Path(".claude")
-        if not claude_dir.exists():
-            print("⚠️  .claude directory not found, skipping AI prompt regeneration")
-            return True
 
-        prompt_file = claude_dir / "ai-usage-prompt.md"
-
-        print("\n" + "=" * 70)
-        print("🔄 Regenerating AI usage prompt...")
-        print("=" * 70)
-
-        # Run budjira ai usage-prompt --plain
-        result = run(  # nosec B603 B607 - Running controlled command (safe)
-            ["uv", "run", "budjira", "-q", "ai", "usage-prompt", "--plain"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-        if result.returncode != 0:
-            print(f"❌ Failed to generate AI prompt: {result.stderr}")
-            return False
-
-        # Write to file (ensure newline at end)
-        content = result.stdout
-        if not content.endswith("\n"):
-            content += "\n"
-        prompt_file.write_text(content)
-
-        # Stage the updated file
-        run(  # nosec B603 B607 - Running git command (safe)
-            ["git", "add", str(prompt_file)],
-            check=True,
-        )
-
-        print(f"✅ Regenerated and staged {prompt_file}")
-        print()
-        print("The AI usage prompt has been automatically updated to reflect")
-        print("the latest CLI commands and features.")
-        print()
-        print("Please review .claude/ai-prompt-supplements.md if you need to add:")
-        print("  • Project-specific workflows")
-        print("  • Custom examples")
-        print("  • Important tips or caveats")
-        print("=" * 70)
-        print()
-
-        return True
-
-    except Exception as e:
-        print(f"❌ Error regenerating AI prompt: {e}")
-        return False
+def print_reminder() -> None:
+    """Print an actionable reminder that the prompt may be stale."""
+    print("\n" + "=" * 70)
+    print("[i] AI usage prompt may be out of date")
+    print("=" * 70)
+    print("CLI/model files changed but .claude/ai-usage-prompt.md differs from")
+    print("the generated output. Regenerate and stage it in a separate commit:")
+    print()
+    print(f"    {REGEN_COMMAND}")
+    print()
+    print("This hook intentionally does NOT write the file itself (doing so from")
+    print("a hook corrupts pre-commit's stash on partial commits).")
+    print("=" * 70 + "\n")
 
 
 def main() -> int:
-    """Main entry point for the hook.
-
-    Returns:
-        Exit code (0 = success, 1 = error)
-    """
+    """Detect staleness and remind; never modify files, never block the commit."""
     try:
         staged_files = get_staged_files()
-
-        if not staged_files:
-            # No staged files, nothing to check
+        if not staged_files or not check_cli_changes(staged_files):
             return 0
 
-        if check_cli_changes(staged_files) and not regenerate_ai_prompt():
-            # Failed to regenerate, but don't block commit
-            print("⚠️  AI prompt regeneration failed, but commit will proceed")
+        if not PROMPT_FILE.exists():
             return 0
 
-        # Success
+        expected = generate_expected_prompt()
+        if expected is None:
+            # Generation failed -- stay silent rather than nag with a false positive.
+            return 0
+
+        if PROMPT_FILE.read_text() != expected:
+            print_reminder()
+
         return 0
-
     except Exception as e:
-        print(f"Error in AI prompt regeneration: {e}", file=sys.stderr)
-        # Return 0 even on error to not block commits
+        # A reminder hook must never break a commit.
+        print(f"AI prompt freshness check skipped: {e}", file=sys.stderr)
         return 0
 
 

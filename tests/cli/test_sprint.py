@@ -1,5 +1,6 @@
 """Tests for sprint CLI commands."""
 
+import json
 from datetime import date
 from unittest.mock import MagicMock, Mock, patch
 
@@ -346,3 +347,261 @@ def test_sprint_show_status_and_type_filters(mock_get_conn: Mock, mock_jira_cls:
     jql = call_args[1].get("jql_filter") or ""
     assert 'status = "In Progress"' in jql
     assert 'issuetype = "Bug"' in jql
+
+
+def _mock_client_and_conn(mock_get_conn: Mock, mock_jira_cls: Mock, board_id: int | None = 42) -> MagicMock:
+    """Wire up a mock connection + client for write-op tests."""
+    mock_conn = MagicMock()
+    mock_conn.name = "test"
+    mock_conn.project_key = "TEST"
+    mock_conn.board_id = board_id
+    mock_get_conn.return_value = mock_conn
+
+    mock_client = MagicMock()
+    mock_jira_cls.from_connection.return_value = mock_client
+    return mock_client
+
+
+# Sprint move tests
+
+
+def test_sprint_move_help() -> None:
+    result = runner.invoke(app, ["sprint", "move", "--help"])
+    assert result.exit_code == 0
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_move_by_name(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+    mock_client.sprints.find_sprint_by_name.return_value = _make_sprint(100, "Sprint 10")
+
+    result = runner.invoke(app, ["-q", "sprint", "move", "TEST-1", "TEST-2", "--to", "Sprint 10"])
+    assert result.exit_code == 0
+    mock_client.sprints.find_sprint_by_name.assert_called_once_with(42, "Sprint 10")
+    mock_client.sprints.move_issues.assert_called_once_with(100, ["TEST-1", "TEST-2"])
+    assert "Moved 2 issue(s)" in result.stdout
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_move_by_id(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+    mock_client.sprints.get_sprint.return_value = _make_sprint(100, "Sprint 10")
+
+    result = runner.invoke(app, ["-q", "sprint", "move", "TEST-1", "--sprint-id", "100"])
+    assert result.exit_code == 0
+    mock_client.sprints.get_sprint.assert_called_once_with(100)
+    mock_client.sprints.move_issues.assert_called_once_with(100, ["TEST-1"])
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_move_requires_target(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+
+    result = runner.invoke(app, ["-q", "sprint", "move", "TEST-1"])
+    assert result.exit_code == 1
+    assert "--to" in result.stdout or "--sprint-id" in result.stdout
+
+
+# Sprint create tests
+
+
+def test_sprint_create_help() -> None:
+    result = runner.invoke(app, ["sprint", "create", "--help"])
+    assert result.exit_code == 0
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_create_basic(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+    mock_client.sprints.create_sprint.return_value = _make_sprint(200, "Sprint 20", SprintState.FUTURE)
+
+    result = runner.invoke(app, ["-q", "sprint", "create", "Sprint 20"])
+    assert result.exit_code == 0
+    mock_client.sprints.create_sprint.assert_called_once()
+    kwargs = mock_client.sprints.create_sprint.call_args.kwargs
+    assert kwargs["name"] == "Sprint 20"
+    assert kwargs["board_id"] == 42
+    assert kwargs["start_date"] is None
+    assert "Created sprint 'Sprint 20'" in result.stdout
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_create_with_future_dates(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+    mock_client.sprints.create_sprint.return_value = _make_sprint(200, "Sprint 20", SprintState.FUTURE)
+
+    result = runner.invoke(app, ["-q", "sprint", "create", "Sprint 20", "--start", "today", "--end", "2099-12-31"])
+    assert result.exit_code == 0
+    kwargs = mock_client.sprints.create_sprint.call_args.kwargs
+    assert kwargs["start_date"] is not None
+    assert kwargs["end_date"] is not None
+    assert kwargs["end_date"].year == 2099
+
+
+# Sprint start tests
+
+
+def test_sprint_start_help() -> None:
+    result = runner.invoke(app, ["sprint", "start", "--help"])
+    assert result.exit_code == 0
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_start_with_force(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+    mock_client.sprints.find_sprint_by_name.return_value = _make_sprint(100, "Sprint 10", SprintState.FUTURE)
+    mock_client.sprints.start_sprint.return_value = _make_sprint(100, "Sprint 10", SprintState.ACTIVE)
+
+    result = runner.invoke(
+        app, ["-q", "sprint", "start", "Sprint 10", "--start", "today", "--end", "2099-12-31", "--force"]
+    )
+    assert result.exit_code == 0
+    mock_client.sprints.start_sprint.assert_called_once()
+    assert mock_client.sprints.start_sprint.call_args.args[0] == 100
+    assert "Started sprint 'Sprint 10'" in result.stdout
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_start_requires_target(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+
+    result = runner.invoke(app, ["-q", "sprint", "start", "--force"])
+    assert result.exit_code == 1
+    assert "No sprint specified" in result.stdout
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_start_abort_on_decline(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+    mock_client.sprints.find_sprint_by_name.return_value = _make_sprint(100, "Sprint 10", SprintState.FUTURE)
+
+    result = runner.invoke(app, ["-q", "sprint", "start", "Sprint 10"], input="n\n")
+    assert result.exit_code == 0
+    mock_client.sprints.start_sprint.assert_not_called()
+    assert "Aborted" in result.stdout
+
+
+# Sprint close tests
+
+
+def test_sprint_close_help() -> None:
+    result = runner.invoke(app, ["sprint", "close", "--help"])
+    assert result.exit_code == 0
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_close_active_with_force(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+    mock_client.sprints.get_active_sprint.return_value = _make_sprint(100, "Sprint 10", SprintState.ACTIVE)
+    mock_client.sprints.close_sprint.return_value = _make_sprint(100, "Sprint 10", SprintState.CLOSED)
+
+    result = runner.invoke(app, ["-q", "sprint", "close", "--force"])
+    assert result.exit_code == 0
+    mock_client.sprints.close_sprint.assert_called_once_with(100)
+    assert "Closed sprint 'Sprint 10'" in result.stdout
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_close_json_requires_force(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+    mock_client.sprints.find_sprint_by_name.return_value = _make_sprint(100, "Sprint 10", SprintState.ACTIVE)
+
+    result = runner.invoke(app, ["-q", "--format", "json", "sprint", "close", "Sprint 10"])
+    assert result.exit_code == 1
+    assert "Confirmation required" in result.stdout
+    mock_client.sprints.close_sprint.assert_not_called()
+
+
+# JSON output contract tests (success paths)
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_move_json_output(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+    mock_client.sprints.find_sprint_by_name.return_value = _make_sprint(100, "Sprint 10")
+
+    result = runner.invoke(app, ["-q", "--format", "json", "sprint", "move", "TEST-1", "TEST-2", "--to", "Sprint 10"])
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["moved"] == ["TEST-1", "TEST-2"]
+    assert payload["sprint"]["id"] == 100
+    assert payload["sprint"]["name"] == "Sprint 10"
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_create_json_output(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+    mock_client.sprints.create_sprint.return_value = _make_sprint(200, "Sprint 20", SprintState.FUTURE)
+
+    result = runner.invoke(app, ["-q", "--format", "json", "sprint", "create", "Sprint 20"])
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["id"] == 200
+    assert payload["state"] == "future"
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_start_json_output(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+    mock_client.sprints.find_sprint_by_name.return_value = _make_sprint(100, "Sprint 10", SprintState.FUTURE)
+    mock_client.sprints.start_sprint.return_value = _make_sprint(100, "Sprint 10", SprintState.ACTIVE)
+
+    result = runner.invoke(
+        app,
+        ["-q", "--format", "json", "sprint", "start", "Sprint 10", "--start", "today", "--end", "2099-12-31", "-f"],
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["id"] == 100
+    assert payload["state"] == "active"
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_close_json_output(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+    mock_client.sprints.get_active_sprint.return_value = _make_sprint(100, "Sprint 10", SprintState.ACTIVE)
+    mock_client.sprints.close_sprint.return_value = _make_sprint(100, "Sprint 10", SprintState.CLOSED)
+
+    result = runner.invoke(app, ["-q", "--format", "json", "sprint", "close", "--force"])
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["id"] == 100
+    assert payload["state"] == "closed"
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_start_json_requires_force(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+    mock_client.sprints.find_sprint_by_name.return_value = _make_sprint(100, "Sprint 10", SprintState.FUTURE)
+
+    result = runner.invoke(app, ["-q", "--format", "json", "sprint", "start", "Sprint 10"])
+    assert result.exit_code == 1
+    assert "Confirmation required" in result.stdout
+    mock_client.sprints.start_sprint.assert_not_called()
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_close_abort_on_decline(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls)
+    mock_client.sprints.get_active_sprint.return_value = _make_sprint(100, "Sprint 10", SprintState.ACTIVE)
+
+    result = runner.invoke(app, ["-q", "sprint", "close"], input="n\n")
+    assert result.exit_code == 0
+    mock_client.sprints.close_sprint.assert_not_called()
+    assert "Aborted" in result.stdout

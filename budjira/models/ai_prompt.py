@@ -465,7 +465,13 @@ budjira create issue "Issue summary" --no-interactive [OPTIONS]
 - `--label TAG`: Add label (can be used multiple times)
 - `--project KEY`: Override default project
 - `--epic KEY`: Link to epic during creation
+- `--parent KEY`: Parent issue key for sub-tasks (required when the type is a sub-task)
 - `--custom NAME=VALUE`: Set custom field (repeatable, requires configuration)
+
+**Sub-tasks:** Use `--parent PROJ-123` to create a sub-task under a parent issue.
+The sub-task type name varies per instance (often `Subtask`, sometimes `Sub-task`);
+budjira detects sub-task types via cached project metadata (`budjira project show`)
+and fails fast with a clear message if a sub-task is created without `--parent`.
 
 **Examples:**
 
@@ -489,6 +495,12 @@ budjira create issue "Add export functionality" \\
 # Quick task creation
 budjira create issue "Update documentation" \\
   --type Task \\
+  --no-interactive
+
+# Sub-task under a parent issue (Epic > Story > Sub-task workflows)
+budjira create issue "Implement login form" \\
+  --type Subtask \\
+  --parent PROJ-123 \\
   --no-interactive
 
 # With custom fields (requires configuration in connections.toml)
@@ -1333,6 +1345,36 @@ budjira --format json sprint show
 **Output includes:**
 - Sprint header with name, state, and dates
 - Table of issues with: Key, Type, Status, Priority, Summary, Assignee
+
+### Sprint Management (Write Operations)
+
+Move issues into sprints and manage the sprint lifecycle. Lifecycle and
+delete operations require Jira board-admin permissions; a 403 is reported as
+a permission error.
+
+```bash
+# Move one or more issues into a sprint (by name or ID)
+budjira sprint move ISSUE-KEY [ISSUE-KEY ...] --to "Sprint 42"
+budjira sprint move PROJ-1 PROJ-2 --sprint-id 100
+
+# Create a new (future) sprint; dates are optional
+budjira sprint create "Sprint 43"
+budjira sprint create "Sprint 43" --start today --end 2026-06-14 --goal "Ship the API"
+
+# Start a sprint (-> active); Jira requires start+end dates
+budjira sprint start "Sprint 43" --start today --end 2026-06-14
+budjira sprint start --sprint-id 100 --force
+
+# Close a sprint (-> closed); defaults to the active sprint
+budjira sprint close
+budjira sprint close "Sprint 42" --force
+```
+
+**Key points:**
+- `move` is additive and needs no confirmation. Target via `--to NAME` or `--sprint-id ID` (one is required).
+- `start`/`close` prompt for confirmation; use `--force`/`-f` to skip. In JSON mode `--force` is mandatory.
+- Sprint dates accept ISO (`2026-06-14`), `today`, `tomorrow`, or `yesterday`.
+- All commands support `--board`, `--connection`, and `--format json`.
 
 ### Board Configuration
 
