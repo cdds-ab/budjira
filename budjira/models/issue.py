@@ -143,13 +143,16 @@ class Issue(BaseModel):
             Dictionary with basic field values
         """
         issue_id = int(jira_issue.id) if hasattr(jira_issue, "id") and jira_issue.id is not None else None
+        # Guard every field access: a partial fetch (e.g. fields=["summary"]) returns a
+        # PropertyHolder that only carries the requested fields, so issuetype/status may be
+        # absent. Unguarded access raised "'PropertyHolder' object has no attribute ...".
         return {
             "id": issue_id,
             "key": jira_issue.key,
-            "summary": fields.summary,
+            "summary": getattr(fields, "summary", "") or "",
             "description": fields.description if hasattr(fields, "description") else None,
-            "issue_type": fields.issuetype.name,
-            "status": fields.status.name,
+            "issue_type": fields.issuetype.name if getattr(fields, "issuetype", None) else "",
+            "status": fields.status.name if getattr(fields, "status", None) else "",
             "project_key": jira_issue.key.split("-")[0],
         }
 

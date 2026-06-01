@@ -272,6 +272,28 @@ class TestIssue:
         assert issue.created is None
         assert issue.updated is None
 
+    def test_from_jira_issue_partial_fields_summary_only(self) -> None:
+        """A partial fetch (fields=["summary"]) must not crash on absent fields (#89).
+
+        Regression: `issue delete` fetched fields=["summary"], yielding a PropertyHolder
+        without issuetype/status. Unguarded access raised
+        "'PropertyHolder' object has no attribute 'issuetype'".
+        """
+        import types
+
+        # SimpleNamespace raises AttributeError on missing attrs, like jira's PropertyHolder.
+        fields = types.SimpleNamespace(summary="Only the title")
+        jira_issue = types.SimpleNamespace(id="123", key="PROJ-7", fields=fields)
+
+        issue = Issue.from_jira_issue(jira_issue)
+
+        assert issue.key == "PROJ-7"
+        assert issue.summary == "Only the title"
+        assert issue.issue_type == ""
+        assert issue.status == ""
+        assert issue.priority is None
+        assert issue.assignee is None
+
     def test_parse_issue_links_outward(self) -> None:
         """Test parsing issue links with outward direction."""
         # Mock Jira API response for outward link
