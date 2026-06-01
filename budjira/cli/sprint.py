@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
@@ -14,6 +14,9 @@ from budjira.utils.connection import get_active_connection
 from budjira.utils.datetime_parser import parse_datetime_string
 from budjira.utils.errors import BudjiraError
 from budjira.utils.formatter import OutputFormatter
+
+if TYPE_CHECKING:
+    from budjira.models.connection import Connection
 
 app = typer.Typer(
     name="sprint",
@@ -80,17 +83,24 @@ def _resolve_sprint(
 
 def _resolve_target(
     client: JiraClient,
-    board_id: int,
+    conn: Connection,
+    board: int | None,
     sprint_name: str | None,
     sprint_id: int | None,
     allow_active: bool,
 ) -> Sprint:
     """Resolve a target sprint by ID, name, or (optionally) the active sprint.
 
+    Board detection is performed lazily: when an explicit ``sprint_id`` is given
+    the sprint is fetched directly via the agile API and no board is resolved at
+    all. This is what makes ``--sprint-id`` work for team-managed projects whose
+    board type is not auto-detected.
+
     Args:
         client: Jira client
-        board_id: Board ID (used for name lookup / active sprint)
-        sprint_id: Explicit sprint ID (highest priority)
+        conn: Active connection (provides board_id default and project key)
+        board: Explicit --board flag value (overrides detection)
+        sprint_id: Explicit sprint ID (highest priority; skips board resolution)
         sprint_name: Sprint name (case-insensitive partial match)
         allow_active: If True and neither id nor name given, fall back to the
             active sprint; otherwise require an explicit target
@@ -101,8 +111,11 @@ def _resolve_target(
     Raises:
         BudjiraError: If no target can be resolved
     """
+    # --sprint-id needs no board: fetch directly via the agile sprint endpoint.
     if sprint_id is not None:
         return client.sprints.get_sprint(sprint_id)
+
+    board_id = _resolve_board_id(client, board, conn.board_id, conn.project_key)
     if sprint_name:
         return client.sprints.find_sprint_by_name(board_id, sprint_name)
     if allow_active:
@@ -414,8 +427,7 @@ def sprint_move(
             console.print(f"[dim]Using connection: {conn.name}[/dim]\n")
 
         client = JiraClient.from_connection(conn)
-        board_id = _resolve_board_id(client, board, conn.board_id, conn.project_key)
-        sprint = _resolve_target(client, board_id, to, sprint_id, allow_active=False)
+        sprint = _resolve_target(client, conn, board, to, sprint_id, allow_active=False)
 
         client.sprints.move_issues(sprint.id, issue_keys)
 
@@ -552,8 +564,7 @@ def sprint_start(
             console.print(f"[dim]Using connection: {conn.name}[/dim]\n")
 
         client = JiraClient.from_connection(conn)
-        board_id = _resolve_board_id(client, board, conn.board_id, conn.project_key)
-        sprint = _resolve_target(client, board_id, sprint_name, sprint_id, allow_active=False)
+        sprint = _resolve_target(client, conn, board, sprint_name, sprint_id, allow_active=False)
 
         if not force:
             if is_json:
@@ -620,8 +631,7 @@ def sprint_close(
             console.print(f"[dim]Using connection: {conn.name}[/dim]\n")
 
         client = JiraClient.from_connection(conn)
-        board_id = _resolve_board_id(client, board, conn.board_id, conn.project_key)
-        sprint = _resolve_target(client, board_id, sprint_name, sprint_id, allow_active=True)
+        sprint = _resolve_target(client, conn, board, sprint_name, sprint_id, allow_active=True)
 
         if not force:
             if is_json:

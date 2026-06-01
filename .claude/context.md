@@ -317,7 +317,8 @@ budjira/tempo/client.py        90%
 - **#73** - Auto-discover Jira project metadata → Released v1.19.0
 
 ### In Progress / Open
-- **#85** - Sub-task creation via `--parent` → implementiert, Release ausstehend (blockierte Epic>Story>Sub-task-Buchung)
+- **#87** - Sprint support for team-managed projects (board type `simple`) + `--sprint-id` skips board detection → fix, Release 1.21.1 ausstehend
+- **#85** - Sub-task creation via `--parent` → released v1.21.0 (blockierte Epic>Story>Sub-task-Buchung)
 - **#78** - Sprint move + lifecycle (move/create/start/close) → implementiert, Release ausstehend
 - **#74** - Local-first release workflow → erledigt (v1.20.0, cz bump)
 - **#75** - AI prompt optimization (nicht gestartet)
