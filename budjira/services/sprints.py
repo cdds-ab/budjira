@@ -8,9 +8,11 @@ from jira.exceptions import JIRAError
 
 from budjira.models.sprint import Board, Sprint, SprintState
 from budjira.services.base import BaseJiraService
-from budjira.utils.errors import JiraAPIError
+from budjira.utils.errors import InvalidIssueError, JiraAPIError, PermissionError
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from budjira.models.issue import Issue
 
 
@@ -167,3 +169,195 @@ class SprintService(BaseJiraService):
 
         sprint_list = ", ".join(f"'{s.name}'" for s in matches)
         raise JiraAPIError(f"Multiple sprints match '{name}': {sprint_list}. Please provide a more specific name.")
+
+    def get_sprint(self, sprint_id: int) -> Sprint:
+        """Get a single sprint by ID.
+
+        Args:
+            sprint_id: Sprint ID
+
+        Returns:
+            Sprint object
+
+        Raises:
+            InvalidIssueError: If the sprint does not exist
+            JiraAPIError: If retrieval fails
+        """
+        try:
+            self._log_operation("Get sprint", sprint_id=sprint_id)
+            jira_sprint = self._client.sprint(sprint_id)
+            return Sprint.from_jira_sprint(jira_sprint)
+        except JIRAError as e:
+            if e.status_code == 404:
+                raise InvalidIssueError(
+                    f"Sprint '{sprint_id}' not found. Use 'budjira sprint list' to see available sprints."
+                ) from e
+            self._handle_jira_error(e, "Get sprint", sprint_id=sprint_id)
+            raise
+        except (InvalidIssueError, PermissionError, JiraAPIError):
+            raise
+        except Exception as e:
+            raise JiraAPIError(f"Failed to get sprint {sprint_id}: {e}") from e
+
+    def move_issues(self, sprint_id: int, issue_keys: list[str]) -> None:
+        """Move issues into a sprint.
+
+        Assigns one or more issues to the target sprint. Issues already in
+        another sprint are moved; the operation is additive and does not
+        remove issues from the sprint.
+
+        Args:
+            sprint_id: Target sprint ID
+            issue_keys: Issue keys to move (e.g., ["PROJ-1", "PROJ-2"])
+
+        Raises:
+            InvalidIssueError: If the sprint or an issue does not exist
+            PermissionError: If the user lacks permission to manage sprints
+            JiraAPIError: If the move fails
+        """
+        try:
+            self._log_operation("Move issues to sprint", sprint_id=sprint_id, issue_keys=issue_keys)
+            self._client.add_issues_to_sprint(sprint_id=sprint_id, issue_keys=issue_keys)
+            self._logger.info(f"Moved {len(issue_keys)} issue(s) into sprint {sprint_id}")
+        except JIRAError as e:
+            self._handle_jira_error(e, "Move issues to sprint", sprint_id=sprint_id)
+            raise
+        except (InvalidIssueError, PermissionError, JiraAPIError):
+            raise
+        except Exception as e:
+            raise JiraAPIError(f"Failed to move issues into sprint {sprint_id}: {e}") from e
+
+    def create_sprint(
+        self,
+        board_id: int,
+        name: str,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        goal: str | None = None,
+    ) -> Sprint:
+        """Create a new sprint on a board.
+
+        The sprint is created in the ``future`` state. Start and end dates are
+        optional; they can be set later when starting the sprint.
+
+        Args:
+            board_id: Board ID to create the sprint on
+            name: Sprint name
+            start_date: Optional planned start date
+            end_date: Optional planned end date
+            goal: Optional sprint goal
+
+        Returns:
+            The created Sprint
+
+        Raises:
+            PermissionError: If the user lacks permission to manage sprints
+            JiraAPIError: If creation fails
+        """
+        try:
+            self._log_operation("Create sprint", board_id=board_id, name=name)
+            jira_sprint = self._client.create_sprint(
+                name=name,
+                board_id=board_id,
+                startDate=start_date.isoformat() if start_date else None,
+                endDate=end_date.isoformat() if end_date else None,
+                goal=goal,
+            )
+            sprint = Sprint.from_jira_sprint(jira_sprint)
+            self._logger.info(f"Created sprint '{name}' (ID: {sprint.id}) on board {board_id}")
+            return sprint
+        except JIRAError as e:
+            self._handle_jira_error(e, "Create sprint", board_id=board_id, name=name)
+            raise
+        except (InvalidIssueError, PermissionError, JiraAPIError):
+            raise
+        except Exception as e:
+            raise JiraAPIError(f"Failed to create sprint '{name}' on board {board_id}: {e}") from e
+
+    def start_sprint(
+        self,
+        sprint_id: int,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> Sprint:
+        """Start a sprint (transition to the ``active`` state).
+
+        Jira requires a future sprint to have a start and end date before it
+        can be started. Provide them here if the sprint does not have them set.
+
+        Args:
+            sprint_id: Sprint ID
+            start_date: Optional start date (required if the sprint has none)
+            end_date: Optional end date (required if the sprint has none)
+
+        Returns:
+            The updated Sprint
+
+        Raises:
+            InvalidIssueError: If the sprint does not exist
+            PermissionError: If the user lacks permission to manage sprints
+            JiraAPIError: If the sprint cannot be started
+        """
+        return self._set_state(
+            sprint_id,
+            SprintState.ACTIVE,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    def close_sprint(self, sprint_id: int) -> Sprint:
+        """Close a sprint (transition to the ``closed`` state).
+
+        Args:
+            sprint_id: Sprint ID
+
+        Returns:
+            The updated Sprint
+
+        Raises:
+            InvalidIssueError: If the sprint does not exist
+            PermissionError: If the user lacks permission to manage sprints
+            JiraAPIError: If the sprint cannot be closed
+        """
+        return self._set_state(sprint_id, SprintState.CLOSED)
+
+    def _set_state(
+        self,
+        sprint_id: int,
+        state: SprintState,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> Sprint:
+        """Transition a sprint to a new state.
+
+        Args:
+            sprint_id: Sprint ID
+            state: Target state
+            start_date: Optional start date (used when starting a sprint)
+            end_date: Optional end date (used when starting a sprint)
+
+        Returns:
+            The updated Sprint (re-fetched after the update)
+
+        Raises:
+            InvalidIssueError: If the sprint does not exist
+            PermissionError: If the user lacks permission to manage sprints
+            JiraAPIError: If the transition fails
+        """
+        try:
+            self._log_operation("Set sprint state", sprint_id=sprint_id, state=state.value)
+            self._client.update_sprint(
+                id=sprint_id,
+                state=state.value,
+                startDate=start_date.isoformat() if start_date else None,
+                endDate=end_date.isoformat() if end_date else None,
+            )
+            self._logger.info(f"Sprint {sprint_id} transitioned to '{state.value}'")
+            return self.get_sprint(sprint_id)
+        except JIRAError as e:
+            self._handle_jira_error(e, "Set sprint state", sprint_id=sprint_id, state=state.value)
+            raise
+        except (InvalidIssueError, PermissionError, JiraAPIError):
+            raise
+        except Exception as e:
+            raise JiraAPIError(f"Failed to set sprint {sprint_id} to '{state.value}': {e}") from e

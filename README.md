@@ -362,7 +362,39 @@ budjira --format json epic show PROJ-100
 - **Time Analysis**: Analyze time tracking data for effort estimation
 - **Automation**: Use in CI/CD pipelines or scripts
 
-### 9. Check for Updates
+### 9. Manage Sprints
+
+Query sprints, move issues between them, and drive the sprint lifecycle from
+the CLI. The board is auto-detected (or set `board_id` in `connections.toml`).
+
+```bash
+# List sprints (optionally filter by state)
+budjira sprint list
+budjira sprint list --state active
+
+# Show the contents of a sprint (defaults to the active sprint)
+budjira sprint show
+budjira sprint show "Sprint 42" --mine
+
+# Move issues into a sprint (by name or ID)
+budjira sprint move PROJ-1 PROJ-2 --to "Sprint 42"
+budjira sprint move PROJ-123 --sprint-id 100
+
+# Create a new (future) sprint; dates are optional
+budjira sprint create "Sprint 43" --start today --end 2026-06-14 --goal "Ship the API"
+
+# Start a sprint (requires start + end dates)
+budjira sprint start "Sprint 43" --start today --end 2026-06-14
+
+# Close a sprint (defaults to the active sprint)
+budjira sprint close --force
+```
+
+> **Note:** Creating, starting, and closing sprints requires Jira board-admin
+> permissions. `move` only needs permission to edit the issues. `start` and
+> `close` ask for confirmation unless you pass `--force`.
+
+### 10. Check for Updates
 
 budjira automatically checks for updates every 24 hours and notifies you when a new version is available.
 
@@ -397,7 +429,7 @@ source ~/.bashrc
 
 **Why?** Unauthenticated requests are limited to 60/hour. Authenticated requests get 5,000/hour.
 
-### 10. AI Integration
+### 11. AI Integration
 
 Generate comprehensive usage guides for AI assistants.
 

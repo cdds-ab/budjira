@@ -1334,6 +1334,36 @@ budjira --format json sprint show
 - Sprint header with name, state, and dates
 - Table of issues with: Key, Type, Status, Priority, Summary, Assignee
 
+### Sprint Management (Write Operations)
+
+Move issues into sprints and manage the sprint lifecycle. Lifecycle and
+delete operations require Jira board-admin permissions; a 403 is reported as
+a permission error.
+
+```bash
+# Move one or more issues into a sprint (by name or ID)
+budjira sprint move ISSUE-KEY [ISSUE-KEY ...] --to "Sprint 42"
+budjira sprint move PROJ-1 PROJ-2 --sprint-id 100
+
+# Create a new (future) sprint; dates are optional
+budjira sprint create "Sprint 43"
+budjira sprint create "Sprint 43" --start today --end 2026-06-14 --goal "Ship the API"
+
+# Start a sprint (-> active); Jira requires start+end dates
+budjira sprint start "Sprint 43" --start today --end 2026-06-14
+budjira sprint start --sprint-id 100 --force
+
+# Close a sprint (-> closed); defaults to the active sprint
+budjira sprint close
+budjira sprint close "Sprint 42" --force
+```
+
+**Key points:**
+- `move` is additive and needs no confirmation. Target via `--to NAME` or `--sprint-id ID` (one is required).
+- `start`/`close` prompt for confirmation; use `--force`/`-f` to skip. In JSON mode `--force` is mandatory.
+- Sprint dates accept ISO (`2026-06-14`), `today`, `tomorrow`, or `yesterday`.
+- All commands support `--board`, `--connection`, and `--format json`.
+
 ### Board Configuration
 
 The board is resolved in this order:

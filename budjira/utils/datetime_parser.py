@@ -7,22 +7,25 @@ from datetime import datetime, timedelta
 from budjira.utils.errors import ValidationError
 
 
-def parse_datetime_string(datetime_str: str) -> datetime:
+def parse_datetime_string(datetime_str: str, allow_future: bool = False) -> datetime:
     """Parse a datetime string and return a datetime object.
 
     Supported formats:
     - ISO format: "2025-10-25T14:30:00" or "2025-10-25 14:30:00"
     - Date only: "2025-10-25" (time defaults to 00:00)
-    - Relative: "today", "yesterday"
+    - Relative: "today", "yesterday", "tomorrow"
 
     Args:
         datetime_str: Datetime string to parse
+        allow_future: If True, accept dates in the future (e.g., sprint dates).
+            Defaults to False so worklog timestamps stay in the past.
 
     Returns:
         Parsed datetime object
 
     Raises:
-        ValidationError: If datetime string format is invalid or in the future
+        ValidationError: If datetime string format is invalid, or in the future
+            while ``allow_future`` is False
 
     Examples:
         >>> dt = parse_datetime_string("2025-10-25 14:30")
@@ -43,6 +46,8 @@ def parse_datetime_string(datetime_str: str) -> datetime:
         result = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     elif datetime_str.lower() == "yesterday":
         result = (datetime.now() - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    elif datetime_str.lower() == "tomorrow":
+        result = (datetime.now() + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     else:
         # Try parsing ISO format variants
         formats = [
@@ -68,7 +73,7 @@ def parse_datetime_string(datetime_str: str) -> datetime:
     # Validate: not in the future
     # At this point, result is guaranteed to be a datetime (not None)
     assert result is not None  # nosec B101
-    if result > datetime.now():
+    if not allow_future and result > datetime.now():
         raise ValidationError(f"Datetime cannot be in the future: {result.strftime('%Y-%m-%d %H:%M')}")
 
     return result
