@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.21.2 (2026-06-01)
+
+### Fix
+
+- **issue**: guard partial-field fetch in Issue parsing (#89)
+
 ## v1.21.1 (2026-06-01)
 
 ### Fix
