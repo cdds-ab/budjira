@@ -1381,7 +1381,12 @@ budjira sprint close "Sprint 42" --force
 The board is resolved in this order:
 1. `--board` CLI flag (highest priority)
 2. `board_id` from connection config (set in connections.toml)
-3. Auto-detection from project (works when exactly one Scrum board exists)
+3. Auto-detection from project (works when exactly one sprint-capable board exists)
+
+Both company-managed (board type `scrum`) and team-managed (board type `simple`)
+projects are supported. For team-managed projects, passing `--sprint-id`
+directly to `sprint move/start/close` skips board detection entirely and
+operates on the sprint via the agile API.
 
 To configure a default board in `connections.toml`:
 ```toml

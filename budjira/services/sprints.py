@@ -17,10 +17,17 @@ if TYPE_CHECKING:
 
 
 class SprintService(BaseJiraService):
-    """Service for querying Jira sprints and scrum boards."""
+    """Service for querying Jira sprints and boards."""
+
+    # Board types that support sprints: 'scrum' (company-managed) and
+    # 'simple' (team-managed / next-gen). 'kanban' boards have no sprints.
+    SPRINT_BOARD_TYPES = ("scrum", "simple")
 
     def get_boards(self, project_key: str) -> list[Board]:
-        """Get scrum boards for a project.
+        """Get all boards for a project.
+
+        Returns boards of every type (scrum, simple, kanban). Filtering to
+        sprint-capable boards is done by the caller (see ``detect_board``).
 
         Args:
             project_key: Jira project key (e.g., PROJ)
@@ -33,9 +40,11 @@ class SprintService(BaseJiraService):
         """
         try:
             self._log_operation("Get boards", project_key=project_key)
-            jira_boards = self._client.boards(projectKeyOrID=project_key, type="scrum")
+            # No server-side type filter: team-managed boards report type
+            # 'simple' and would be hidden by type='scrum'.
+            jira_boards = self._client.boards(projectKeyOrID=project_key)
             boards = [Board.from_jira_board(b) for b in jira_boards]
-            self._logger.info(f"Found {len(boards)} scrum boards for project {project_key}")
+            self._logger.info(f"Found {len(boards)} boards for project {project_key}")
             return boards
         except JIRAError as e:
             self._handle_jira_error(e, "Get boards", project_key=project_key)
@@ -44,9 +53,10 @@ class SprintService(BaseJiraService):
             raise JiraAPIError(f"Failed to get boards for project {project_key}: {e}") from e
 
     def detect_board(self, project_key: str) -> Board:
-        """Auto-detect the scrum board for a project.
+        """Auto-detect the sprint-capable board for a project.
 
-        Works when there is exactly one scrum board. Raises an error otherwise
+        Accepts both company-managed (``scrum``) and team-managed (``simple``)
+        boards. Works when there is exactly one such board; raises otherwise
         with guidance to use --board.
 
         Args:
@@ -56,19 +66,21 @@ class SprintService(BaseJiraService):
             Detected Board object
 
         Raises:
-            JiraAPIError: If no boards or multiple boards found
+            JiraAPIError: If no sprint-capable board or multiple are found
         """
-        boards = self.get_boards(project_key)
+        boards = [b for b in self.get_boards(project_key) if b.board_type in self.SPRINT_BOARD_TYPES]
 
         if len(boards) == 0:
             raise JiraAPIError(
-                f"No scrum boards found for project '{project_key}'. Ensure the project uses a Scrum board in Jira."
+                f"No sprint-capable board found for project '{project_key}'. Ensure the project has a "
+                f"Scrum (company-managed) or team-managed board with sprints enabled. "
+                f"For team-managed projects you can also pass --sprint-id directly."
             )
 
         if len(boards) > 1:
             board_list = ", ".join(f"{b.name} (ID: {b.id})" for b in boards)
             raise JiraAPIError(
-                f"Multiple scrum boards found for project '{project_key}': {board_list}. "
+                f"Multiple sprint-capable boards found for project '{project_key}': {board_list}. "
                 f"Use --board to specify which board to use."
             )
 

@@ -376,6 +376,9 @@ budjira --format json epic show PROJ-100
 
 Query sprints, move issues between them, and drive the sprint lifecycle from
 the CLI. The board is auto-detected (or set `board_id` in `connections.toml`).
+Both company-managed (Scrum) and team-managed boards are supported; for
+team-managed projects you can also pass `--sprint-id` directly, which skips
+board detection entirely.
 
 ```bash
 # List sprints (optionally filter by state)

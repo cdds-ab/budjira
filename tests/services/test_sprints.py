@@ -74,7 +74,8 @@ class TestGetBoards:
         assert len(boards) == 2
         assert boards[0].id == 1
         assert boards[1].id == 2
-        mock_jira_client.boards.assert_called_once_with(projectKeyOrID="TEST", type="scrum")
+        # No server-side type filter so team-managed ('simple') boards are visible too.
+        mock_jira_client.boards.assert_called_once_with(projectKeyOrID="TEST")
 
     def test_empty_boards(self, service: SprintService, mock_jira_client: MagicMock) -> None:
         mock_jira_client.boards.return_value = []
@@ -97,9 +98,22 @@ class TestDetectBoard:
         assert board.id == 42
         assert board.name == "My Board"
 
+    def test_team_managed_simple_board(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        # Team-managed projects expose a board of type 'simple' (not 'scrum').
+        mock_jira_client.boards.return_value = [_make_jira_board(99, "TM Board", board_type="simple")]
+
+        board = service.detect_board("TEST")
+        assert board.id == 99
+        assert board.board_type == "simple"
+
     def test_no_boards(self, service: SprintService, mock_jira_client: MagicMock) -> None:
         mock_jira_client.boards.return_value = []
-        with pytest.raises(JiraAPIError, match="No scrum boards found"):
+        with pytest.raises(JiraAPIError, match="No sprint-capable board"):
+            service.detect_board("TEST")
+
+    def test_kanban_only_is_not_sprint_capable(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        mock_jira_client.boards.return_value = [_make_jira_board(7, "Kanban", board_type="kanban")]
+        with pytest.raises(JiraAPIError, match="No sprint-capable board"):
             service.detect_board("TEST")
 
     def test_multiple_boards(self, service: SprintService, mock_jira_client: MagicMock) -> None:
@@ -107,8 +121,17 @@ class TestDetectBoard:
             _make_jira_board(1, "Board A"),
             _make_jira_board(2, "Board B"),
         ]
-        with pytest.raises(JiraAPIError, match="Multiple scrum boards"):
+        with pytest.raises(JiraAPIError, match="Multiple sprint-capable boards"):
             service.detect_board("TEST")
+
+    def test_kanban_ignored_when_one_sprint_board(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        # A kanban board alongside one scrum board must not trigger the "multiple" error.
+        mock_jira_client.boards.return_value = [
+            _make_jira_board(1, "Kanban", board_type="kanban"),
+            _make_jira_board(2, "Scrum", board_type="scrum"),
+        ]
+        board = service.detect_board("TEST")
+        assert board.id == 2
 
 
 class TestGetSprints:

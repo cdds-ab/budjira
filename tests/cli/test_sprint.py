@@ -397,6 +397,20 @@ def test_sprint_move_by_id(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
 
 @patch("budjira.cli.sprint.JiraClient")
 @patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_move_by_id_skips_board_detection(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    """--sprint-id must not trigger board auto-detection (team-managed safe, #87)."""
+    mock_client = _mock_client_and_conn(mock_get_conn, mock_jira_cls, board_id=None)
+    mock_client.sprints.get_sprint.return_value = _make_sprint(107, "Future Sprint", SprintState.FUTURE)
+
+    result = runner.invoke(app, ["-q", "sprint", "move", "PROJ-1", "PROJ-2", "--sprint-id", "107"])
+    assert result.exit_code == 0
+    mock_client.sprints.move_issues.assert_called_once_with(107, ["PROJ-1", "PROJ-2"])
+    # The whole point of #87: no board lookup at all when --sprint-id is given.
+    mock_client.sprints.detect_board.assert_not_called()
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
 def test_sprint_move_requires_target(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
     _mock_client_and_conn(mock_get_conn, mock_jira_cls)
 
