@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 
 from budjira import __version__
-from budjira.cli import ai, comment, connect, create, dor, epic, issue, search, show, tempo, update, worklog
+from budjira.cli import ai, comment, connect, create, dor, epic, issue, search, show, tempo, update, workflow, worklog
 from budjira.utils.banner import print_header
 
 # Show header early for --help (which bypasses callback)
@@ -39,6 +39,12 @@ app.add_typer(worklog.app, name="worklog")
 
 # Register top-level show command
 app.command(name="show")(show.show_issue)
+
+# Register workflow alias commands (quick status transitions)
+app.command(name="start")(workflow.start_issue)
+app.command(name="done")(workflow.done_issue)
+app.command(name="block")(workflow.block_issue)
+app.command(name="review")(workflow.review_issue)
 
 
 def is_quiet_mode() -> bool:

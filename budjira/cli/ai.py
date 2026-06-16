@@ -389,6 +389,76 @@ budjira issue transitions PROJ-123
 
 ---
 
+## Quick Workflow Shortcuts
+
+For common status transitions, budjira provides quick alias commands that save typing:
+
+### Start Working on Issue
+
+```bash
+budjira start ISSUE-KEY [--connection NAME]
+```
+
+Quick alias for transitioning an issue to "In Progress". Equivalent to `budjira issue update ISSUE-KEY --status "In Progress"` but 70% faster to type.
+
+**Example:**
+```bash
+budjira start PROJ-123
+```
+
+### Mark Issue as Done
+
+```bash
+budjira done ISSUE-KEY [--connection NAME]
+```
+
+Quick alias for transitioning an issue to "Done". Equivalent to `budjira issue update ISSUE-KEY --status "Done"`.
+
+**Example:**
+```bash
+budjira done PROJ-456
+```
+
+### Block an Issue
+
+```bash
+budjira block ISSUE-KEY [--connection NAME]
+```
+
+Quick alias for transitioning an issue to "Blocked". Equivalent to `budjira issue update ISSUE-KEY --status "Blocked"`.
+
+**Example:**
+```bash
+budjira block PROJ-789
+```
+
+### Send to Review
+
+```bash
+budjira review ISSUE-KEY [--connection NAME]
+```
+
+Quick alias for transitioning an issue to "In Review". Equivalent to `budjira issue update ISSUE-KEY --status "In Review"`.
+
+**Example:**
+```bash
+budjira review PROJ-111
+```
+
+**Benefits:**
+- ✅ 70% less typing for most common workflow actions
+- ✅ Natural command names that match developer vocabulary
+- ✅ Faster daily standup updates
+- ✅ Same connection management as full update command
+
+**Use Cases:**
+- Daily standup updates: `budjira start PROJ-123`
+- Marking completed work: `budjira done PROJ-456`
+- Flagging blockers: `budjira block PROJ-789`
+- Code review workflows: `budjira review PROJ-111`
+
+---
+
 ## Epic Management
 
 ### View Epic with Child Issues

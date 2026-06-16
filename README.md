@@ -276,14 +276,34 @@ budjira issue update PROJ-123 --epic PROJ-100
 budjira issue transitions PROJ-123
 ```
 
-### 8. View Epic Progress
+### 8. Quick Workflow Shortcuts
+
+For common status transitions, budjira provides quick alias commands that save typing:
+
+```bash
+# Start working on an issue (→ In Progress)
+budjira start PROJ-123
+
+# Mark issue as done (→ Done)
+budjira done PROJ-123
+
+# Block an issue (→ Blocked)
+budjira block PROJ-123
+
+# Send to review (→ In Review)
+budjira review PROJ-123
+```
+
+These are equivalent to using `budjira issue update PROJ-123 --status "..."` but are 70% faster to type for the most common workflow actions.
+
+### 9. View Epic Progress
 
 ```bash
 # Show epic with all child stories
 budjira epic show PROJ-100
 ```
 
-### 9. Check for Updates
+### 10. Check for Updates
 
 budjira automatically checks for updates every 24 hours and notifies you when a new version is available.
 
@@ -298,7 +318,7 @@ budjira update
 budjira update --check --force
 ```
 
-### 10. AI Integration
+### 11. AI Integration
 
 Generate comprehensive usage guides for AI assistants.
 
@@ -359,7 +379,7 @@ budjira issue update PROJ-123 --log-work 2h --work-comment "Implemented API endp
 - Date only: `2024-10-25` (time defaults to 00:00)
 - Relative: `today`, `yesterday`
 
-### 8. Add Comments
+### 12. Add Comments
 
 Add comments to Jira issues without logging time (unlike worklogs which combine comments with time tracking).
 
@@ -389,7 +409,7 @@ budjira comment add PROJ-123 "Comment text" --connection my-connection
 - Supports markdown formatting
 - Multi-line content for detailed updates
 
-### 9. Tempo Timesheets Integration
+### 13. Tempo Timesheets Integration
 
 For enterprise teams using [Tempo Timesheets](https://www.tempo.io/), budjira provides full API integration for advanced time tracking and billing.
 
@@ -439,7 +459,7 @@ budjira tempo accounts
 - Use `budjira worklog` commands for standard Jira time tracking
 - Tempo integration is optional and requires a separate API token
 
-### 10. JSON Output Format
+### 14. JSON Output Format
 
 budjira supports JSON output for automation and integration with other tools (e.g., reporting systems, data analysis).
 
