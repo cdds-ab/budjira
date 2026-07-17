@@ -1,7 +1,7 @@
 # mypy: disable-error-code="attr-defined,union-attr"
 """Tests for issue service."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from budjira.services.issues import IssueService
@@ -66,3 +66,30 @@ class TestDeleteIssue:
 
         with pytest.raises(JiraAPIError):
             service.delete("PROJ-123")
+
+
+class TestDescriptionConversion:
+    """Markdown descriptions must be converted to Jira wiki markup on upload."""
+
+    def test_create_converts_markdown_description(self) -> None:
+        """create() sends wiki markup, not raw Markdown (issue #95)."""
+        mock_client = MagicMock()
+        service = IssueService(mock_client)
+
+        with patch("budjira.services.issues.Issue.from_jira_issue", return_value=MagicMock()):
+            service.create("PROJ", "summary", "Task", description="## Title\n- [ ] todo")
+
+        fields = mock_client.create_issue.call_args.kwargs["fields"]
+        assert fields["description"] == "h2. Title\n* (x) todo"
+
+    def test_update_converts_markdown_description(self) -> None:
+        """update() sends wiki markup, not raw Markdown (issue #95)."""
+        mock_client = MagicMock()
+        mock_issue = MagicMock()
+        mock_client.issue.return_value = mock_issue
+        service = IssueService(mock_client)
+
+        service.update("PROJ-1", description="## Title\n- [ ] todo")
+
+        fields = mock_issue.update.call_args.kwargs["fields"]
+        assert fields["description"] == "h2. Title\n* (x) todo"

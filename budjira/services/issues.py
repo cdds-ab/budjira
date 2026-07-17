@@ -9,6 +9,7 @@ from jira.exceptions import JIRAError
 from budjira.models.issue import Issue
 from budjira.services.base import BaseJiraService
 from budjira.utils.errors import InvalidIssueError, JiraAPIError, PermissionError
+from budjira.utils.markdown_to_jira import markdown_to_wiki
 
 
 class IssueService(BaseJiraService):
@@ -175,7 +176,8 @@ class IssueService(BaseJiraService):
             }
 
             if description:
-                fields["description"] = description
+                # Jira REST v2 renders descriptions as wiki markup; convert from Markdown (issue #95).
+                fields["description"] = markdown_to_wiki(description)
             if priority:
                 fields["priority"] = {"name": priority}
             if assignee:
@@ -221,7 +223,7 @@ class IssueService(BaseJiraService):
             # jira's Resource.delete is inherited untyped (unlike the overridden Issue.update). cast() keeps this
             # clean across mypy environments: with jira installed the call would otherwise raise no-untyped-call,
             # while in the jira-less CI mypy env a type: ignore would be flagged unused.
-            cast(Any, self.client.issue(issue_key)).delete(deleteSubtasks=delete_subtasks)
+            cast("Any", self.client.issue(issue_key)).delete(deleteSubtasks=delete_subtasks)
             self._logger.info(f"Deleted issue {issue_key}")
 
         except JIRAError as e:
@@ -292,7 +294,8 @@ class IssueService(BaseJiraService):
 
             # Handle description
             if description is not None:
-                update_fields["description"] = description
+                # Jira REST v2 renders descriptions as wiki markup; convert from Markdown (issue #95).
+                update_fields["description"] = markdown_to_wiki(description)
 
             if update_fields:
                 self.client.issue(issue_key).update(fields=update_fields)
