@@ -24,6 +24,10 @@ from budjira.cli import (
     worklog,
 )
 from budjira.utils.banner import print_header
+from budjira.utils.redact import install_redaction
+
+# Credentials must never reach log output; scrub every record at creation.
+install_redaction()
 
 # Show header early for --help (which bypasses callback)
 # Check for --help and show header unless -q is present
