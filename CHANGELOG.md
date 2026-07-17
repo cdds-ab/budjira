@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## v1.21.3 (2026-07-17)
+
+### Fix
+
+- **issue**: convert Markdown descriptions to Jira wiki markup on upload
+- **logging**: redact credentials from all log records
+
 ## v1.21.2 (2026-06-01)
 
 ### Fix
