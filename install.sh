@@ -38,7 +38,7 @@ BIN_DIR="$HOME/.local/bin"
 
 echo "${YELLOW}→${NC} Installing budjira to ${INSTALL_DIR}..."
 
-if [ -d "$INSTALL_DIR" ]; then
+if [ -d "$INSTALL_DIR/.git" ]; then
     echo "${YELLOW}→${NC} Updating existing installation..."
     cd "$INSTALL_DIR"
     # Reset any local changes and force-sync with remote
@@ -47,7 +47,15 @@ if [ -d "$INSTALL_DIR" ]; then
     git reset --hard origin/master --quiet
     git clean -fd --quiet
 else
-    echo "${YELLOW}→${NC} Cloning budjira repository..."
+    # Gate on the .git checkout, not just the directory: a directory that exists
+    # but is not a git checkout (interrupted/corrupted earlier install) would make
+    # git fetch abort with "not a git repository". Heal it by re-cloning.
+    if [ -d "$INSTALL_DIR" ]; then
+        echo "${YELLOW}→${NC} Existing directory is not a git checkout, re-cloning..."
+        rm -rf "$INSTALL_DIR"
+    else
+        echo "${YELLOW}→${NC} Cloning budjira repository..."
+    fi
     mkdir -p "$(dirname "$INSTALL_DIR")"
     git clone --quiet https://github.com/cdds-ab/budjira.git "$INSTALL_DIR"
     cd "$INSTALL_DIR"
