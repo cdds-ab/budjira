@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from datetime import date
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from budjira.cli.tempo import get_tempo_client
 from budjira.core.jira_client import JiraClient
 from budjira.utils.connection import get_active_connection
 from budjira.utils.datetime_parser import parse_datetime_string
@@ -19,7 +21,11 @@ from budjira.utils.errors import (
     PermissionError,
     ValidationError,
 )
+from budjira.utils.formatter import OutputFormatter
 from budjira.utils.time_parser import parse_time_string
+
+if TYPE_CHECKING:
+    from budjira.tempo.models import TempoWorklog
 
 console = Console()
 app = typer.Typer(help="Manage work log entries for issues")
@@ -195,6 +201,7 @@ def delete_worklog(
 
 @app.command(name="list")
 def list_worklogs(
+    ctx: typer.Context,
     issue_key: Annotated[
         str,
         typer.Argument(help="Issue key (e.g., PROJ-123)"),
@@ -207,61 +214,66 @@ def list_worklogs(
             envvar="BUDJIRA_CONNECTION",
         ),
     ] = None,
+    mine: Annotated[
+        bool,
+        typer.Option("--mine", help="Only worklogs authored by the current user (Tempo connections only)"),
+    ] = False,
+    author: Annotated[
+        str | None,
+        typer.Option("--author", help="Filter by author accountId (Tempo connections only)"),
+    ] = None,
+    from_date: Annotated[
+        str | None,
+        typer.Option("--from", help="Only worklogs on/after this date, YYYY-MM-DD (Tempo connections only)"),
+    ] = None,
+    to_date: Annotated[
+        str | None,
+        typer.Option("--to", help="Only worklogs on/before this date, YYYY-MM-DD (Tempo connections only)"),
+    ] = None,
 ) -> None:
     """List work log entries for an issue.
 
-    Display all work logs for the specified issue in a table.
+    On Tempo-enabled connections the worklogs are fetched via the Tempo API so the
+    real author is shown (the Jira worklog API reports only the Tempo sync account),
+    and the --mine/--author/--from/--to filters are available. On non-Tempo
+    connections the Jira worklog API is used.
 
-    Example:
+    Examples:
 
         budjira worklog list PROJ-123
+        budjira worklog list PROJ-123 --mine
+        budjira worklog list PROJ-123 --author 557058:abc --from 2025-10-01 --to 2025-10-31
+        budjira -f json worklog list PROJ-123
     """
+    output_format = ctx.obj.get("format", "table") if ctx.obj else "table"
+
+    if mine and author:
+        console.print("[red]Error:[/red] --mine and --author cannot be used together.")
+        raise typer.Exit(1)
+
     try:
-        # Get active connection
         connection = get_active_connection(connection_name)
+        filters_requested = mine or author is not None or from_date is not None or to_date is not None
 
-        # Create Jira client and fetch worklogs
-        client = JiraClient.from_connection(connection)
-        worklogs = client.get_worklogs(issue_key)
-
-        if not worklogs:
-            console.print(f"[yellow]No work logs found for {issue_key}[/yellow]")
-            return
-
-        # Create table
-        table = Table(title=f"Work Logs for {issue_key}", show_header=True)
-        table.add_column("ID", style="dim")
-        table.add_column("Author", style="cyan")
-        table.add_column("Time Spent", style="green")
-        table.add_column("Started", style="blue")
-        table.add_column("Comment", style="white", no_wrap=False)
-
-        # Add rows
-        for wl in worklogs:
-            wl_id = str(wl.get("id", ""))
-            author = wl.get("author", "Unknown")
-            time_spent = wl.get("timeSpent", "0m")
-            started = wl.get("started", "")
-
-            # Format started datetime
-            if started:
-                # Parse and format: "2025-10-25T14:30:00.000+0000" -> "2025-10-25 14:30"
-                try:
-                    from datetime import datetime
-
-                    dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
-                    started_fmt = dt.strftime("%Y-%m-%d %H:%M")
-                except Exception:
-                    started_fmt = started[:16] if len(started) > 16 else started
-            else:
-                started_fmt = "-"
-
-            comment = wl.get("comment", "")
-
-            table.add_row(wl_id, author, time_spent, started_fmt, comment)
-
-        console.print(table)
-        console.print(f"\n[green]Total: {len(worklogs)} work log(s)[/green]")
+        if connection.tempo_enabled:
+            _list_worklogs_tempo(
+                issue_key=issue_key,
+                connection_name=connection_name,
+                connection=connection,
+                output_format=output_format,
+                mine=mine,
+                author=author,
+                from_date=from_date,
+                to_date=to_date,
+            )
+        else:
+            if filters_requested:
+                console.print(
+                    "[red]Error:[/red] --mine/--author/--from/--to require a Tempo-enabled "
+                    "connection. Run 'budjira connect tempo-setup' to enable Tempo."
+                )
+                raise typer.Exit(1)
+            _list_worklogs_jira(issue_key, connection, output_format)
 
     except ConnectionError as e:
         console.print(f"[red]Connection Error:[/red] {e}")
@@ -272,6 +284,151 @@ def list_worklogs(
     except InvalidIssueError as e:
         console.print(f"[red]Invalid Issue:[/red] {e}")
         raise typer.Exit(1) from e
+    except PermissionError as e:
+        console.print(f"[red]Permission Denied:[/red] {e}")
+        raise typer.Exit(1) from e
+    except ValidationError as e:
+        console.print(f"[red]Validation Error:[/red] {e}")
+        raise typer.Exit(1) from e
     except BudjiraError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from e
+
+
+def _list_worklogs_tempo(
+    *,
+    issue_key: str,
+    connection_name: str | None,
+    connection: Any,
+    output_format: str,
+    mine: bool,
+    author: str | None,
+    from_date: str | None,
+    to_date: str | None,
+) -> None:
+    """List worklogs via the Tempo API (real author + filters)."""
+    tempo_client = get_tempo_client(connection_name)
+    jira_client = JiraClient.from_connection(connection)
+
+    # Tempo requires the numeric issue ID, not the key.
+    issue_id = int(jira_client.client.issue(issue_key).id)
+
+    # Resolve the author filter to an accountId.
+    account_id = author
+    if mine:
+        account_id = jira_client.client.myself()["accountId"]
+
+    from_date_obj = date.fromisoformat(from_date) if from_date else None
+    to_date_obj = date.fromisoformat(to_date) if to_date else None
+
+    worklogs = tempo_client.get_worklogs(
+        issue_id=issue_id,
+        account_id=account_id,
+        from_date=from_date_obj,
+        to_date=to_date_obj,
+        limit=1000,
+    )
+
+    if OutputFormatter.is_json_format(output_format):
+        OutputFormatter.output_json(
+            {
+                "issue": issue_key,
+                "total": len(worklogs),
+                "worklogs": [_tempo_worklog_to_dict(wl) for wl in worklogs],
+            }
+        )
+        return
+
+    if not worklogs:
+        console.print(f"[yellow]No work logs found for {issue_key}[/yellow]")
+        return
+
+    table = Table(title=f"Work Logs for {issue_key}", show_header=True)
+    table.add_column("ID", style="dim")
+    table.add_column("Author", style="cyan")
+    table.add_column("Time Spent", style="green")
+    table.add_column("Started", style="blue")
+    table.add_column("Comment", style="white", no_wrap=False)
+
+    for wl in worklogs:
+        hours, remainder = divmod(wl.timeSpentSeconds, 3600)
+        minutes = remainder // 60
+        time_spent = f"{hours}h {minutes}m" if hours else f"{minutes}m"
+        started = f"{wl.startDate.isoformat()} {(wl.startTime or '')[:5]}".strip()
+        author_name = wl.author.displayName or wl.author.accountId
+        table.add_row(str(wl.tempoWorklogId), author_name, time_spent, started, wl.description or "")
+
+    console.print(table)
+    console.print(f"\n[green]Total: {len(worklogs)} work log(s)[/green]")
+
+
+def _tempo_worklog_to_dict(wl: TempoWorklog) -> dict[str, Any]:
+    """Serialize a Tempo worklog for JSON output."""
+    return {
+        "id": wl.tempoWorklogId,
+        "author": {"accountId": wl.author.accountId, "displayName": wl.author.displayName},
+        "timeSpentSeconds": wl.timeSpentSeconds,
+        "startDate": wl.startDate.isoformat(),
+        "startTime": wl.startTime,
+        "description": wl.description,
+    }
+
+
+def _list_worklogs_jira(issue_key: str, connection: Any, output_format: str) -> None:
+    """List worklogs via the Jira worklog API (non-Tempo connections)."""
+    client = JiraClient.from_connection(connection)
+    worklogs = client.get_worklogs(issue_key)
+
+    if OutputFormatter.is_json_format(output_format):
+        OutputFormatter.output_json(
+            {
+                "issue": issue_key,
+                "total": len(worklogs),
+                "worklogs": [
+                    {
+                        "id": wl.get("id"),
+                        "author": {"accountId": None, "displayName": wl.get("author")},
+                        "timeSpentSeconds": wl.get("timeSpentSeconds"),
+                        "startDate": wl.get("started"),
+                        "description": wl.get("comment"),
+                    }
+                    for wl in worklogs
+                ],
+            }
+        )
+        return
+
+    if not worklogs:
+        console.print(f"[yellow]No work logs found for {issue_key}[/yellow]")
+        return
+
+    table = Table(title=f"Work Logs for {issue_key}", show_header=True)
+    table.add_column("ID", style="dim")
+    table.add_column("Author", style="cyan")
+    table.add_column("Time Spent", style="green")
+    table.add_column("Started", style="blue")
+    table.add_column("Comment", style="white", no_wrap=False)
+
+    for wl in worklogs:
+        wl_id = str(wl.get("id", ""))
+        author = wl.get("author", "Unknown")
+        time_spent = wl.get("timeSpent", "0m")
+        started = wl.get("started", "")
+
+        if started:
+            # Parse and format: "2025-10-25T14:30:00.000+0000" -> "2025-10-25 14:30"
+            try:
+                from datetime import datetime
+
+                dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+                started_fmt = dt.strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                started_fmt = started[:16] if len(started) > 16 else started
+        else:
+            started_fmt = "-"
+
+        comment = wl.get("comment", "")
+        table.add_row(wl_id, author, time_spent, started_fmt, comment)
+
+    console.print(table)
+    console.print(f"\n[green]Total: {len(worklogs)} work log(s)[/green]")
