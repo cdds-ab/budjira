@@ -517,3 +517,268 @@ class TestWorklogListCommand:
 
         assert result.exit_code == 0
         mock_get_conn.assert_called_once_with("my-connection")
+
+
+def _tempo_worklog(
+    *,
+    worklog_id: int = 10001,
+    account_id: str = "557058:real-person",
+    display_name: str | None = "Real Person",
+    seconds: int = 9000,
+    description: str | None = "Fixed bug",
+):
+    """Build a TempoWorklog for list tests."""
+    from datetime import date, datetime
+
+    from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
+
+    return TempoWorklog(
+        self=f"https://api.tempo.io/worklogs/{worklog_id}",
+        tempoWorklogId=worklog_id,
+        issue=TempoIssue(self="https://api.tempo.io/issues/12345", key="TEST-123", id=12345),
+        timeSpentSeconds=seconds,
+        startDate=date(2025, 10, 24),
+        startTime="14:00:00",
+        description=description,
+        createdAt=datetime(2025, 10, 24, 16, 30),
+        updatedAt=datetime(2025, 10, 24, 16, 30),
+        author=TempoAuthor(
+            self=f"https://api.tempo.io/users/{account_id}",
+            accountId=account_id,
+            displayName=display_name,
+        ),
+    )
+
+
+class TestWorklogListTempoAttribution:
+    """Tests for 'budjira worklog list' on Tempo-enabled connections (#92)."""
+
+    @pytest.fixture
+    def tempo_connection(self, mock_connection):
+        mock_connection.tempo_enabled = True
+        return mock_connection
+
+    def _wire_jira(self, mock_jira_class: MagicMock, *, account_id: str = "557058:me") -> MagicMock:
+        """Wire JiraClient mock for issue_id resolution and myself()."""
+        jira = MagicMock()
+        issue = MagicMock()
+        issue.id = "12345"
+        issue.key = "TEST-123"
+        jira.client.issue.return_value = issue
+        jira.client.myself.return_value = {"accountId": account_id, "displayName": "Me"}
+        mock_jira_class.from_connection.return_value = jira
+        return jira
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_tempo_connection_shows_real_author_displayname(
+        self, mock_get_conn, mock_jira_class, mock_get_tempo, tempo_connection
+    ):
+        """On a Tempo connection the real author displayName is shown, not the sync account."""
+        mock_get_conn.return_value = tempo_connection
+        self._wire_jira(mock_jira_class)
+        tempo = MagicMock()
+        tempo.get_worklogs.return_value = [_tempo_worklog(display_name="Real Person")]
+        mock_get_tempo.return_value = tempo
+
+        result = runner.invoke(app, ["worklog", "list", "TEST-123"])
+
+        assert result.exit_code == 0
+        assert "Real Person" in result.stdout
+        # Resolved numeric issue id must be passed to the Tempo client
+        assert tempo.get_worklogs.call_args.kwargs["issue_id"] == 12345
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_format_json_emits_expected_fields(self, mock_get_conn, mock_jira_class, mock_get_tempo, tempo_connection):
+        """--format json emits structured records with author accountId + displayName."""
+        import json
+
+        mock_get_conn.return_value = tempo_connection
+        self._wire_jira(mock_jira_class)
+        tempo = MagicMock()
+        tempo.get_worklogs.return_value = [
+            _tempo_worklog(worklog_id=777, account_id="557058:x", display_name="Real Person", seconds=1800)
+        ]
+        mock_get_tempo.return_value = tempo
+
+        result = runner.invoke(app, ["--format", "json", "worklog", "list", "TEST-123"])
+
+        assert result.exit_code == 0
+        payload = json.loads(result.stdout)
+        record = payload["worklogs"][0]
+        assert record["id"] == 777
+        assert record["author"]["accountId"] == "557058:x"
+        assert record["author"]["displayName"] == "Real Person"
+        assert record["timeSpentSeconds"] == 1800
+        assert record["startDate"] == "2025-10-24"
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_mine_filters_by_current_user_account_id(
+        self, mock_get_conn, mock_jira_class, mock_get_tempo, tempo_connection
+    ):
+        """--mine resolves the current user and passes their accountId to the client."""
+        mock_get_conn.return_value = tempo_connection
+        self._wire_jira(mock_jira_class, account_id="557058:me")
+        tempo = MagicMock()
+        tempo.get_worklogs.return_value = []
+        mock_get_tempo.return_value = tempo
+
+        result = runner.invoke(app, ["worklog", "list", "TEST-123", "--mine"])
+
+        assert result.exit_code == 0
+        assert tempo.get_worklogs.call_args.kwargs["account_id"] == "557058:me"
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_author_filters_by_account_id(self, mock_get_conn, mock_jira_class, mock_get_tempo, tempo_connection):
+        """--author passes the given accountId to the client."""
+        mock_get_conn.return_value = tempo_connection
+        self._wire_jira(mock_jira_class)
+        tempo = MagicMock()
+        tempo.get_worklogs.return_value = []
+        mock_get_tempo.return_value = tempo
+
+        result = runner.invoke(app, ["worklog", "list", "TEST-123", "--author", "557058:colleague"])
+
+        assert result.exit_code == 0
+        assert tempo.get_worklogs.call_args.kwargs["account_id"] == "557058:colleague"
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_from_and_to_passed_to_client(self, mock_get_conn, mock_jira_class, mock_get_tempo, tempo_connection):
+        """--from/--to are parsed and passed as date filters to the client."""
+        from datetime import date
+
+        mock_get_conn.return_value = tempo_connection
+        self._wire_jira(mock_jira_class)
+        tempo = MagicMock()
+        tempo.get_worklogs.return_value = []
+        mock_get_tempo.return_value = tempo
+
+        result = runner.invoke(app, ["worklog", "list", "TEST-123", "--from", "2025-10-01", "--to", "2025-10-31"])
+
+        assert result.exit_code == 0
+        kwargs = tempo.get_worklogs.call_args.kwargs
+        assert kwargs["from_date"] == date(2025, 10, 1)
+        assert kwargs["to_date"] == date(2025, 10, 31)
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_mine_and_author_are_mutually_exclusive(
+        self, mock_get_conn, mock_jira_class, mock_get_tempo, tempo_connection
+    ):
+        """--mine and --author together is a usage error."""
+        mock_get_conn.return_value = tempo_connection
+        self._wire_jira(mock_jira_class)
+        mock_get_tempo.return_value = MagicMock()
+
+        result = runner.invoke(app, ["worklog", "list", "TEST-123", "--mine", "--author", "557058:x"])
+
+        assert result.exit_code == 1
+        assert "mine" in result.stdout.lower() and "author" in result.stdout.lower()
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_invalid_from_date_is_usage_error(self, mock_get_conn, mock_jira_class, mock_get_tempo, tempo_connection):
+        """An unparseable --from date is a clean usage error, not a traceback."""
+        mock_get_conn.return_value = tempo_connection
+        self._wire_jira(mock_jira_class)
+        mock_get_tempo.return_value = MagicMock()
+
+        result = runner.invoke(app, ["worklog", "list", "TEST-123", "--from", "2025-13-01"])
+
+        assert result.exit_code == 1
+        assert "invalid date" in result.stdout.lower()
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_truncation_hint_when_limit_reached(self, mock_get_conn, mock_jira_class, mock_get_tempo, tempo_connection):
+        """Exactly limit results means more may exist: table output carries a hint."""
+        mock_get_conn.return_value = tempo_connection
+        self._wire_jira(mock_jira_class)
+        tempo = MagicMock()
+        tempo.get_worklogs.return_value = [_tempo_worklog(worklog_id=i) for i in range(1000)]
+        mock_get_tempo.return_value = tempo
+
+        result = runner.invoke(app, ["worklog", "list", "TEST-123"])
+
+        assert result.exit_code == 0
+        assert "truncated" in result.stdout.lower()
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_json_truncated_flag(self, mock_get_conn, mock_jira_class, mock_get_tempo, tempo_connection):
+        """JSON output exposes whether the result hit the fetch limit."""
+        import json
+
+        mock_get_conn.return_value = tempo_connection
+        self._wire_jira(mock_jira_class)
+        tempo = MagicMock()
+        tempo.get_worklogs.return_value = [_tempo_worklog()]
+        mock_get_tempo.return_value = tempo
+
+        result = runner.invoke(app, ["--format", "json", "worklog", "list", "TEST-123"])
+
+        assert result.exit_code == 0
+        payload = json.loads(result.stdout)
+        assert payload["truncated"] is False
+
+
+class TestWorklogListNonTempo:
+    """Non-Tempo (Jira fallback) behaviour for 'budjira worklog list' (#92)."""
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_non_tempo_json_output(self, mock_get_conn, mock_jira_class, mock_connection):
+        """--format json works on the Jira fallback path too."""
+        import json
+
+        mock_get_conn.return_value = mock_connection  # tempo_enabled defaults to False
+        client = MagicMock()
+        client.get_worklogs.return_value = [
+            {
+                "id": "10001",
+                "author": "John Doe",
+                "timeSpent": "2h 30m",
+                "timeSpentSeconds": 9000,
+                "started": "2025-10-24T14:00:00.000+0000",
+                "comment": "Fixed bug",
+            }
+        ]
+        mock_jira_class.from_connection.return_value = client
+
+        result = runner.invoke(app, ["--format", "json", "worklog", "list", "TEST-123"])
+
+        assert result.exit_code == 0
+        payload = json.loads(result.stdout)
+        record = payload["worklogs"][0]
+        assert record["id"] == "10001"
+        assert record["author"]["displayName"] == "John Doe"
+        # Same schema as the Tempo path: startDate is a date, startTime a separate field.
+        assert record["startDate"] == "2025-10-24"
+        assert record["startTime"] == "14:00:00"
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_filter_flag_on_non_tempo_warns(self, mock_get_conn, mock_jira_class, mock_connection):
+        """Author/date filters require a Tempo connection; using them on Jira warns instead of silently ignoring."""
+        mock_get_conn.return_value = mock_connection  # tempo_enabled=False
+        client = MagicMock()
+        client.get_worklogs.return_value = []
+        mock_jira_class.from_connection.return_value = client
+
+        result = runner.invoke(app, ["worklog", "list", "TEST-123", "--mine"])
+
+        assert result.exit_code == 1
+        assert "tempo" in result.stdout.lower()
