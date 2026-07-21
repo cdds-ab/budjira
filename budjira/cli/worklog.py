@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date
+import re
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
@@ -25,10 +26,14 @@ from budjira.utils.formatter import OutputFormatter
 from budjira.utils.time_parser import parse_time_string
 
 if TYPE_CHECKING:
+    from budjira.models.connection import Connection
     from budjira.tempo.models import TempoWorklog
 
 console = Console()
 app = typer.Typer(help="Manage work log entries for issues")
+
+# Tempo API hard cap per request; results at exactly this size may be incomplete.
+_TEMPO_WORKLOG_LIMIT = 1000
 
 
 @app.command(name="add")
@@ -251,6 +256,9 @@ def list_worklogs(
         console.print("[red]Error:[/red] --mine and --author cannot be used together.")
         raise typer.Exit(1)
 
+    from_date_obj = _parse_date_option(from_date, "--from")
+    to_date_obj = _parse_date_option(to_date, "--to")
+
     try:
         connection = get_active_connection(connection_name)
         filters_requested = mine or author is not None or from_date is not None or to_date is not None
@@ -263,8 +271,8 @@ def list_worklogs(
                 output_format=output_format,
                 mine=mine,
                 author=author,
-                from_date=from_date,
-                to_date=to_date,
+                from_date=from_date_obj,
+                to_date=to_date_obj,
             )
         else:
             if filters_requested:
@@ -295,16 +303,38 @@ def list_worklogs(
         raise typer.Exit(1) from e
 
 
+def _parse_date_option(value: str | None, option: str) -> date | None:
+    """Parse a YYYY-MM-DD option value, exiting with a usage error if invalid."""
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        console.print(f"[red]Error:[/red] Invalid date for {option}: '{value}' (expected YYYY-MM-DD).")
+        raise typer.Exit(1) from None
+
+
+def _worklog_table(issue_key: str) -> Table:
+    """Build the shared worklog table skeleton."""
+    table = Table(title=f"Work Logs for {issue_key}", show_header=True)
+    table.add_column("ID", style="dim")
+    table.add_column("Author", style="cyan")
+    table.add_column("Time Spent", style="green")
+    table.add_column("Started", style="blue")
+    table.add_column("Comment", style="white", no_wrap=False)
+    return table
+
+
 def _list_worklogs_tempo(
     *,
     issue_key: str,
     connection_name: str | None,
-    connection: Any,
+    connection: Connection,
     output_format: str,
     mine: bool,
     author: str | None,
-    from_date: str | None,
-    to_date: str | None,
+    from_date: date | None,
+    to_date: date | None,
 ) -> None:
     """List worklogs via the Tempo API (real author + filters)."""
     tempo_client = get_tempo_client(connection_name)
@@ -318,22 +348,21 @@ def _list_worklogs_tempo(
     if mine:
         account_id = jira_client.client.myself()["accountId"]
 
-    from_date_obj = date.fromisoformat(from_date) if from_date else None
-    to_date_obj = date.fromisoformat(to_date) if to_date else None
-
     worklogs = tempo_client.get_worklogs(
         issue_id=issue_id,
         account_id=account_id,
-        from_date=from_date_obj,
-        to_date=to_date_obj,
-        limit=1000,
+        from_date=from_date,
+        to_date=to_date,
+        limit=_TEMPO_WORKLOG_LIMIT,
     )
+    truncated = len(worklogs) >= _TEMPO_WORKLOG_LIMIT
 
     if OutputFormatter.is_json_format(output_format):
         OutputFormatter.output_json(
             {
                 "issue": issue_key,
                 "total": len(worklogs),
+                "truncated": truncated,
                 "worklogs": [_tempo_worklog_to_dict(wl) for wl in worklogs],
             }
         )
@@ -343,12 +372,7 @@ def _list_worklogs_tempo(
         console.print(f"[yellow]No work logs found for {issue_key}[/yellow]")
         return
 
-    table = Table(title=f"Work Logs for {issue_key}", show_header=True)
-    table.add_column("ID", style="dim")
-    table.add_column("Author", style="cyan")
-    table.add_column("Time Spent", style="green")
-    table.add_column("Started", style="blue")
-    table.add_column("Comment", style="white", no_wrap=False)
+    table = _worklog_table(issue_key)
 
     for wl in worklogs:
         hours, remainder = divmod(wl.timeSpentSeconds, 3600)
@@ -360,6 +384,11 @@ def _list_worklogs_tempo(
 
     console.print(table)
     console.print(f"\n[green]Total: {len(worklogs)} work log(s)[/green]")
+    if truncated:
+        console.print(
+            f"[yellow]Result truncated at {_TEMPO_WORKLOG_LIMIT} entries; "
+            "narrow the range with --from/--to to see the rest.[/yellow]"
+        )
 
 
 def _tempo_worklog_to_dict(wl: TempoWorklog) -> dict[str, Any]:
@@ -374,26 +403,44 @@ def _tempo_worklog_to_dict(wl: TempoWorklog) -> dict[str, Any]:
     }
 
 
-def _list_worklogs_jira(issue_key: str, connection: Any, output_format: str) -> None:
+def _split_jira_started(started: str | None) -> tuple[str | None, str | None]:
+    """Split a Jira 'started' timestamp into (date, time) ISO parts for JSON parity with Tempo."""
+    if not started:
+        return None, None
+    # Normalize "+0000"-style offsets so Python 3.10's fromisoformat accepts them.
+    normalized = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", started.replace("Z", "+00:00"))
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError:
+        return started, None
+    return dt.date().isoformat(), dt.time().replace(microsecond=0).isoformat()
+
+
+def _list_worklogs_jira(issue_key: str, connection: Connection, output_format: str) -> None:
     """List worklogs via the Jira worklog API (non-Tempo connections)."""
     client = JiraClient.from_connection(connection)
     worklogs = client.get_worklogs(issue_key)
 
     if OutputFormatter.is_json_format(output_format):
+        records = []
+        for wl in worklogs:
+            start_date, start_time = _split_jira_started(wl.get("started"))
+            records.append(
+                {
+                    "id": wl.get("id"),
+                    "author": {"accountId": None, "displayName": wl.get("author")},
+                    "timeSpentSeconds": wl.get("timeSpentSeconds"),
+                    "startDate": start_date,
+                    "startTime": start_time,
+                    "description": wl.get("comment"),
+                }
+            )
         OutputFormatter.output_json(
             {
                 "issue": issue_key,
                 "total": len(worklogs),
-                "worklogs": [
-                    {
-                        "id": wl.get("id"),
-                        "author": {"accountId": None, "displayName": wl.get("author")},
-                        "timeSpentSeconds": wl.get("timeSpentSeconds"),
-                        "startDate": wl.get("started"),
-                        "description": wl.get("comment"),
-                    }
-                    for wl in worklogs
-                ],
+                "truncated": False,
+                "worklogs": records,
             }
         )
         return
@@ -402,12 +449,7 @@ def _list_worklogs_jira(issue_key: str, connection: Any, output_format: str) -> 
         console.print(f"[yellow]No work logs found for {issue_key}[/yellow]")
         return
 
-    table = Table(title=f"Work Logs for {issue_key}", show_header=True)
-    table.add_column("ID", style="dim")
-    table.add_column("Author", style="cyan")
-    table.add_column("Time Spent", style="green")
-    table.add_column("Started", style="blue")
-    table.add_column("Comment", style="white", no_wrap=False)
+    table = _worklog_table(issue_key)
 
     for wl in worklogs:
         wl_id = str(wl.get("id", ""))
@@ -416,13 +458,10 @@ def _list_worklogs_jira(issue_key: str, connection: Any, output_format: str) -> 
         started = wl.get("started", "")
 
         if started:
-            # Parse and format: "2025-10-25T14:30:00.000+0000" -> "2025-10-25 14:30"
-            try:
-                from datetime import datetime
-
-                dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
-                started_fmt = dt.strftime("%Y-%m-%d %H:%M")
-            except Exception:
+            start_date, start_time = _split_jira_started(started)
+            if start_time:
+                started_fmt = f"{start_date} {start_time[:5]}"
+            else:
                 started_fmt = started[:16] if len(started) > 16 else started
         else:
             started_fmt = "-"

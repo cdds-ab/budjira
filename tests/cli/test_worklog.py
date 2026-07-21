@@ -685,6 +685,55 @@ class TestWorklogListTempoAttribution:
         assert result.exit_code == 1
         assert "mine" in result.stdout.lower() and "author" in result.stdout.lower()
 
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_invalid_from_date_is_usage_error(self, mock_get_conn, mock_jira_class, mock_get_tempo, tempo_connection):
+        """An unparseable --from date is a clean usage error, not a traceback."""
+        mock_get_conn.return_value = tempo_connection
+        self._wire_jira(mock_jira_class)
+        mock_get_tempo.return_value = MagicMock()
+
+        result = runner.invoke(app, ["worklog", "list", "TEST-123", "--from", "2025-13-01"])
+
+        assert result.exit_code == 1
+        assert "invalid date" in result.stdout.lower()
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_truncation_hint_when_limit_reached(self, mock_get_conn, mock_jira_class, mock_get_tempo, tempo_connection):
+        """Exactly limit results means more may exist: table output carries a hint."""
+        mock_get_conn.return_value = tempo_connection
+        self._wire_jira(mock_jira_class)
+        tempo = MagicMock()
+        tempo.get_worklogs.return_value = [_tempo_worklog(worklog_id=i) for i in range(1000)]
+        mock_get_tempo.return_value = tempo
+
+        result = runner.invoke(app, ["worklog", "list", "TEST-123"])
+
+        assert result.exit_code == 0
+        assert "truncated" in result.stdout.lower()
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_json_truncated_flag(self, mock_get_conn, mock_jira_class, mock_get_tempo, tempo_connection):
+        """JSON output exposes whether the result hit the fetch limit."""
+        import json
+
+        mock_get_conn.return_value = tempo_connection
+        self._wire_jira(mock_jira_class)
+        tempo = MagicMock()
+        tempo.get_worklogs.return_value = [_tempo_worklog()]
+        mock_get_tempo.return_value = tempo
+
+        result = runner.invoke(app, ["--format", "json", "worklog", "list", "TEST-123"])
+
+        assert result.exit_code == 0
+        payload = json.loads(result.stdout)
+        assert payload["truncated"] is False
+
 
 class TestWorklogListNonTempo:
     """Non-Tempo (Jira fallback) behaviour for 'budjira worklog list' (#92)."""
@@ -713,8 +762,12 @@ class TestWorklogListNonTempo:
 
         assert result.exit_code == 0
         payload = json.loads(result.stdout)
-        assert payload["worklogs"][0]["id"] == "10001"
-        assert payload["worklogs"][0]["author"]["displayName"] == "John Doe"
+        record = payload["worklogs"][0]
+        assert record["id"] == "10001"
+        assert record["author"]["displayName"] == "John Doe"
+        # Same schema as the Tempo path: startDate is a date, startTime a separate field.
+        assert record["startDate"] == "2025-10-24"
+        assert record["startTime"] == "14:00:00"
 
     @patch("budjira.cli.worklog.JiraClient")
     @patch("budjira.cli.worklog.get_active_connection")
