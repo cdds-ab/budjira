@@ -558,7 +558,7 @@ class TestWorklogListTempoAttribution:
         mock_connection.tempo_enabled = True
         return mock_connection
 
-    def _wire_jira(self, mock_jira_class, *, account_id="557058:me"):
+    def _wire_jira(self, mock_jira_class: MagicMock, *, account_id: str = "557058:me") -> MagicMock:
         """Wire JiraClient mock for issue_id resolution and myself()."""
         jira = MagicMock()
         issue = MagicMock()
