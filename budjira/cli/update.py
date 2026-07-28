@@ -36,7 +36,9 @@ def update(
 ) -> None:
     """Check for and install updates.
 
-    By default, downloads and runs the install script to update budjira.
+    By default, updates budjira with the mechanism matching how it was
+    installed (install script, uv tool, or pipx). If the install method cannot
+    be determined, the update is refused rather than guessed.
     Use --check to only check for updates without installing.
     """
     # If a subcommand was called, don't run the default behavior

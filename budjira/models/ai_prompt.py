@@ -1454,7 +1454,9 @@ budjira update
 Interactive update process:
 1. Shows available version and release notes
 2. Asks for confirmation
-3. Runs installation script
+3. Runs the updater matching the install method (install script for a git
+   checkout, `uv tool upgrade` for uv tool, `pipx upgrade` for pipx; refuses
+   if the install method cannot be determined)
 4. Restarts with new version
 
 ### Force Update Check

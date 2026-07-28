@@ -422,6 +422,12 @@ budjira update
 budjira update --check --force
 ```
 
+`budjira update` uses the mechanism that matches your install: the install
+script for a git checkout, `uv tool upgrade` for a `uv tool install`, and
+`pipx upgrade` for a pipx install. If it cannot tell how budjira was installed,
+it stops and asks you to update manually instead of installing a second copy
+that could shadow the first one.
+
 **Troubleshooting: GitHub API Rate Limits**
 
 If you see `403 Client Error: rate limit exceeded` when checking for updates, you need to authenticate with GitHub:

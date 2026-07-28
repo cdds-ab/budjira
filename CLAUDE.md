@@ -457,18 +457,21 @@ commits.
 
 ## Installation Methods
 
-**Recommended (isolated environment):**
-```bash
-# Using uvx (recommended)
-uvx install budjira
+**budjira is not published to PyPI.** All installs come from the GitHub
+repository, so `pip install budjira` / `pipx install budjira` do not work.
 
-# Using pipx (alternative)
-pipx install budjira
+**Recommended (install script):**
+```bash
+curl -LsSf https://raw.githubusercontent.com/cdds-ab/budjira/master/install.sh | sh
 ```
+Clones into `~/.local/share/budjira` and symlinks the entry point into
+`~/.local/bin`. This is the method the README documents.
 
-**Traditional:**
+**Isolated environment (from the git URL):**
 ```bash
-pip install budjira
+uv tool install git+https://github.com/cdds-ab/budjira.git
+# or
+pipx install git+https://github.com/cdds-ab/budjira.git
 ```
 
 **From source:**
@@ -482,7 +485,7 @@ uv run budjira --help
 ## Self-Update Mechanism
 
 **Version checking:**
-- Queries PyPI JSON API: `https://pypi.org/pypi/budjira/json`
+- Queries the GitHub Releases API: `https://api.github.com/repos/cdds-ab/budjira/releases/latest`
 - Caches result for 24 hours
 - Shows notification if update available
 - Displays what's new from release notes
@@ -491,7 +494,23 @@ uv run budjira --help
 ```bash
 budjira update
 ```
-Detects installation method (uvx/pipx/pip) and runs appropriate update command.
+`perform_update()` detects the install method from the location of the running
+`budjira` package (`detect_install_method()` in `budjira/utils/version.py`) and
+dispatches accordingly:
+
+| Detected layout | Update action |
+|-----------------|---------------|
+| git checkout (any `.git` above the package) | `install.sh` from master |
+| `.../uv/tools/...` | `uv tool upgrade budjira` |
+| `.../pipx/venvs/...` | `pipx upgrade budjira` |
+| anything else | refuses, points at manual update |
+
+The refusal matters: running the install script from an unrecognized install
+would create a *second*, git-clone install that can shadow the real binary
+depending on `PATH` order.
+
+Note that `install.sh` is always fetched live from `master`, so fixes to the
+install script take effect without a release.
 
 ## Common Development Tasks
 
