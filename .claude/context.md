@@ -11,15 +11,20 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.20.0
+- **Current Version**: v1.22.0
 - **Branch**: master
 - **Status**: Local-first release workflow live (cz bump owns versioning)
-- **Last Update**: 2026-04-30
+- **Last Update**: 2026-07-28
 
 ### Recent Releases (seit v1.8.1)
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.22.0** | 2026-07-28 | feat | Worklog list: real Tempo author, JSON output, author/date filters (#92); install.sh update gating (#98) |
+| **v1.21.3** | 2026-07-17 | fix | Markdown→Wiki description upload (#95/#97), credential redaction in logs (#93/#94) |
+| **v1.21.2** | 2026-06-01 | fix | Guard partial-field fetch in Issue parsing (#89) |
+| **v1.21.1** | 2026-06-01 | fix | Team-managed boards, skip detection with --sprint-id (#87) |
+| **v1.21.0** | 2026-06-01 | feat | Sub-task creation via --parent (#85), sprint move/create/start/close (#78) |
 | **v1.20.0** | 2026-04-01 | feat | Worklog delete command (#77) |
 | **v1.19.2** | 2026-04-01 | chore | Version bump |
 | **v1.19.1** | 2026-04-01 | fix | Tempo: correct query parameter 'issueId' for GET /worklogs (#76) |
