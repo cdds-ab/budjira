@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v1.22.0 (2026-07-28)
+
+### Feat
+
+- **worklog**: resolve real Tempo author, add JSON output and author/date filters (#92)
+
+### Fix
+
+- **worklog**: address review findings on list command
+- **install**: gate update on .git checkout and self-heal non-git dir
+
 ## v1.21.3 (2026-07-17)
 
 ### Fix
