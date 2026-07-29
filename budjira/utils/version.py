@@ -6,7 +6,10 @@ import json
 import logging
 import subprocess  # nosec B404
 from datetime import datetime, timedelta
-from typing import Any
+from enum import Enum
+from itertools import pairwise
+from pathlib import Path
+from typing import Any, ClassVar
 
 import requests
 
@@ -14,6 +17,44 @@ from budjira import __version__
 from budjira.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+class InstallMethod(str, Enum):
+    """How the running budjira was installed."""
+
+    GIT_CLONE = "git-clone"
+    UV_TOOL = "uv-tool"
+    PIPX = "pipx"
+    UNKNOWN = "unknown"
+
+
+def detect_install_method(package_path: Path | None = None) -> InstallMethod:
+    """Detect how the running budjira was installed.
+
+    Detection is based on where the ``budjira`` package lives: uv and pipx both
+    place tool environments in recognizable directory layouts, and the install
+    script places a git checkout that carries a ``.git`` directory.
+
+    Args:
+        package_path: Path of the budjira package (defaults to the running one)
+
+    Returns:
+        The detected install method, or ``InstallMethod.UNKNOWN``
+    """
+    resolved = (package_path or Path(__file__).parent.parent).resolve()
+    parts = resolved.parts
+
+    for first, second in pairwise(parts):
+        if (first, second) == ("uv", "tools"):
+            return InstallMethod.UV_TOOL
+        if (first, second) == ("pipx", "venvs"):
+            return InstallMethod.PIPX
+
+    for parent in resolved.parents:
+        if (parent / ".git").exists():
+            return InstallMethod.GIT_CLONE
+
+    return InstallMethod.UNKNOWN
 
 
 class VersionChecker:
@@ -165,18 +206,40 @@ class VersionChecker:
         except (ValueError, AttributeError):
             return False
 
+    INSTALL_SCRIPT_URL = "https://raw.githubusercontent.com/cdds-ab/budjira/master/install.sh"
+
+    UPGRADE_COMMANDS: ClassVar[dict[InstallMethod, list[str]]] = {
+        InstallMethod.UV_TOOL: ["uv", "tool", "upgrade", "budjira"],
+        InstallMethod.PIPX: ["pipx", "upgrade", "budjira"],
+    }
+
     def perform_update(self) -> tuple[bool, str]:
-        """Perform self-update using install script.
+        """Perform self-update using the mechanism matching the install method.
 
         Returns:
             Tuple of (success, message)
         """
-        install_script_url = "https://raw.githubusercontent.com/cdds-ab/budjira/master/install.sh"
+        method = detect_install_method()
+        logger.debug(f"Detected install method: {method.value}")
+
+        if method is InstallMethod.UNKNOWN:
+            # Running the install script here would create a second, git-clone
+            # install that can shadow the real one depending on PATH order.
+            return (
+                False,
+                "Could not determine how budjira was installed, so it was not touched. "
+                "Please update it manually with the tool you installed it with "
+                "(for example 'pip install -U', or re-run the install script from the README).",
+            )
+
+        if method is InstallMethod.GIT_CLONE:
+            command = ["sh", "-c", f"curl -LsSf {self.INSTALL_SCRIPT_URL} | sh"]
+        else:
+            command = self.UPGRADE_COMMANDS[method]
 
         try:
-            # Download and execute install script from official repository
             result = subprocess.run(  # nosec B603 B607
-                ["sh", "-c", f"curl -LsSf {install_script_url} | sh"],
+                command,
                 capture_output=True,
                 text=True,
                 timeout=120,

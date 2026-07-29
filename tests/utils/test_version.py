@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
-from budjira.utils.version import VersionChecker
+from budjira.utils.version import InstallMethod, VersionChecker, detect_install_method
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -198,7 +198,10 @@ class TestVersionChecker:
         mock_result.stdout = "Update successful"
         mock_result.stderr = ""
 
-        with patch("subprocess.run", return_value=mock_result):
+        with (
+            patch("budjira.utils.version.detect_install_method", return_value=InstallMethod.GIT_CLONE),
+            patch("subprocess.run", return_value=mock_result),
+        ):
             success, message = version_checker.perform_update()
 
             assert success is True
@@ -211,7 +214,10 @@ class TestVersionChecker:
         mock_result.stdout = ""
         mock_result.stderr = "Update failed"
 
-        with patch("subprocess.run", return_value=mock_result):
+        with (
+            patch("budjira.utils.version.detect_install_method", return_value=InstallMethod.GIT_CLONE),
+            patch("subprocess.run", return_value=mock_result),
+        ):
             success, message = version_checker.perform_update()
 
             assert success is False
@@ -221,8 +227,116 @@ class TestVersionChecker:
         """Test update timeout."""
         import subprocess
 
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("cmd", 120)):
+        with (
+            patch("budjira.utils.version.detect_install_method", return_value=InstallMethod.GIT_CLONE),
+            patch("subprocess.run", side_effect=subprocess.TimeoutExpired("cmd", 120)),
+        ):
             success, message = version_checker.perform_update()
 
             assert success is False
             assert "timed out" in message.lower()
+
+
+def _make_package(root: Path, *, relative_venv: str) -> Path:
+    """Create a fake installed budjira package tree and return its package dir.
+
+    Args:
+        root: Directory the install lives in
+        relative_venv: Path from root down to the site-packages parent
+
+    Returns:
+        Path of the fake ``budjira`` package directory
+    """
+    package_dir = root / relative_venv / "site-packages" / "budjira"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("")
+    return package_dir
+
+
+class TestDetectInstallMethod:
+    """Test install-method detection from the package location."""
+
+    def test_detects_git_clone_install(self, tmp_path: Path) -> None:
+        """A checkout with a .git directory above the package is a git-clone install."""
+        install_root = tmp_path / ".local" / "share" / "budjira"
+        (install_root / ".git").mkdir(parents=True)
+        package_dir = _make_package(install_root, relative_venv=".venv/lib/python3.13")
+
+        assert detect_install_method(package_dir) is InstallMethod.GIT_CLONE
+
+    def test_detects_uv_tool_install(self, tmp_path: Path) -> None:
+        """A package under uv's tool directory is a uv-tool install."""
+        install_root = tmp_path / ".local" / "share" / "uv" / "tools" / "budjira"
+        package_dir = _make_package(install_root, relative_venv="lib/python3.13")
+
+        assert detect_install_method(package_dir) is InstallMethod.UV_TOOL
+
+    def test_detects_pipx_install(self, tmp_path: Path) -> None:
+        """A package under pipx's venv directory is a pipx install."""
+        install_root = tmp_path / ".local" / "pipx" / "venvs" / "budjira"
+        package_dir = _make_package(install_root, relative_venv="lib/python3.13")
+
+        assert detect_install_method(package_dir) is InstallMethod.PIPX
+
+    def test_detects_unknown_for_plain_site_packages(self, tmp_path: Path) -> None:
+        """A plain pip/system install into site-packages is not recognized."""
+        package_dir = _make_package(tmp_path / "usr", relative_venv="lib/python3.13")
+
+        assert detect_install_method(package_dir) is InstallMethod.UNKNOWN
+
+
+class TestPerformUpdateDispatch:
+    """Test that perform_update dispatches on the detected install method."""
+
+    @staticmethod
+    def _ok_result() -> MagicMock:
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = ""
+        result.stderr = ""
+        return result
+
+    def test_git_clone_runs_install_script(self, version_checker: VersionChecker) -> None:
+        """The git-clone install keeps using the install script."""
+        with (
+            patch("budjira.utils.version.detect_install_method", return_value=InstallMethod.GIT_CLONE),
+            patch("subprocess.run", return_value=self._ok_result()) as mock_run,
+        ):
+            success, _message = version_checker.perform_update()
+
+        assert success is True
+        assert "install.sh" in " ".join(mock_run.call_args.args[0])
+
+    def test_uv_tool_runs_uv_tool_upgrade(self, version_checker: VersionChecker) -> None:
+        """A uv-tool install is upgraded with uv, not with the install script."""
+        with (
+            patch("budjira.utils.version.detect_install_method", return_value=InstallMethod.UV_TOOL),
+            patch("subprocess.run", return_value=self._ok_result()) as mock_run,
+        ):
+            success, _message = version_checker.perform_update()
+
+        assert success is True
+        assert mock_run.call_args.args[0] == ["uv", "tool", "upgrade", "budjira"]
+
+    def test_pipx_runs_pipx_upgrade(self, version_checker: VersionChecker) -> None:
+        """A pipx install is upgraded with pipx, not with the install script."""
+        with (
+            patch("budjira.utils.version.detect_install_method", return_value=InstallMethod.PIPX),
+            patch("subprocess.run", return_value=self._ok_result()) as mock_run,
+        ):
+            success, _message = version_checker.perform_update()
+
+        assert success is True
+        assert mock_run.call_args.args[0] == ["pipx", "upgrade", "budjira"]
+
+    def test_unknown_install_refuses_instead_of_shadow_install(self, version_checker: VersionChecker) -> None:
+        """An unrecognized install must not silently create a parallel git-clone install."""
+        with (
+            patch("budjira.utils.version.detect_install_method", return_value=InstallMethod.UNKNOWN),
+            patch("subprocess.run") as mock_run,
+        ):
+            success, message = version_checker.perform_update()
+
+        assert success is False
+        mock_run.assert_not_called()
+        assert "manual" in message.lower()
