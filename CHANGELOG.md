@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.22.1 (2026-07-29)
+
+### Fix
+
+- **update**: dispatch self-update on detected install method
+
 ## v1.22.0 (2026-07-28)
 
 ### Feat
