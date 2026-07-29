@@ -197,6 +197,10 @@ version_files = [
 tag_format = "v$version"
 update_changelog_on_bump = true
 major_version_zero = true
+# Annotated tags are required: `git push --follow-tags` only pushes annotated
+# tags, so lightweight tags silently never reach the remote and the release
+# workflow (which triggers on v* tag pushes) never runs.
+annotated_tag = true
 
 [dependency-groups]
 dev = [
