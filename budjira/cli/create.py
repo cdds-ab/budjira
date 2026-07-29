@@ -467,8 +467,7 @@ def _validate_parent(parent: str | None, issue_type: str, metadata: ProjectMetad
     """
     if not parent and _is_subtask_type(issue_type, metadata):
         raise BudjiraError(
-            f"Issue type '{issue_type}' is a sub-task and requires a parent issue. "
-            f"Provide it with --parent PROJ-123."
+            f"Issue type '{issue_type}' is a sub-task and requires a parent issue. Provide it with --parent PROJ-123."
         )
 
 

@@ -99,10 +99,10 @@ class TestIssueLink:
         """Test issue link validation."""
         # Missing required fields
         with pytest.raises(ValidationError):
-            IssueLink(link_id="10001")  # type: ignore
+            IssueLink(link_id="10001")
 
         with pytest.raises(ValidationError):
-            IssueLink(link_type="Relates", direction="outward")  # type: ignore
+            IssueLink(link_type="Relates", direction="outward")
 
 
 class TestIssue:

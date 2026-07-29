@@ -41,10 +41,13 @@ dev = [
     "pytest>=8.3.4",
     "pytest-cov>=6.0.0",
     "pytest-mock>=3.14.0",
-    "ruff>=0.8.4",
-    "mypy>=1.14.0",
-    "bandit>=1.8.0",
-    "commitizen>=4.9.1",
+    # Quality tools are pinned exactly to the revs in .pre-commit-config.yaml.
+    # With >= bounds the local venv drifts ahead of the pinned hooks, and
+    # "pre-commit passes locally -> CI passes" stops holding. Bump both together.
+    "ruff==0.14.0",
+    "mypy==1.18.2",
+    "bandit==1.8.6",
+    "commitizen==4.9.1",
     "pre-commit>=4.0.1",
     "radon>=6.0.1",
 ]

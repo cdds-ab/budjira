@@ -56,6 +56,6 @@ def test_banner_lines_same_width() -> None:
     top_measurement = console.measure(lines[0])
     bottom_measurement = console.measure(lines[1])
 
-    assert (
-        top_measurement.maximum == bottom_measurement.maximum
-    ), f"Banner lines must have equal width: top={top_measurement.maximum}, bottom={bottom_measurement.maximum}"
+    assert top_measurement.maximum == bottom_measurement.maximum, (
+        f"Banner lines must have equal width: top={top_measurement.maximum}, bottom={bottom_measurement.maximum}"
+    )

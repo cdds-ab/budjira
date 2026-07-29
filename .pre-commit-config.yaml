@@ -6,10 +6,10 @@
 repos:
   # Ruff - Fast Python linter and formatter (replaces black, flake8, isort)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.14.0
     hooks:
       # Run the linter
-      - id: ruff
+      - id: ruff-check
         args: [--fix]
         types_or: [python, pyi]
       # Run the formatter
@@ -18,7 +18,7 @@ repos:
 
   # MyPy - Static type checker
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.0
+    rev: v1.18.2
     hooks:
       - id: mypy
         additional_dependencies:
@@ -28,7 +28,7 @@ repos:
 
   # Bandit - Security vulnerability scanner
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.8.0
+    rev: 1.8.6
     hooks:
       - id: bandit
         args: [-c, pyproject.toml]

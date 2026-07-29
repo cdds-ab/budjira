@@ -368,8 +368,23 @@ never have it rewrite tracked files in place.
 - CI uses `pre-commit/action@v3.0.1` instead of individual tool steps
 - Single source of truth: `.pre-commit-config.yaml`
 - No hardcoded Python versions (works with matrix 3.10-3.13)
-- Same ruff version (v0.8.4) in both environments
 - Same behavior (format + check) in both environments
+
+**Quality tool versions must be pinned on both sides.** The `rev:` entries in
+`.pre-commit-config.yaml` and the dev extras in `pyproject.toml` name the same
+versions, and the dev extras use `==` rather than `>=`:
+
+| Tool | `.pre-commit-config.yaml` | `pyproject.toml` dev extra |
+|------|---------------------------|----------------------------|
+| ruff | `v0.14.0` | `ruff==0.14.0` |
+| mypy | `v1.18.2` | `mypy==1.18.2` |
+| bandit | `1.8.6` | `bandit==1.8.6` |
+| commitizen | `v4.9.1` | `commitizen==4.9.1` |
+
+With `>=` bounds the local venv silently drifts ahead of the pinned hooks —
+`uv run ruff format` then wants to reformat files that CI happily accepts, and
+the consistency guarantee below quietly stops holding. **When bumping a tool,
+change both places in the same commit.**
 
 **Benefits:**
 - ✅ No version drift between local and CI
