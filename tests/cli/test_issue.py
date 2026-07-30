@@ -464,3 +464,118 @@ def test_missing_required_field_is_prompted_when_interactive(mock_client: MagicM
     mock_client.transitions.transition.assert_called_once_with(
         "TEST-123", "Resolve", fields={"customfield_10001": "Rolled out"}
     )
+
+
+def _validator_error() -> JIRAError:
+    """A workflow validator rejection: message set, errors object empty."""
+    error = JIRAError(status_code=400, text="Provide details about the solution made available.")
+    error.response = MagicMock()
+    error.response.json.return_value = {
+        "errorMessages": ["Provide details about the solution made available."],
+        "errors": {},
+    }
+    return error
+
+
+def test_validator_failure_names_the_field(mock_client: MagicMock) -> None:
+    """Jira's anonymous message is replaced by a concrete field name."""
+    mock_client.transitions.get_transition_details.return_value = [_transition_with_required_field()]
+    mock_client.transitions.transition.side_effect = _validator_error()
+
+    result = runner.invoke(
+        app,
+        [
+            "-q",
+            "issue",
+            "update",
+            "TEST-123",
+            "--status",
+            "Resolve",
+            "--field",
+            "customfield_10001=x",
+            "--no-interactive",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "customfield_10001" in result.stdout
+    assert "Solution details" in result.stdout
+
+
+def test_validator_failure_retries_once_when_interactive(mock_client: MagicMock) -> None:
+    """After prompting, retry exactly once."""
+    mock_client.transitions.get_transition_details.return_value = [_transition_with_required_field()]
+    mock_client.transitions.transition.side_effect = [_validator_error(), None]
+
+    with (
+        patch("budjira.cli.issue._can_prompt", return_value=True),
+        patch("typer.prompt", return_value="Rolled out"),
+    ):
+        result = runner.invoke(
+            app, ["-q", "issue", "update", "TEST-123", "--status", "Resolve", "--field", "customfield_10001=x"]
+        )
+
+    assert result.exit_code == 0
+    assert mock_client.transitions.transition.call_count == 2
+
+
+def test_unattributable_validator_message_is_forwarded(mock_client: MagicMock) -> None:
+    """Never invent a field name."""
+    error = JIRAError(status_code=400, text="Something else went wrong")
+    error.response = MagicMock()
+    error.response.json.return_value = {"errorMessages": ["Something else went wrong"], "errors": {}}
+    mock_client.transitions.get_transition_details.return_value = [_transition_with_required_field()]
+    mock_client.transitions.transition.side_effect = error
+
+    result = runner.invoke(
+        app,
+        [
+            "-q",
+            "issue",
+            "update",
+            "TEST-123",
+            "--status",
+            "Resolve",
+            "--field",
+            "customfield_10001=x",
+            "--no-interactive",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Something else went wrong" in result.stdout
+
+
+def test_validator_failure_is_attributed_through_the_service_error_wrapper(mock_client: MagicMock) -> None:
+    """Production shape: the service wraps JIRAError in JiraAPIError.
+
+    _handle_jira_error keeps only the error text, so the response body survives
+    solely in the __cause__ chain. Attribution must still work.
+    """
+    from budjira.utils.errors import JiraAPIError
+
+    original = _validator_error()
+    wrapped = JiraAPIError("Transition issue failed: Provide details about the solution made available.")
+    wrapped.__cause__ = original
+
+    mock_client.transitions.get_transition_details.return_value = [_transition_with_required_field()]
+    mock_client.transitions.transition.side_effect = wrapped
+
+    result = runner.invoke(
+        app,
+        [
+            "-q",
+            "issue",
+            "update",
+            "TEST-123",
+            "--status",
+            "Resolve",
+            "--field",
+            "customfield_10001=x",
+            "--no-interactive",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "customfield_10001" in result.stdout
+    assert "Solution details" in result.stdout

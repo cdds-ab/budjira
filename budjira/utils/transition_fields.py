@@ -93,8 +93,7 @@ def resolve_fields(raw_fields: dict[str, str], transition: Transition) -> dict[s
         if field.allowed_values and value not in field.allowed_values:
             allowed = ", ".join(field.allowed_values)
             raise ValidationError(
-                f"Value '{value}' is not allowed for field '{field.name}' ({field.field_id}). "
-                f"Allowed values: {allowed}"
+                f"Value '{value}' is not allowed for field '{field.name}' ({field.field_id}). Allowed values: {allowed}"
             )
         resolved[field.field_id] = encode_field_value(field, value)
     return resolved
@@ -123,8 +122,7 @@ def _match_field(key: str, transition: Transition) -> TransitionField:
     if len(matches) > 1:
         candidates = ", ".join(f.field_id for f in matches)
         raise ValidationError(
-            f"Field name '{key}' is ambiguous on transition '{transition.name}'. "
-            f"Use the field id instead: {candidates}"
+            f"Field name '{key}' is ambiguous on transition '{transition.name}'. Use the field id instead: {candidates}"
         )
 
     available = ", ".join(f"{f.field_id} ('{f.name}')" for f in transition.fields) or "none"

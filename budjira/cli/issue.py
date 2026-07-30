@@ -87,6 +87,36 @@ def delete_issue(
         raise typer.Exit(1) from e
 
 
+def _validator_messages(error: Exception) -> list[str]:
+    """Extract errorMessages from a Jira error whose 'errors' object is empty.
+
+    A populated 'errors' object means Jira already named the field, so there is
+    nothing to attribute.
+
+    Args:
+        error: Exception raised while transitioning
+
+    Returns:
+        The anonymous validator messages, empty if this is not that case
+    """
+    # The service layer converts JIRAError into JiraAPIError and keeps only the
+    # error text, so the response body survives solely in the __cause__ chain.
+    # Walk it, otherwise attribution never fires outside of unit tests.
+    current: BaseException | None = error
+    while current is not None:
+        response = getattr(current, "response", None)
+        if response is not None:
+            try:
+                body = response.json()
+            except Exception:
+                # A non-JSON body simply carries no attribution.
+                body = None
+            if isinstance(body, dict) and not body.get("errors"):
+                return [str(m) for m in body.get("errorMessages") or []]
+        current = current.__cause__
+    return []
+
+
 def _can_prompt() -> bool:
     """Whether prompting can actually succeed.
 
@@ -261,7 +291,36 @@ def update_issue(
                         console.print(format_field_requirements(still_missing))
                     return
 
-                client.transitions.transition(issue_key, matched.name, fields=resolved or None)
+                try:
+                    client.transitions.transition(issue_key, matched.name, fields=resolved or None)
+                except Exception as transition_error:
+                    messages = _validator_messages(transition_error)
+                    culprit = attribute_validator_error(messages, matched) if messages else None
+                    if culprit is None:
+                        if not messages:
+                            raise
+                        # Forward Jira's own wording rather than naming a field we
+                        # could not identify, but show what the screen offers.
+                        console.print(f"[red]✗[/red] Transition '{matched.name}' was rejected: {' '.join(messages)}")
+                        if matched.fields:
+                            console.print("Screen fields on this transition:")
+                            console.print(format_field_requirements(matched.fields))
+                        raise typer.Exit(1) from transition_error
+
+                    detail = f"'{culprit.name}' ({culprit.field_id})"
+                    if not (interactive and _can_prompt()):
+                        console.print(
+                            f"[red]✗[/red] Transition '{matched.name}' was rejected by a workflow validator. "
+                            f"The message refers to field {detail}. Supply it with:\n"
+                            f"{format_field_requirements([culprit])}"
+                        )
+                        raise typer.Exit(1) from transition_error
+
+                    console.print(f"[yellow]![/yellow] A workflow validator requires field {detail}.")
+                    answer = typer.prompt(f"{culprit.name} ({culprit.field_id})")
+                    resolved.update(resolve_fields({culprit.field_id: answer}, matched))
+                    client.transitions.transition(issue_key, matched.name, fields=resolved)
+
                 changes.append(("Status", f"→ {status}"))
             except BudjiraError as e:
                 console.print(f"[red]✗[/red] Status update failed: {e}")
@@ -342,8 +401,8 @@ def update_issue(
             table.add_column("Field", style="cyan")
             table.add_column("Change", style="")
 
-            for field, change in changes:
-                table.add_row(field, change)
+            for field_name, change in changes:
+                table.add_row(field_name, change)
 
             console.print(table)
 
