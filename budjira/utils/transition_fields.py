@@ -6,6 +6,7 @@ The CLI composes them, which keeps the fiddly matching logic testable on its own
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from budjira.utils.errors import ValidationError
@@ -17,6 +18,10 @@ if TYPE_CHECKING:
 _NAME_WRAPPED_TYPES = {"resolution", "priority"}
 _VALUE_WRAPPED_TYPES = {"option"}
 _ARRAY_TYPES = {"array"}
+
+# Words shorter than this carry no signal when matching a validator message
+# against a field name ("QA", "of", "id").
+_MIN_TOKEN_LENGTH = 3
 
 
 def parse_field_args(field_args: list[str] | None) -> dict[str, str]:
@@ -139,6 +144,49 @@ def missing_required_fields(resolved: dict[str, Any], transition: Transition) ->
         Required fields still missing a value
     """
     return [f for f in transition.fields if f.required and f.field_id not in resolved]
+
+
+def _words(text: str) -> set[str]:
+    """Split text into lowercase words, dropping ones too short to carry signal."""
+    return {w for w in re.findall(r"\w+", text.lower()) if len(w) >= _MIN_TOKEN_LENGTH}
+
+
+def attribute_validator_error(messages: list[str], transition: Transition) -> TransitionField | None:
+    """Find the screen field a workflow validator message refers to.
+
+    Workflow validators report failures with an empty ``errors`` object, so the
+    offending field is never named. Jira's wording rarely quotes the field name
+    verbatim either — a field called "Solution details" is reported as "Provide
+    details about the solution made available." Matching therefore requires every
+    significant word of the field name to appear in the message, in any order.
+
+    A field is only returned when it is the single best match. Two equally good
+    candidates yield None, so the caller forwards Jira's own message rather than
+    naming the wrong field.
+
+    Args:
+        messages: Jira's errorMessages entries
+        transition: The transition that was attempted
+
+    Returns:
+        The matched field, or None when nothing matches unambiguously
+    """
+    best: list[TransitionField] = []
+    best_score = 0
+
+    for message in messages:
+        message_words = _words(message)
+        for field in transition.fields:
+            field_words = _words(field.name)
+            if not field_words or not field_words <= message_words:
+                continue
+            score = len(field_words)
+            if score > best_score:
+                best, best_score = [field], score
+            elif score == best_score:
+                best.append(field)
+
+    return best[0] if len(best) == 1 else None
 
 
 def format_field_requirements(fields: list[TransitionField]) -> str:

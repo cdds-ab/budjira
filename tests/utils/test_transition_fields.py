@@ -6,6 +6,7 @@ import pytest
 from budjira.models.transition import Transition, TransitionField
 from budjira.utils.errors import ValidationError
 from budjira.utils.transition_fields import (
+    attribute_validator_error,
     encode_field_value,
     format_field_requirements,
     missing_required_fields,
@@ -148,6 +149,68 @@ class TestMissingRequiredFields:
         missing = missing_required_fields({"resolution": {"name": "Done"}}, transition)
 
         assert all(f.field_id != "customfield_10001" for f in missing)
+
+
+class TestAttributeValidatorError:
+    """Test mapping an anonymous validator message onto a screen field."""
+
+    def test_matches_field_whose_words_appear_in_the_message(self, transition: Transition) -> None:
+        """The real-world case: Jira's wording reorders and separates the field name."""
+        field = attribute_validator_error(["Provide details about the solution made available."], transition)
+
+        assert field is not None
+        assert field.field_id == "customfield_10001"
+
+    def test_matches_verbatim_field_name(self, transition: Transition) -> None:
+        field = attribute_validator_error(["Solution details must be set"], transition)
+
+        assert field is not None
+        assert field.field_id == "customfield_10001"
+
+    def test_matching_ignores_case(self, transition: Transition) -> None:
+        field = attribute_validator_error(["SOLUTION DETAILS must be set"], transition)
+
+        assert field is not None
+        assert field.field_id == "customfield_10001"
+
+    def test_prefers_the_field_with_more_matching_words(self) -> None:
+        """A two-word field name beats a one-word one that also matches."""
+        candidates = Transition(
+            id="21",
+            name="Resolve",
+            fields=[
+                TransitionField(field_id="customfield_1", name="Details", required=False),
+                TransitionField(field_id="customfield_2", name="Solution details", required=False),
+            ],
+        )
+
+        field = attribute_validator_error(["Provide solution details"], candidates)
+
+        assert field is not None
+        assert field.field_id == "customfield_2"
+
+    def test_equally_good_candidates_are_not_guessed(self) -> None:
+        """Two fields matching equally well must not be resolved by coin flip."""
+        candidates = Transition(
+            id="21",
+            name="Resolve",
+            fields=[
+                TransitionField(field_id="customfield_1", name="Notes", required=False),
+                TransitionField(field_id="customfield_2", name="Comment", required=False),
+            ],
+        )
+
+        assert attribute_validator_error(["Notes and comment are required"], candidates) is None
+
+    def test_partial_word_overlap_does_not_match(self, transition: Transition) -> None:
+        """One word of a two-word field name is not enough."""
+        assert attribute_validator_error(["Provide a solution"], transition) is None
+
+    def test_returns_none_when_nothing_matches(self, transition: Transition) -> None:
+        assert attribute_validator_error(["Something else went wrong"], transition) is None
+
+    def test_returns_none_for_no_messages(self, transition: Transition) -> None:
+        assert attribute_validator_error([], transition) is None
 
 
 class TestFormatFieldRequirements:
