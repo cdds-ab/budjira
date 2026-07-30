@@ -66,6 +66,30 @@ def test_get_transition_details_maps_screen_fields(mock_jira: MagicMock) -> None
     assert by_id["customfield_10001"].allowed_values is None
 
 
+def test_transition_forwards_fields(mock_jira: MagicMock) -> None:
+    """Screen field values must reach transition_issue."""
+    from budjira.services.transitions import TransitionService
+
+    mock_jira.transitions.return_value = [{"id": "21", "name": "Resolve"}]
+    service = TransitionService(mock_jira)
+
+    service.transition("PROJ-123", "Resolve", fields={"resolution": {"name": "Done"}})
+
+    mock_jira.transition_issue.assert_called_once_with("PROJ-123", "21", fields={"resolution": {"name": "Done"}})
+
+
+def test_transition_without_fields_sends_none(mock_jira: MagicMock) -> None:
+    """Existing behaviour is preserved when no fields are supplied."""
+    from budjira.services.transitions import TransitionService
+
+    mock_jira.transitions.return_value = [{"id": "11", "name": "Start Progress"}]
+    service = TransitionService(mock_jira)
+
+    service.transition("PROJ-123", "Start Progress")
+
+    mock_jira.transition_issue.assert_called_once_with("PROJ-123", "11", fields=None)
+
+
 def test_get_transition_details_handles_transition_without_screen(mock_jira: MagicMock) -> None:
     """A transition with no screen has no fields, not an error."""
     from budjira.services.transitions import TransitionService

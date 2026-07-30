@@ -98,12 +98,13 @@ class TransitionService(BaseJiraService):
         values = [v.get("name") or v.get("value") for v in raw_values if isinstance(v, dict)]
         return [v for v in values if v] or None
 
-    def transition(self, issue_key: str, transition_name: str) -> None:
+    def transition(self, issue_key: str, transition_name: str, fields: dict[str, Any] | None = None) -> None:
         """Transition an issue to a new status.
 
         Args:
             issue_key: Issue key (e.g., PROJ-123)
             transition_name: Name of the transition (e.g., "In Progress", "Done")
+            fields: Optional transition screen field values, keyed by Jira field id
 
         Raises:
             InvalidIssueError: If issue not found
@@ -128,7 +129,7 @@ class TransitionService(BaseJiraService):
                     f"Invalid transition '{transition_name}' for {issue_key}. Available transitions: {available}"
                 )
 
-            self.client.transition_issue(issue_key, transition_id)
+            self.client.transition_issue(issue_key, transition_id, fields=fields)
             self._logger.info(f"Successfully transitioned {issue_key} to '{transition_name}'")
 
         except JIRAError as e:
