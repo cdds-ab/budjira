@@ -11,8 +11,8 @@ class TransitionField(BaseModel):
     field_id: str = Field(..., description="Jira field id (e.g., 'customfield_10001')")
     name: str = Field(..., description="Display name shown on the transition screen")
     required: bool = Field(..., description="Whether Jira marks the field as required")
-    field_type: str | None = Field(None, description="Field schema type (e.g., 'string', 'option', 'array')")
-    allowed_values: list[str] | None = Field(None, description="Permitted values, if the field is constrained")
+    field_type: str | None = Field(default=None, description="Field schema type (e.g., 'string', 'option', 'array')")
+    allowed_values: list[str] | None = Field(default=None, description="Permitted values, if the field is constrained")
 
 
 class Transition(BaseModel):
@@ -20,5 +20,5 @@ class Transition(BaseModel):
 
     id: str = Field(..., description="Transition id used when executing the transition")
     name: str = Field(..., description="Transition name (e.g., 'Start Progress')")
-    to_status: str | None = Field(None, description="Status the issue reaches through this transition")
+    to_status: str | None = Field(default=None, description="Status the issue reaches through this transition")
     fields: list[TransitionField] = Field(default_factory=list, description="Fields on the transition screen")

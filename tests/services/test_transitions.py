@@ -101,3 +101,41 @@ def test_get_transition_details_handles_transition_without_screen(mock_jira: Mag
 
     assert transitions[0].fields == []
     assert transitions[0].to_status is None
+
+
+def test_get_transition_details_maps_404_to_invalid_issue(mock_jira: MagicMock) -> None:
+    """A missing issue is reported as an issue problem, not a generic API error."""
+    from budjira.services.transitions import TransitionService
+    from budjira.utils.errors import InvalidIssueError
+    from jira.exceptions import JIRAError
+
+    mock_jira.transitions.side_effect = JIRAError(status_code=404, text="Not Found")
+    service = TransitionService(mock_jira)
+
+    with pytest.raises(InvalidIssueError, match="not found"):
+        service.get_transition_details("PROJ-999")
+
+
+def test_get_transition_details_maps_403_to_permission_error(mock_jira: MagicMock) -> None:
+    """A permission problem keeps its own exception type."""
+    from budjira.services.transitions import TransitionService
+    from budjira.utils.errors import PermissionError as BudjiraPermissionError
+    from jira.exceptions import JIRAError
+
+    mock_jira.transitions.side_effect = JIRAError(status_code=403, text="Forbidden")
+    service = TransitionService(mock_jira)
+
+    with pytest.raises(BudjiraPermissionError):
+        service.get_transition_details("PROJ-123")
+
+
+def test_get_transition_details_wraps_unexpected_errors(mock_jira: MagicMock) -> None:
+    """Anything else surfaces as a JiraAPIError rather than leaking out raw."""
+    from budjira.services.transitions import TransitionService
+    from budjira.utils.errors import JiraAPIError
+
+    mock_jira.transitions.side_effect = RuntimeError("socket exploded")
+    service = TransitionService(mock_jira)
+
+    with pytest.raises(JiraAPIError, match="Unexpected error"):
+        service.get_transition_details("PROJ-123")

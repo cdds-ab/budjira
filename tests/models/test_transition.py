@@ -33,7 +33,9 @@ class TestTransitionField:
 
     def test_missing_required_attribute_is_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            TransitionField(field_id="customfield_10001", name="Solution details")
+            # The ignore below is deliberate: omitting 'required' is exactly what
+            # this test exercises, and mypy flags the call it is meant to make.
+            TransitionField(field_id="customfield_10001", name="Solution details")  # type: ignore[call-arg]
 
 
 class TestTransition:
