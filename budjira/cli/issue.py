@@ -1,15 +1,24 @@
 """CLI commands for updating Jira issues."""
 
-from typing import Annotated
+import sys
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from budjira.core.jira_client import JiraClient
+from budjira.models.transition import Transition
 from budjira.utils.connection import get_active_connection
 from budjira.utils.errors import BudjiraError, InvalidIssueError, PermissionError
 from budjira.utils.time_parser import parse_time_string
+from budjira.utils.transition_fields import (
+    attribute_validator_error,
+    format_field_requirements,
+    missing_required_fields,
+    parse_field_args,
+    resolve_fields,
+)
 
 app = typer.Typer(
     name="issue",
@@ -78,10 +87,80 @@ def delete_issue(
         raise typer.Exit(1) from e
 
 
+def _can_prompt() -> bool:
+    """Whether prompting can actually succeed.
+
+    budjira is frequently driven by agents and CI, where ``--no-interactive`` is
+    easy to forget. Without a terminal attached a prompt would hang forever, so
+    the absence of a TTY counts as non-interactive regardless of the flag.
+
+    Returns:
+        True if stdin is a terminal
+    """
+    return sys.stdin.isatty()
+
+
+def _collect_transition_fields(
+    client: JiraClient,
+    issue_key: str,
+    status: str,
+    field_args: list[str] | None,
+    interactive: bool,
+    dry_run: bool,
+) -> tuple[Transition, dict[str, Any]]:
+    """Resolve screen field values for a transition, prompting when allowed.
+
+    Args:
+        client: Connected Jira client
+        issue_key: Issue key
+        status: Transition name requested with --status
+        field_args: Raw --field arguments
+        interactive: Whether prompting is permitted
+        dry_run: Whether this is a dry run (never prompts)
+
+    Returns:
+        The matched transition and the resolved field values
+
+    Raises:
+        BudjiraError: If the transition is unknown or a required field is missing
+    """
+    transitions = client.transitions.get_transition_details(issue_key)
+    matched = next((t for t in transitions if t.name.lower() == status.lower()), None)
+    if matched is None:
+        available = ", ".join(t.name for t in transitions) or "none"
+        raise BudjiraError(f"Invalid transition '{status}' for {issue_key}. Available transitions: {available}")
+
+    resolved = resolve_fields(parse_field_args(field_args), matched)
+
+    missing = missing_required_fields(resolved, matched)
+    if missing and not dry_run:
+        if interactive and _can_prompt():
+            for field_meta in missing:
+                answer = typer.prompt(f"{field_meta.name} ({field_meta.field_id})")
+                resolved.update(resolve_fields({field_meta.field_id: answer}, matched))
+        else:
+            raise BudjiraError(
+                f"Transition '{matched.name}' requires field values that were not supplied:\n"
+                f"{format_field_requirements(missing)}"
+            )
+
+    return matched, resolved
+
+
 @app.command("update")
 def update_issue(
     issue_key: Annotated[str, typer.Argument(help="Issue key (e.g., PROJ-123)")],
     status: Annotated[str | None, typer.Option("--status", "-s", help="Transition to status")] = None,
+    field: Annotated[
+        list[str] | None,
+        typer.Option("--field", help="Transition screen field as key=value (repeatable)"),
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Show the transition and its fields without performing it")
+    ] = False,
+    interactive: Annotated[
+        bool, typer.Option("--interactive/--no-interactive", "-i/-n", help="Prompt for missing required fields")
+    ] = True,
     assignee: Annotated[
         str | None, typer.Option("--assignee", "-a", help="Assign to user (username or 'currentUser()')")
     ] = None,
@@ -134,6 +213,7 @@ def update_issue(
         if not any(
             [
                 status,
+                field,
                 assignee is not None,
                 priority,
                 add_label,
@@ -159,10 +239,29 @@ def update_issue(
         # Track changes for output
         changes: list[tuple[str, str]] = []
 
+        # Screen fields have no meaning without a transition to resolve them against
+        if field and not status:
+            console.print("[red]Error:[/red] --field requires --status; screen fields belong to a transition.")
+            raise typer.Exit(1)
+
         # Perform status transition first (if specified)
         if status:
             try:
-                client.transition_issue(issue_key, status)
+                matched, resolved = _collect_transition_fields(client, issue_key, status, field, interactive, dry_run)
+
+                if dry_run:
+                    console.print(f"[cyan]Dry run:[/cyan] would transition {issue_key} via '{matched.name}'")
+                    if matched.to_status:
+                        console.print(f"  Target status: {matched.to_status}")
+                    for field_id, value in resolved.items():
+                        console.print(f"  {field_id} = {value}")
+                    still_missing = missing_required_fields(resolved, matched)
+                    if still_missing:
+                        console.print("[yellow]Missing required fields:[/yellow]")
+                        console.print(format_field_requirements(still_missing))
+                    return
+
+                client.transitions.transition(issue_key, matched.name, fields=resolved or None)
                 changes.append(("Status", f"→ {status}"))
             except BudjiraError as e:
                 console.print(f"[red]✗[/red] Status update failed: {e}")
