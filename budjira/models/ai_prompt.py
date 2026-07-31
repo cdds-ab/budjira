@@ -602,6 +602,9 @@ Update existing issues with status transitions, field changes, and label managem
 - `--add-label TAG`: Add label (repeatable)
 - `--remove-label TAG`: Remove label (repeatable)
 - `--epic EPIC-KEY`, `-e`: Link issue to epic
+- `--field KEY=VALUE`: Transition screen field, by field id or display name (repeatable, requires `--status`)
+- `--dry-run`: Show the transition and its fields without performing it
+- `--interactive/--no-interactive`, `-i/-n`: Prompt for missing required fields (default: interactive)
 
 **Examples:**
 
@@ -632,6 +635,31 @@ budjira issue update PROJ-123 \\
   --add-label backend \\
   --add-label security
 ```
+
+### Transition Screen Fields
+
+Some transitions require fields that only exist on the transition screen. Without
+them the transition cannot be completed at all.
+
+```bash
+# See what a transition needs without performing it
+budjira issue update PROJ-123 --status "Resolve" --dry-run
+
+# Supply fields by id or by display name
+budjira issue update PROJ-123 --status "Resolve" \\
+  --field resolution=Done \\
+  --field "Solution details=Rolled out"
+```
+
+**Behaviour for automation:** non-interactive callers (agents, CI, piped stdin) never
+get a prompt. A missing required field aborts with a list of the required fields
+including id, type and allowed values, ready to paste back as `--field` arguments.
+
+**Workflow validators:** when a validator rejects the transition, Jira returns a
+message with an empty `errors` object that never names the field. budjira matches
+the message against the transition's screen fields and reports the field it means.
+If no single field matches, Jira's own message is forwarded unchanged — budjira does
+not guess.
 
 ### Delete Issue
 

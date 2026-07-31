@@ -2,6 +2,7 @@
 
 from budjira.models.config import GlobalConfig, LogLevel, OutputFormat
 from budjira.models.connection import Connection, ConnectionList
+from budjira.models.transition import Transition, TransitionField
 
 __all__ = [
     "Connection",
@@ -9,4 +10,6 @@ __all__ = [
     "GlobalConfig",
     "LogLevel",
     "OutputFormat",
+    "Transition",
+    "TransitionField",
 ]

@@ -335,7 +335,13 @@ budjira create issue "Issue summary" --no-interactive [OPTIONS]
 - `--label TAG`: Add label (can be used multiple times)
 - `--project KEY`: Override default project
 - `--epic KEY`: Link to epic during creation
+- `--parent KEY`: Parent issue key for sub-tasks (required when the type is a sub-task)
 - `--custom NAME=VALUE`: Set custom field (repeatable, requires configuration)
+
+**Sub-tasks:** Use `--parent PROJ-123` to create a sub-task under a parent issue.
+The sub-task type name varies per instance (often `Subtask`, sometimes `Sub-task`);
+budjira detects sub-task types via cached project metadata (`budjira project show`)
+and fails fast with a clear message if a sub-task is created without `--parent`.
 
 **Examples:**
 
@@ -359,6 +365,12 @@ budjira create issue "Add export functionality" \
 # Quick task creation
 budjira create issue "Update documentation" \
   --type Task \
+  --no-interactive
+
+# Sub-task under a parent issue (Epic > Story > Sub-task workflows)
+budjira create issue "Implement login form" \
+  --type Subtask \
+  --parent PROJ-123 \
   --no-interactive
 
 # With custom fields (requires configuration in connections.toml)
@@ -452,6 +464,9 @@ Update existing issues with status transitions, field changes, and label managem
 - `--add-label TAG`: Add label (repeatable)
 - `--remove-label TAG`: Remove label (repeatable)
 - `--epic EPIC-KEY`, `-e`: Link issue to epic
+- `--field KEY=VALUE`: Transition screen field, by field id or display name (repeatable, requires `--status`)
+- `--dry-run`: Show the transition and its fields without performing it
+- `--interactive/--no-interactive`, `-i/-n`: Prompt for missing required fields (default: interactive)
 
 **Examples:**
 
@@ -482,6 +497,31 @@ budjira issue update PROJ-123 \
   --add-label backend \
   --add-label security
 ```
+
+### Transition Screen Fields
+
+Some transitions require fields that only exist on the transition screen. Without
+them the transition cannot be completed at all.
+
+```bash
+# See what a transition needs without performing it
+budjira issue update PROJ-123 --status "Resolve" --dry-run
+
+# Supply fields by id or by display name
+budjira issue update PROJ-123 --status "Resolve" \
+  --field resolution=Done \
+  --field "Solution details=Rolled out"
+```
+
+**Behaviour for automation:** non-interactive callers (agents, CI, piped stdin) never
+get a prompt. A missing required field aborts with a list of the required fields
+including id, type and allowed values, ready to paste back as `--field` arguments.
+
+**Workflow validators:** when a validator rejects the transition, Jira returns a
+message with an empty `errors` object that never names the field. budjira matches
+the message against the transition's screen fields and reports the field it means.
+If no single field matches, Jira's own message is forwarded unchanged — budjira does
+not guess.
 
 ### Delete Issue
 
@@ -1168,12 +1208,47 @@ budjira --format json sprint show
 - Sprint header with name, state, and dates
 - Table of issues with: Key, Type, Status, Priority, Summary, Assignee
 
+### Sprint Management (Write Operations)
+
+Move issues into sprints and manage the sprint lifecycle. Lifecycle and
+delete operations require Jira board-admin permissions; a 403 is reported as
+a permission error.
+
+```bash
+# Move one or more issues into a sprint (by name or ID)
+budjira sprint move ISSUE-KEY [ISSUE-KEY ...] --to "Sprint 42"
+budjira sprint move PROJ-1 PROJ-2 --sprint-id 100
+
+# Create a new (future) sprint; dates are optional
+budjira sprint create "Sprint 43"
+budjira sprint create "Sprint 43" --start today --end 2026-06-14 --goal "Ship the API"
+
+# Start a sprint (-> active); Jira requires start+end dates
+budjira sprint start "Sprint 43" --start today --end 2026-06-14
+budjira sprint start --sprint-id 100 --force
+
+# Close a sprint (-> closed); defaults to the active sprint
+budjira sprint close
+budjira sprint close "Sprint 42" --force
+```
+
+**Key points:**
+- `move` is additive and needs no confirmation. Target via `--to NAME` or `--sprint-id ID` (one is required).
+- `start`/`close` prompt for confirmation; use `--force`/`-f` to skip. In JSON mode `--force` is mandatory.
+- Sprint dates accept ISO (`2026-06-14`), `today`, `tomorrow`, or `yesterday`.
+- All commands support `--board`, `--connection`, and `--format json`.
+
 ### Board Configuration
 
 The board is resolved in this order:
 1. `--board` CLI flag (highest priority)
 2. `board_id` from connection config (set in connections.toml)
-3. Auto-detection from project (works when exactly one Scrum board exists)
+3. Auto-detection from project (works when exactly one sprint-capable board exists)
+
+Both company-managed (board type `scrum`) and team-managed (board type `simple`)
+projects are supported. For team-managed projects, passing `--sprint-id`
+directly to `sprint move/start/close` skips board detection entirely and
+operates on the sprint via the agile API.
 
 To configure a default board in `connections.toml`:
 ```toml
@@ -1237,7 +1312,9 @@ budjira update
 Interactive update process:
 1. Shows available version and release notes
 2. Asks for confirmation
-3. Runs installation script
+3. Runs the updater matching the install method (install script for a git
+   checkout, `uv tool upgrade` for uv tool, `pipx upgrade` for pipx; refuses
+   if the install method cannot be determined)
 4. Restarts with new version
 
 ### Force Update Check

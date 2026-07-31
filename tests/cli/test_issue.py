@@ -2,9 +2,12 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from budjira.cli.main import app
+from budjira.models.transition import Transition, TransitionField
 from budjira.utils.errors import InvalidIssueError
 from budjira.utils.errors import PermissionError as BudjiraPermissionError
+from jira.exceptions import JIRAError
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -344,3 +347,235 @@ class TestIssueDelete:
 
         assert result.exit_code == 1
         assert "Permission denied" in result.stdout
+
+
+@pytest.fixture
+def mock_client():
+    """Patched JiraClient for transition tests (same patching the decorated tests do)."""
+    with (
+        patch("budjira.cli.issue.JiraClient") as mock_jira_cls,
+        patch("budjira.cli.issue.get_active_connection", return_value=_mock_connection()),
+    ):
+        client = MagicMock()
+        mock_jira_cls.from_connection.return_value = client
+        yield client
+
+
+def _transition_with_required_field() -> Transition:
+    """A transition whose screen carries one required text field."""
+    return Transition(
+        id="21",
+        name="Resolve",
+        to_status="Resolved",
+        fields=[
+            TransitionField(
+                field_id="customfield_10001",
+                name="Solution details",
+                required=True,
+                field_type="string",
+            )
+        ],
+    )
+
+
+def test_field_without_status_is_a_usage_error(mock_client: MagicMock) -> None:
+    """Screen fields only exist in the context of a transition."""
+    result = runner.invoke(app, ["-q", "issue", "update", "TEST-123", "--field", "resolution=Done"])
+
+    assert result.exit_code == 1
+    assert "--status" in result.stdout
+    mock_client.transitions.transition.assert_not_called()
+
+
+def test_missing_required_field_non_interactive_lists_requirements(mock_client: MagicMock) -> None:
+    """Without a TTY there is no prompt - abort with what is needed."""
+    mock_client.transitions.get_transition_details.return_value = [_transition_with_required_field()]
+
+    result = runner.invoke(app, ["-q", "issue", "update", "TEST-123", "--status", "Resolve", "--no-interactive"])
+
+    assert result.exit_code == 1
+    assert "customfield_10001" in result.stdout
+    assert "Solution details" in result.stdout
+    mock_client.transitions.transition.assert_not_called()
+
+
+def test_supplied_field_is_passed_to_the_transition(mock_client: MagicMock) -> None:
+    """A supplied screen field reaches the service layer."""
+    mock_client.transitions.get_transition_details.return_value = [_transition_with_required_field()]
+
+    result = runner.invoke(
+        app,
+        [
+            "-q",
+            "issue",
+            "update",
+            "TEST-123",
+            "--status",
+            "Resolve",
+            "--field",
+            "customfield_10001=Rolled out",
+            "--no-interactive",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_client.transitions.transition.assert_called_once_with(
+        "TEST-123", "Resolve", fields={"customfield_10001": "Rolled out"}
+    )
+
+
+def test_dry_run_performs_no_transition(mock_client: MagicMock) -> None:
+    """A dry run must never touch the issue."""
+    mock_client.transitions.get_transition_details.return_value = [_transition_with_required_field()]
+
+    result = runner.invoke(
+        app,
+        ["-q", "issue", "update", "TEST-123", "--status", "Resolve", "--field", "customfield_10001=x", "--dry-run"],
+    )
+
+    assert result.exit_code == 0
+    assert "Resolve" in result.stdout
+    mock_client.transitions.transition.assert_not_called()
+
+
+def test_dry_run_does_not_prompt_for_missing_fields(mock_client: MagicMock) -> None:
+    """A dry run must not ask for values it will never send."""
+    mock_client.transitions.get_transition_details.return_value = [_transition_with_required_field()]
+
+    with patch("typer.prompt") as mock_prompt:
+        result = runner.invoke(app, ["-q", "issue", "update", "TEST-123", "--status", "Resolve", "--dry-run"])
+
+    assert result.exit_code == 0
+    mock_prompt.assert_not_called()
+    mock_client.transitions.transition.assert_not_called()
+
+
+def test_missing_required_field_is_prompted_when_interactive(mock_client: MagicMock) -> None:
+    """With a TTY the missing value is asked for instead of aborting."""
+    mock_client.transitions.get_transition_details.return_value = [_transition_with_required_field()]
+
+    with (
+        patch("budjira.cli.issue._can_prompt", return_value=True),
+        patch("typer.prompt", return_value="Rolled out"),
+    ):
+        result = runner.invoke(app, ["-q", "issue", "update", "TEST-123", "--status", "Resolve"])
+
+    assert result.exit_code == 0
+    mock_client.transitions.transition.assert_called_once_with(
+        "TEST-123", "Resolve", fields={"customfield_10001": "Rolled out"}
+    )
+
+
+def _validator_error() -> JIRAError:
+    """A workflow validator rejection: message set, errors object empty."""
+    error = JIRAError(status_code=400, text="Provide details about the solution made available.")
+    error.response = MagicMock()
+    error.response.json.return_value = {
+        "errorMessages": ["Provide details about the solution made available."],
+        "errors": {},
+    }
+    return error
+
+
+def test_validator_failure_names_the_field(mock_client: MagicMock) -> None:
+    """Jira's anonymous message is replaced by a concrete field name."""
+    mock_client.transitions.get_transition_details.return_value = [_transition_with_required_field()]
+    mock_client.transitions.transition.side_effect = _validator_error()
+
+    result = runner.invoke(
+        app,
+        [
+            "-q",
+            "issue",
+            "update",
+            "TEST-123",
+            "--status",
+            "Resolve",
+            "--field",
+            "customfield_10001=x",
+            "--no-interactive",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "customfield_10001" in result.stdout
+    assert "Solution details" in result.stdout
+
+
+def test_validator_failure_retries_once_when_interactive(mock_client: MagicMock) -> None:
+    """After prompting, retry exactly once."""
+    mock_client.transitions.get_transition_details.return_value = [_transition_with_required_field()]
+    mock_client.transitions.transition.side_effect = [_validator_error(), None]
+
+    with (
+        patch("budjira.cli.issue._can_prompt", return_value=True),
+        patch("typer.prompt", return_value="Rolled out"),
+    ):
+        result = runner.invoke(
+            app, ["-q", "issue", "update", "TEST-123", "--status", "Resolve", "--field", "customfield_10001=x"]
+        )
+
+    assert result.exit_code == 0
+    assert mock_client.transitions.transition.call_count == 2
+
+
+def test_unattributable_validator_message_is_forwarded(mock_client: MagicMock) -> None:
+    """Never invent a field name."""
+    error = JIRAError(status_code=400, text="Something else went wrong")
+    error.response = MagicMock()
+    error.response.json.return_value = {"errorMessages": ["Something else went wrong"], "errors": {}}
+    mock_client.transitions.get_transition_details.return_value = [_transition_with_required_field()]
+    mock_client.transitions.transition.side_effect = error
+
+    result = runner.invoke(
+        app,
+        [
+            "-q",
+            "issue",
+            "update",
+            "TEST-123",
+            "--status",
+            "Resolve",
+            "--field",
+            "customfield_10001=x",
+            "--no-interactive",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Something else went wrong" in result.stdout
+
+
+def test_validator_failure_is_attributed_through_the_service_error_wrapper(mock_client: MagicMock) -> None:
+    """Production shape: the service wraps JIRAError in JiraAPIError.
+
+    _handle_jira_error keeps only the error text, so the response body survives
+    solely in the __cause__ chain. Attribution must still work.
+    """
+    from budjira.utils.errors import JiraAPIError
+
+    original = _validator_error()
+    wrapped = JiraAPIError("Transition issue failed: Provide details about the solution made available.")
+    wrapped.__cause__ = original
+
+    mock_client.transitions.get_transition_details.return_value = [_transition_with_required_field()]
+    mock_client.transitions.transition.side_effect = wrapped
+
+    result = runner.invoke(
+        app,
+        [
+            "-q",
+            "issue",
+            "update",
+            "TEST-123",
+            "--status",
+            "Resolve",
+            "--field",
+            "customfield_10001=x",
+            "--no-interactive",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "customfield_10001" in result.stdout
+    assert "Solution details" in result.stdout

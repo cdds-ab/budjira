@@ -309,6 +309,28 @@ budjira issue delete PROJ-123 --force
 budjira issue delete PROJ-123 --delete-subtasks
 ```
 
+**Transition screen fields**
+
+Some transitions present a screen with fields that must be filled:
+
+```bash
+# Inspect what a transition needs, without touching the issue
+budjira issue update PROJ-123 --status "Resolve" --dry-run
+
+# Supply screen fields by id or by display name
+budjira issue update PROJ-123 --status "Resolve" \
+  --field resolution=Done \
+  --field "Solution details=Rolled out to production"
+```
+
+Missing required fields are prompted for interactively. With `--no-interactive`,
+or when stdin is not a terminal, budjira aborts and lists exactly which fields
+are needed instead of hanging on a prompt.
+
+Some fields are enforced by a workflow validator rather than by the screen. Jira
+reports those without naming the field; budjira matches the message against the
+transition's fields and tells you which one it means.
+
 ### 8. View Epic Progress
 
 ```bash

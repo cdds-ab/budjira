@@ -656,7 +656,7 @@ class TestJiraClientTransitions:
         client = JiraClient(connection, "test-token")
         client.transition_issue("TEST-123", "In Progress")
 
-        mock_jira_instance.transition_issue.assert_called_once_with("TEST-123", "21")
+        mock_jira_instance.transition_issue.assert_called_once_with("TEST-123", "21", fields=None)
 
     @patch("budjira.core.jira_client.JIRA")
     def test_transition_issue_case_insensitive(self, mock_jira_class: Mock, connection: Connection) -> None:
@@ -670,7 +670,7 @@ class TestJiraClientTransitions:
         client = JiraClient(connection, "test-token")
         client.transition_issue("TEST-123", "in progress")  # lowercase
 
-        mock_jira_instance.transition_issue.assert_called_once_with("TEST-123", "21")
+        mock_jira_instance.transition_issue.assert_called_once_with("TEST-123", "21", fields=None)
 
     @patch("budjira.core.jira_client.JIRA")
     def test_transition_issue_invalid_transition(self, mock_jira_class: Mock, connection: Connection) -> None:

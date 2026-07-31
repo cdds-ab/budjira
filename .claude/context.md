@@ -11,7 +11,7 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.22.0
+- **Current Version**: v1.22.1
 - **Branch**: master
 - **Status**: Local-first release workflow live (cz bump owns versioning)
 - **Last Update**: 2026-07-28
@@ -284,10 +284,10 @@ budjira/services/
 
 | Metrik | Wert |
 |--------|------|
-| **Total Tests** | 833 |
+| **Total Tests** | 962 |
 | **Skipped Tests** | 3 |
-| **Coverage** | 85.67% |
-| **Test Duration** | ~15s |
+| **Coverage** | 86.90% |
+| **Test Duration** | ~14s |
 
 ### Coverage by Module (Top)
 ```
@@ -440,13 +440,16 @@ budjira/
 | Issue Delete | v1.15.0 | `budjira issue delete` |
 | Workflow Profiles | v1.16.0 | `budjira workflow *` |
 | Sprint Querying | v1.17.0 | `budjira sprint list`, `sprint show` |
-| Sprint Management | pending | `budjira sprint move/create/start/close` |
-| Sub-task Creation | pending | `budjira create issue --type Subtask --parent KEY` |
+| Sprint Management | v1.21.0 | `budjira sprint move/create/start/close` |
+| Sub-task Creation | v1.21.0 | `budjira create issue --type Subtask --parent KEY` |
 | Workflow Sprint | v1.17.0 | `budjira workflow sprint` |
 | Booking Policy Enforcement | v1.17.0 | `budjira tempo log` (workflow) |
 | Cross-instance Tempo Fix | v1.18.1 | `budjira workflow book` |
 | Project Metadata | v1.19.0 | `budjira project sync/show/clear` |
 | Tempo issueId Fix | v1.19.1 | `budjira tempo worklogs` |
+| Worklog List JSON + Author | v1.22.0 | `budjira worklog list --format json --mine` |
+| Install-Method-Aware Update | v1.22.1 | `budjira update` |
+| Transition Screen Fields | pending | `budjira issue update --status X --field k=v --dry-run` |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---
