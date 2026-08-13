@@ -196,6 +196,7 @@ class Settings:
             "cache_enabled": conn.cache_enabled,
             "cache_ttl_hours": conn.cache_ttl_hours,
             "tempo_enabled": conn.tempo_enabled,
+            "description_dialect": conn.description_dialect,
         }
 
         # Add ai_prompt if set

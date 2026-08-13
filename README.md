@@ -230,6 +230,30 @@ budjira create issue "Implement login form" --type Subtask --parent PROJ-123 --n
 - Creating a sub-task without `--parent` fails fast with a clear error instead of a
   cryptic Jira API response
 
+**Description dialect:**
+
+Jira renders descriptions with its legacy wiki-markup renderer. Which dialect
+descriptions are written in is a property of the instance, so it belongs to the
+connection: choose `markdown` (the default) for an instance where authors write
+Markdown — budjira converts headings, lists, links and code fences to wiki markup on
+upload. Choose `wiki` for an instance whose house format is already expressed in wiki
+markup, e.g. panel macros and `#` ordered lists; the description is then sent
+unchanged, because converting it would rewrite `#` list items into `h1.` headings.
+
+```bash
+# Set the dialect for a connection
+budjira connect add --name house --url https://company.atlassian.net \
+  --email user@example.com --project PROJ --description-dialect wiki
+
+# Deviate for a single call (works on create and update)
+budjira create issue "Fix login bug" --type Bug --no-interactive \
+  --description-dialect wiki --description "$(cat description.txt)"
+budjira issue update PROJ-123 --description-dialect markdown --description "## Notes"
+```
+
+The option wins over the connection setting, which wins over the default. Existing
+configurations keep working unchanged: a connection without the key is `markdown`.
+
 ### 6. Definition of Ready (DoR) Templates
 
 budjira supports customizable templates for different issue types to ensure consistent quality.

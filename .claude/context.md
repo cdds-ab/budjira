@@ -450,6 +450,7 @@ budjira/
 | Worklog List JSON + Author | v1.22.0 | `budjira worklog list --format json --mine` |
 | Install-Method-Aware Update | v1.22.1 | `budjira update` |
 | Transition Screen Fields | pending | `budjira issue update --status X --field k=v --dry-run` |
+| Description Dialect | pending | `budjira connect add --description-dialect wiki`, `create issue/issue update --description-dialect` |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---

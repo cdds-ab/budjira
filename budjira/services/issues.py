@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from jira.exceptions import JIRAError
 
 from budjira.models.issue import Issue
 from budjira.services.base import BaseJiraService
+from budjira.utils.description import render_description
 from budjira.utils.errors import InvalidIssueError, JiraAPIError, PermissionError
-from budjira.utils.markdown_to_jira import markdown_to_wiki
+
+if TYPE_CHECKING:
+    from budjira.models.connection import DescriptionDialect
 
 
 class IssueService(BaseJiraService):
@@ -144,6 +147,7 @@ class IssueService(BaseJiraService):
         priority: str | None = None,
         assignee: str | None = None,
         labels: list[str] | None = None,
+        description_dialect: DescriptionDialect = "markdown",
         **extra_fields: Any,
     ) -> Issue:
         """Create a new issue.
@@ -156,6 +160,7 @@ class IssueService(BaseJiraService):
             priority: Priority level
             assignee: Assignee username
             labels: List of labels
+            description_dialect: Dialect the description is authored in, resolved by the caller
             **extra_fields: Additional custom fields
 
         Returns:
@@ -176,8 +181,7 @@ class IssueService(BaseJiraService):
             }
 
             if description:
-                # Jira REST v2 renders descriptions as wiki markup; convert from Markdown (issue #95).
-                fields["description"] = markdown_to_wiki(description)
+                fields["description"] = render_description(description, description_dialect)
             if priority:
                 fields["priority"] = {"name": priority}
             if assignee:
@@ -251,6 +255,7 @@ class IssueService(BaseJiraService):
         priority: str | None = None,
         summary: str | None = None,
         description: str | None = None,
+        description_dialect: DescriptionDialect = "markdown",
     ) -> None:
         """Update issue fields.
 
@@ -261,6 +266,7 @@ class IssueService(BaseJiraService):
             priority: Priority name
             summary: New summary
             description: New description
+            description_dialect: Dialect the description is authored in, resolved by the caller
 
         Raises:
             InvalidIssueError: If issue not found
@@ -294,8 +300,7 @@ class IssueService(BaseJiraService):
 
             # Handle description
             if description is not None:
-                # Jira REST v2 renders descriptions as wiki markup; convert from Markdown (issue #95).
-                update_fields["description"] = markdown_to_wiki(description)
+                update_fields["description"] = render_description(description, description_dialect)
 
             if update_fields:
                 self.client.issue(issue_key).update(fields=update_fields)

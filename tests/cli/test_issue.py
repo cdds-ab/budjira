@@ -63,6 +63,70 @@ def test_issue_transitions_requires_argument() -> None:
     assert "Missing argument" in result.stdout or "required" in result.stdout.lower()
 
 
+class TestIssueUpdateDescriptionDialect:
+    """The update command resolves the dialect for the description it sends."""
+
+    @staticmethod
+    def _connection(dialect: str):
+        from budjira.models.connection import Connection
+
+        return Connection(
+            name="test",
+            url="https://test.atlassian.net",  # type: ignore[arg-type]
+            email="test@example.com",
+            project_key="TEST",
+            description_dialect=dialect,  # type: ignore[arg-type]
+        )
+
+    @patch("budjira.cli.issue.JiraClient")
+    @patch("budjira.cli.issue.get_active_connection")
+    def test_update_uses_connection_description_dialect(self, mock_get_conn, mock_jira_client_class):
+        """A wiki connection makes update send its description verbatim."""
+        mock_get_conn.return_value = self._connection("wiki")
+        mock_client = MagicMock()
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["-q", "issue", "update", "TEST-123", "--description", "# first"],
+        )
+
+        assert result.exit_code == 0
+        assert mock_client.update_issue.call_args.kwargs["description_dialect"] == "wiki"
+
+    @patch("budjira.cli.issue.JiraClient")
+    @patch("budjira.cli.issue.get_active_connection")
+    def test_update_description_dialect_option_overrides_connection(self, mock_get_conn, mock_jira_client_class):
+        """A single call can deviate from the connection setting."""
+        mock_get_conn.return_value = self._connection("markdown")
+        mock_client = MagicMock()
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["-q", "issue", "update", "TEST-123", "--description", "# first", "--description-dialect", "wiki"],
+        )
+
+        assert result.exit_code == 0
+        assert mock_client.update_issue.call_args.kwargs["description_dialect"] == "wiki"
+
+    @patch("budjira.cli.issue.JiraClient")
+    @patch("budjira.cli.issue.get_active_connection")
+    def test_update_rejects_unknown_description_dialect(self, mock_get_conn, mock_jira_client_class):
+        """An unsupported dialect fails before anything is sent to Jira."""
+        mock_get_conn.return_value = self._connection("markdown")
+        mock_client = MagicMock()
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["-q", "issue", "update", "TEST-123", "--description", "x", "--description-dialect", "adf"],
+        )
+
+        assert result.exit_code != 0
+        mock_client.update_issue.assert_not_called()
+
+
 class TestIssueUpdateTimeTracking:
     """Tests for issue update time tracking functionality."""
 
