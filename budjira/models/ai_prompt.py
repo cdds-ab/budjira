@@ -460,6 +460,8 @@ budjira create issue "Issue summary" --no-interactive [OPTIONS]
 **Options:**
 - `--type TYPE`: Issue type (Bug, Story, Task, Epic, Sub-task)
 - `--description TEXT`: Full description
+- `--description-dialect {markdown,wiki}`: Dialect the description is written in
+  (overrides the connection setting for this call)
 - `--priority PRIORITY`: Priority level (Highest, High, Medium, Low, Lowest)
 - `--assignee USER`: Assign to user (username or account ID)
 - `--label TAG`: Add label (can be used multiple times)
@@ -599,6 +601,8 @@ Update existing issues with status transitions, field changes, and label managem
 - `--priority PRIORITY`, `-p`: Set priority (Highest, High, Medium, Low, Lowest)
 - `--summary TEXT`: Update summary/title
 - `--description TEXT`: Update description
+- `--description-dialect {markdown,wiki}`: Dialect the description is written in
+  (overrides the connection setting for this call)
 - `--add-label TAG`: Add label (repeatable)
 - `--remove-label TAG`: Remove label (repeatable)
 - `--epic EPIC-KEY`, `-e`: Link issue to epic
