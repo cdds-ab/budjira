@@ -127,6 +127,74 @@ class TestConnectAdd:
             assert stored is not None
             assert stored.description_dialect == "wiki"
 
+    def test_add_preserves_configuration_of_existing_connection(self, tmp_path: Path) -> None:
+        """Updating a connection must not reset fields the command never asked for (#108)."""
+        from budjira.models.custom_field import CustomFieldConfig, CustomFieldType
+
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+            patch("budjira.cli.connect._auto_sync_metadata"),
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            settings.add_connection(
+                Connection(
+                    name="Configured",
+                    url="https://test.atlassian.net",
+                    email="old@example.com",
+                    project_key="OLD",
+                    tempo_enabled=True,
+                    cache_enabled=True,
+                    cache_ttl_hours=48,
+                    board_id=42,
+                    ai_prompt="house rules",
+                    custom_fields={
+                        "system": CustomFieldConfig(field_id="customfield_10001", type=CustomFieldType.SELECT)
+                    },
+                )
+            )
+
+            result = runner.invoke(
+                app,
+                [
+                    "connect",
+                    "add",
+                    "--name",
+                    "Configured",
+                    "--url",
+                    "https://test.atlassian.net",
+                    "--email",
+                    "new@example.com",
+                    "--project",
+                    "NEW",
+                ],
+                input="y\ntoken\n",
+            )
+
+            assert result.exit_code == 0
+            stored = settings.load_connections().find_by_name("Configured")
+            assert stored is not None
+            # What was given changes ...
+            assert stored.email == "new@example.com"
+            assert stored.project_key == "NEW"
+            # ... everything else survives
+            assert stored.tempo_enabled is True
+            assert stored.cache_enabled is True
+            assert stored.cache_ttl_hours == 48
+            assert stored.board_id == 42
+            assert stored.ai_prompt == "house rules"
+            assert stored.custom_fields["system"].field_id == "customfield_10001"
+
 
 class TestConnectList:
     """Test connect list command."""
