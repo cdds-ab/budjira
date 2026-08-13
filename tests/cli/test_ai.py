@@ -348,3 +348,43 @@ class TestUsagePromptWithMetadata:
 
         assert result.exit_code == 0
         assert "Discovered Project Metadata" not in result.stdout
+
+
+class TestUsagePromptDefaults:
+    """--defaults renders the built-in template, so committed docs are reproducible (#105)."""
+
+    @patch("budjira.cli.ai.get_settings")
+    def test_defaults_ignores_the_local_template(self, mock_get_settings: MagicMock) -> None:
+        """A stale local template must not leak into the generated output."""
+        mock_template = MagicMock()
+        mock_template.render.return_value = "# Stale local template"
+        mock_settings = MagicMock()
+        mock_settings.ai_prompt_template = mock_template
+        mock_get_settings.return_value = mock_settings
+
+        result = runner.invoke(app, ["-q", "ai", "usage-prompt", "--defaults", "--plain"])
+
+        assert result.exit_code == 0
+        assert "Stale local template" not in result.stdout
+        mock_template.render.assert_not_called()
+
+    @patch("budjira.cli.ai.get_settings")
+    def test_local_template_is_used_without_the_flag(self, mock_get_settings: MagicMock) -> None:
+        """The user template overlay stays intact for interactive use."""
+        mock_template = MagicMock()
+        mock_template.render.return_value = "# Stale local template"
+        mock_settings = MagicMock()
+        mock_settings.ai_prompt_template = mock_template
+        mock_get_settings.return_value = mock_settings
+
+        result = runner.invoke(app, ["-q", "ai", "usage-prompt", "--plain"])
+
+        assert result.exit_code == 0
+        assert "Stale local template" in result.stdout
+
+    def test_defaults_documents_the_description_dialect_option(self) -> None:
+        """The built-in template covers the options the CLI actually offers."""
+        result = runner.invoke(app, ["-q", "ai", "usage-prompt", "--defaults", "--plain"])
+
+        assert result.exit_code == 0
+        assert result.stdout.count("--description-dialect") >= 2
