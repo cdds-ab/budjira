@@ -31,6 +31,103 @@ def mock_jira() -> MagicMock:
     return jira_mock
 
 
+class TestConnectAdd:
+    """Test connect add command."""
+
+    def test_add_stores_description_dialect(self, tmp_path: Path) -> None:
+        """The dialect can be set when creating a connection."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+            patch("budjira.cli.connect._auto_sync_metadata"),
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+
+            result = runner.invoke(
+                app,
+                [
+                    "connect",
+                    "add",
+                    "--name",
+                    "WikiHouse",
+                    "--url",
+                    "https://test.atlassian.net",
+                    "--email",
+                    "test@example.com",
+                    "--project",
+                    "TEST",
+                    "--description-dialect",
+                    "wiki",
+                ],
+                input="token\n",
+            )
+
+            assert result.exit_code == 0
+            stored = settings.load_connections().find_by_name("WikiHouse")
+            assert stored is not None
+            assert stored.description_dialect == "wiki"
+
+    def test_add_keeps_description_dialect_of_existing_connection(self, tmp_path: Path) -> None:
+        """Updating a connection without the option must not reset the dialect."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+            patch("budjira.cli.connect._auto_sync_metadata"),
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            settings.add_connection(
+                Connection(
+                    name="WikiHouse",
+                    url="https://test.atlassian.net",
+                    email="test@example.com",
+                    project_key="TEST",
+                    description_dialect="wiki",
+                )
+            )
+
+            result = runner.invoke(
+                app,
+                [
+                    "connect",
+                    "add",
+                    "--name",
+                    "WikiHouse",
+                    "--url",
+                    "https://test.atlassian.net",
+                    "--email",
+                    "test@example.com",
+                    "--project",
+                    "TEST",
+                ],
+                input="y\ntoken\n",
+            )
+
+            assert result.exit_code == 0
+            stored = settings.load_connections().find_by_name("WikiHouse")
+            assert stored is not None
+            assert stored.description_dialect == "wiki"
+
+
 class TestConnectList:
     """Test connect list command."""
 
@@ -88,9 +185,72 @@ class TestConnectList:
             assert "test.atlassian.net" in result.stdout or "https://tes" in result.stdout
             assert "TEST" in result.stdout
 
+    def test_list_shows_description_dialect(self, tmp_path: Path) -> None:
+        """The listing tells which connection deviates from the Markdown default."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            settings.add_connection(
+                Connection(
+                    name="WikiHouse",
+                    url="https://test.atlassian.net",
+                    email="test@example.com",
+                    project_key="TEST",
+                    description_dialect="wiki",
+                )
+            )
+
+            result = runner.invoke(app, ["connect", "list"])
+
+            assert result.exit_code == 0
+            assert "wiki" in result.stdout
+
 
 class TestConnectShow:
     """Test connect show command."""
+
+    def test_show_includes_description_dialect(self, tmp_path: Path) -> None:
+        """The detail view names the dialect descriptions are sent in."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_get_settings,
+        ):
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+
+            from budjira.config import get_settings
+
+            settings = get_settings()
+            mock_get_settings.return_value = settings
+            settings.add_connection(
+                Connection(
+                    name="WikiHouse",
+                    url="https://test.atlassian.net",
+                    email="test@example.com",
+                    project_key="TEST",
+                    description_dialect="wiki",
+                )
+            )
+
+            result = runner.invoke(app, ["connect", "show", "WikiHouse"])
+
+            assert result.exit_code == 0
+            assert "Description" in result.stdout
+            assert "wiki" in result.stdout
 
     def test_show_by_name(self, tmp_path: Path) -> None:
         """Test showing connection by name."""

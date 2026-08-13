@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
@@ -11,7 +12,11 @@ from rich.table import Table
 
 from budjira.config import get_credential_store, get_settings
 from budjira.models.connection import Connection
+from budjira.utils.description import DescriptionDialectOption  # noqa: TC001 - Typer resolves it at runtime
 from budjira.utils.errors import BudjiraError
+
+if TYPE_CHECKING:
+    from budjira.models.connection import DescriptionDialect
 
 app = typer.Typer(
     name="connect",
@@ -59,12 +64,23 @@ def add_connection(
     url: str = typer.Option(None, "--url", "-u", help="Jira instance URL"),
     email: str = typer.Option(None, "--email", "-e", help="Email address"),
     project_key: str = typer.Option(None, "--project", "-p", help="Default project key"),
+    description_dialect: DescriptionDialectOption = typer.Option(
+        None,
+        "--description-dialect",
+        help="Dialect descriptions on this instance are written in (default: markdown)",
+    ),
 ) -> None:
     """Add or update a Jira connection.
 
     Creates a named connection that can be used across different projects
     and directories. Use --connection flag or BUDJIRA_CONNECTION env var
     to select which connection to use.
+
+    Description dialect: pick "markdown" (the default) for an instance where
+    authors write Markdown - budjira converts it to Jira wiki markup on upload.
+    Pick "wiki" for an instance whose house format is already expressed in wiki
+    markup, e.g. panel macros and "#" ordered lists; descriptions are then sent
+    unchanged. Individual calls can deviate with --description-dialect.
 
     Examples:
         # Interactive mode
@@ -73,6 +89,10 @@ def add_connection(
         # With all parameters
         budjira connect add --name work --url https://work.atlassian.net \\
             --email user@work.com --project PROJ
+
+        # An instance whose descriptions are authored in wiki markup
+        budjira connect add --name house --url https://house.atlassian.net \\
+            --email user@house.com --project PROJ --description-dialect wiki
     """
     try:
         settings = get_settings()
@@ -117,6 +137,15 @@ def add_connection(
             default="<keep existing>" if existing and credential_store.has_credentials(existing) else None,
         )
 
+        # Keep the dialect of an existing connection unless it is explicitly changed
+        dialect: DescriptionDialect
+        if description_dialect is not None:
+            dialect = description_dialect.value
+        elif existing:
+            dialect = existing.description_dialect
+        else:
+            dialect = "markdown"
+
         # Create connection
         # Pydantic will validate and convert url string to HttpUrl
         connection = Connection(
@@ -124,6 +153,7 @@ def add_connection(
             url=url,  # type: ignore[arg-type]
             email=email,
             project_key=project_key,
+            description_dialect=dialect,
         )
 
         # Save connection
@@ -145,6 +175,7 @@ def add_connection(
         console.print(f"  URL:          {connection.url}")
         console.print(f"  Email:        {connection.email}")
         console.print(f"  Project:      {connection.project_key}")
+        console.print(f"  Descriptions: {connection.description_dialect}")
 
         # Auto-sync project metadata
         _auto_sync_metadata(connection)
@@ -182,6 +213,7 @@ def list_connections() -> None:
     table.add_column("URL")
     table.add_column("Email")
     table.add_column("Project")
+    table.add_column("Descriptions")
     table.add_column("Default", justify="center")
 
     for conn in connections:
@@ -198,6 +230,7 @@ def list_connections() -> None:
             str(conn.url),
             conn.email,
             conn.project_key,
+            conn.description_dialect,
             default_icon,
         )
 
@@ -230,6 +263,7 @@ def show_connection(
     console.print(f"[bold]URL:[/bold]          {connection.url}")
     console.print(f"[bold]Email:[/bold]        {connection.email}")
     console.print(f"[bold]Project Key:[/bold]  {connection.project_key}")
+    console.print(f"[bold]Descriptions:[/bold] {connection.description_dialect}")
     console.print(f"[bold]Cache:[/bold]        {'Enabled' if connection.cache_enabled else 'Disabled'}")
 
     # Check credentials
