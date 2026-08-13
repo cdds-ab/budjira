@@ -1,6 +1,29 @@
 # CHANGELOG
 
 
+## v1.23.0 (2026-08-13)
+
+### Feat
+
+- **ai**: add --defaults to render the built-in usage prompt
+- **connect**: surface the description dialect in connection commands
+- **cli**: resolve the description dialect on create and update
+- **issue**: let the caller choose the description dialect
+- **connection**: add description_dialect setting
+- **issue**: name the screen field behind a workflow validator failure
+- **issue**: add --field and --dry-run for transition screen fields
+- **transitions**: attribute workflow validator errors to a screen field
+- **transitions**: resolve and encode transition screen field values
+- **transitions**: forward screen field values to transition_issue
+- **transitions**: fetch transition screen field metadata
+- **models**: add transition screen field models
+
+### Fix
+
+- **scripts**: check the AI prompt against the built-in template
+- **connect**: keep existing configuration when updating a connection
+- **config**: persist board_id in connections.toml
+
 ## v1.22.1 (2026-07-29)
 
 ### Fix
