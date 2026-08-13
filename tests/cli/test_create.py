@@ -79,6 +79,7 @@ class TestCreateCommand:
             priority=None,
             assignee=None,
             labels=[],
+            description_dialect="markdown",
         )
 
     @patch("budjira.cli.create.get_settings")
@@ -137,7 +138,97 @@ class TestCreateCommand:
             priority="High",
             assignee="jdoe",
             labels=["bug", "urgent"],
+            description_dialect="markdown",
         )
+
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_uses_connection_description_dialect(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_created_issue: Issue,
+    ) -> None:
+        """A wiki connection makes create send its description verbatim."""
+        mock_get_active_connection.return_value = Connection(
+            name="wiki-connection",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+            description_dialect="wiki",
+        )
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["New bug", "--type", "Bug", "--description", "# first", "--no-interactive", "--skip-dor"],
+        )
+
+        assert result.exit_code == 0
+        assert mock_client.create_issue.call_args.kwargs["description_dialect"] == "wiki"
+
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_description_dialect_option_overrides_connection(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_created_issue: Issue,
+    ) -> None:
+        """A single call can deviate from the connection setting."""
+        mock_get_active_connection.return_value = Connection(
+            name="wiki-connection",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+            description_dialect="wiki",
+        )
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            [
+                "New bug",
+                "--type",
+                "Bug",
+                "--description",
+                "## Title",
+                "--description-dialect",
+                "markdown",
+                "--no-interactive",
+                "--skip-dor",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert mock_client.create_issue.call_args.kwargs["description_dialect"] == "markdown"
+
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_rejects_unknown_description_dialect(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+    ) -> None:
+        """An unsupported dialect fails before anything is sent to Jira."""
+        mock_get_active_connection.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(
+            app,
+            ["New bug", "--type", "Bug", "--description-dialect", "adf", "--no-interactive"],
+        )
+
+        assert result.exit_code != 0
+        mock_client.create_issue.assert_not_called()
 
     @patch("budjira.cli.create.JiraClient")
     @patch("budjira.cli.create.get_active_connection")

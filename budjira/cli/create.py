@@ -14,6 +14,7 @@ from budjira.config.settings import get_settings
 from budjira.core.jira_client import JiraClient
 from budjira.models.issue import IssueType, Priority
 from budjira.utils.connection import get_active_connection
+from budjira.utils.description import DescriptionDialectOption, resolve_description_dialect
 from budjira.utils.dor_validator import format_validation_result, validate_description
 from budjira.utils.editor import open_editor
 from budjira.utils.errors import BudjiraError
@@ -630,6 +631,11 @@ def issue(
         "-d",
         help="Issue description",
     ),
+    description_dialect: DescriptionDialectOption = typer.Option(
+        None,
+        "--description-dialect",
+        help="Dialect the description is written in (overrides the connection setting for this call)",
+    ),
     project: str = typer.Option(
         None,
         "--project",
@@ -702,6 +708,13 @@ def issue(
 
     You can provide all details via command line options, or use interactive mode
     to be prompted for required fields.
+
+    Description dialect: descriptions are uploaded as Jira wiki markup. Choose
+    "markdown" (the default) for instances where authors write Markdown - budjira
+    then converts headings, lists and code fences for you. Choose "wiki" for an
+    instance whose house format is already expressed in wiki markup, e.g. panel
+    macros and "#" ordered lists; the text is then sent unchanged. The connection
+    setting decides unless --description-dialect overrides it for a single call.
 
     Examples:
 
@@ -784,6 +797,7 @@ def issue(
             priority=priority,
             assignee=assignee,
             labels=labels,
+            description_dialect=resolve_description_dialect(description_dialect, active_connection),
             **extra_fields,
         )
 

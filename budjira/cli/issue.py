@@ -10,6 +10,7 @@ from rich.table import Table
 from budjira.core.jira_client import JiraClient
 from budjira.models.transition import Transition
 from budjira.utils.connection import get_active_connection
+from budjira.utils.description import DescriptionDialectOption, resolve_description_dialect
 from budjira.utils.errors import BudjiraError, InvalidIssueError, PermissionError
 from budjira.utils.time_parser import parse_time_string
 from budjira.utils.transition_fields import (
@@ -199,6 +200,13 @@ def update_issue(
     remove_label: Annotated[list[str] | None, typer.Option("--remove-label", help="Remove label (repeatable)")] = None,
     summary: Annotated[str | None, typer.Option("--summary", help="Update summary")] = None,
     description: Annotated[str | None, typer.Option("--description", help="Update description")] = None,
+    description_dialect: Annotated[
+        DescriptionDialectOption | None,
+        typer.Option(
+            "--description-dialect",
+            help="Dialect the description is written in (overrides the connection setting for this call)",
+        ),
+    ] = None,
     epic: Annotated[str | None, typer.Option("--epic", "-e", help="Link to epic (epic key)")] = None,
     original_estimate: Annotated[
         str | None, typer.Option("--original-estimate", help="Update original estimate (e.g., 2h, 30m)")
@@ -218,6 +226,13 @@ def update_issue(
 
     Update status, assignee, priority, labels, summary, and description.
     Multiple updates can be performed in a single command.
+
+    Description dialect: descriptions are uploaded as Jira wiki markup. Choose
+    "markdown" (the default) for instances where authors write Markdown - budjira
+    then converts headings, lists and code fences for you. Choose "wiki" for an
+    instance whose house format is already expressed in wiki markup, e.g. panel
+    macros and "#" ordered lists; the text is then sent unchanged. The connection
+    setting decides unless --description-dialect overrides it for a single call.
 
     Examples:
 
@@ -336,6 +351,7 @@ def update_issue(
                     priority=priority,
                     summary=summary,
                     description=description,
+                    description_dialect=resolve_description_dialect(description_dialect, conn),
                 )
                 if assignee is not None:
                     changes.append(("Assignee", f"→ {assignee}"))
