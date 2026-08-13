@@ -253,6 +253,35 @@ class TestSettings:
         loaded_conn = loaded.connections[0]
         assert loaded_conn.tempo_enabled is True, "tempo_enabled should be persisted to TOML"
 
+    def test_board_id_persistence(self, temp_settings: Settings) -> None:
+        """A board configured for sprint operations must survive a save (issue #108)."""
+        temp_settings.add_connection(
+            Connection(
+                name="Test Board",
+                url="https://test.atlassian.net",
+                email="test@example.com",
+                project_key="TEST",
+                board_id=42,
+            )
+        )
+
+        loaded = temp_settings.load_connections()
+
+        assert loaded.connections[0].board_id == 42
+
+    def test_board_id_omitted_when_unset(self, temp_settings: Settings) -> None:
+        """An unset board writes no key, like the other optional fields."""
+        temp_settings.add_connection(
+            Connection(
+                name="Test No Board",
+                url="https://test.atlassian.net",
+                email="test@example.com",
+                project_key="TEST",
+            )
+        )
+
+        assert "board_id" not in temp_settings.connections_file.read_text()
+
     def test_tempo_disabled_by_default(self, temp_settings: Settings) -> None:
         """Test that tempo_enabled defaults to False when not specified."""
         connection = Connection(

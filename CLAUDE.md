@@ -354,8 +354,13 @@ regenerate `.claude/ai-usage-prompt.md`. Regenerate that file manually and commi
 it separately:
 
 ```bash
-uv run budjira -q ai usage-prompt --plain > .claude/ai-usage-prompt.md
+uv run budjira -q ai usage-prompt --defaults --plain > .claude/ai-usage-prompt.md
 ```
+
+**`--defaults` is not optional here.** Without it the command renders
+`~/.config/budjira/ai-prompt-template.toml` when that file exists, so the committed
+file would reflect one developer's local overlay instead of the code. The freshness
+hook builds its baseline with the same flag, so both sides compare the same thing.
 
 If you add a new hook, keep it check-only (validate and fail with a message);
 never have it rewrite tracked files in place.
@@ -700,7 +705,7 @@ This section provides structured checklists for repeatable, high-quality develop
   - [ ] Known limitations if any
 - [ ] **AI prompt updated** if CLI commands or models changed:
   - [ ] Edit `budjira/cli/ai.py` template
-  - [ ] Regenerate: `uv run budjira -q ai usage-prompt --plain > .claude/ai-usage-prompt.md`
+  - [ ] Regenerate: `uv run budjira -q ai usage-prompt --defaults --plain > .claude/ai-usage-prompt.md`
   - [ ] Commit separately with `docs: update AI usage prompt`
 - [ ] **.claude/ai-prompt-supplements.md** extended if new workflows
 - [ ] **CLAUDE.md** updated if architectural changes

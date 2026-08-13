@@ -10,6 +10,7 @@ from rich.markdown import Markdown
 
 from budjira.config.metadata_cache import MetadataCache
 from budjira.config.settings import get_settings
+from budjira.models.ai_prompt import get_default_ai_prompt_template
 
 if TYPE_CHECKING:
     from budjira.models.connection import Connection
@@ -23,17 +24,18 @@ app = typer.Typer(
 console = Console()
 
 
-def _generate_usage_prompt(connection: Connection | None = None) -> str:
+def _generate_usage_prompt(connection: Connection | None = None, use_defaults: bool = False) -> str:
     """Generate comprehensive AI usage prompt for budjira.
 
     Args:
         connection: Optional connection to include project-specific prompt from
+        use_defaults: Render the built-in template instead of the user's local
+            overlay, so the output is a function of the code alone (issue #105)
 
     Returns:
         Markdown-formatted prompt text explaining all budjira functionality
     """
-    settings = get_settings()
-    template = settings.ai_prompt_template
+    template = get_default_ai_prompt_template() if use_defaults else get_settings().ai_prompt_template
     base_prompt = template.render()
 
     # Append project-specific prompt if connection has one
@@ -98,6 +100,11 @@ def usage_prompt(
         "-c",
         help="Include project-specific AI prompt from this connection",
     ),
+    defaults: bool = typer.Option(
+        False,
+        "--defaults",
+        help="Render the built-in template, ignoring a local ai-prompt-template.toml",
+    ),
 ) -> None:
     """Generate comprehensive usage guide for AI assistants.
 
@@ -118,6 +125,11 @@ def usage_prompt(
     When --connection is specified, the connection's project-specific AI prompt
     (if configured) will be appended to the generated guide.
 
+    By default the guide is rendered from ~/.config/budjira/ai-prompt-template.toml
+    when that file exists, so local edits show up. Use --defaults to render the
+    built-in template instead: the output then depends only on the installed
+    version, which is what a file checked into a repository needs.
+
     Examples:
         # Display the guide in terminal (formatted)
         budjira ai usage-prompt
@@ -128,8 +140,8 @@ def usage_prompt(
         # Include project-specific prompt from a connection
         budjira ai usage-prompt --connection my-project --plain
 
-        # Save to file
-        budjira ai usage-prompt --plain > .claude/ai-usage-prompt.md
+        # Save a reproducible copy to a file
+        budjira ai usage-prompt --defaults --plain > .claude/ai-usage-prompt.md
 
         # Copy to clipboard (requires xclip/pbcopy)
         budjira ai usage-prompt --plain | xclip -selection clipboard
@@ -143,7 +155,7 @@ def usage_prompt(
             console.print(f"[red]Error:[/red] Connection '{connection_name}' not found", style="red")
             raise typer.Exit(1)
 
-    prompt = _generate_usage_prompt(connection)
+    prompt = _generate_usage_prompt(connection, use_defaults=defaults)
 
     if plain:
         # Output raw markdown for file/clipboard

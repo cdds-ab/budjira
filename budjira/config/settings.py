@@ -199,6 +199,10 @@ class Settings:
             "description_dialect": conn.description_dialect,
         }
 
+        # Add board_id if set
+        if conn.board_id is not None:
+            result["board_id"] = conn.board_id
+
         # Add ai_prompt if set
         if conn.ai_prompt is not None:
             result["ai_prompt"] = conn.ai_prompt

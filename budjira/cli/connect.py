@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
@@ -14,9 +13,6 @@ from budjira.config import get_credential_store, get_settings
 from budjira.models.connection import Connection
 from budjira.utils.description import DescriptionDialectOption  # noqa: TC001 - Typer resolves it at runtime
 from budjira.utils.errors import BudjiraError
-
-if TYPE_CHECKING:
-    from budjira.models.connection import DescriptionDialect
 
 app = typer.Typer(
     name="connect",
@@ -137,24 +133,21 @@ def add_connection(
             default="<keep existing>" if existing and credential_store.has_credentials(existing) else None,
         )
 
-        # Keep the dialect of an existing connection unless it is explicitly changed
-        dialect: DescriptionDialect
+        # Updating carries the stored connection forward: this command only asks for a
+        # handful of fields, and everything else (Tempo, custom fields, board, prompts)
+        # must survive an edit of URL, email or project key.
+        stored_values = existing.model_dump() if existing else {}
+        changed_values: dict[str, object] = {
+            "name": name,
+            "url": url,
+            "email": email,
+            "project_key": project_key,
+        }
         if description_dialect is not None:
-            dialect = description_dialect.value
-        elif existing:
-            dialect = existing.description_dialect
-        else:
-            dialect = "markdown"
+            changed_values["description_dialect"] = description_dialect.value
 
-        # Create connection
-        # Pydantic will validate and convert url string to HttpUrl
-        connection = Connection(
-            name=name,
-            url=url,  # type: ignore[arg-type]
-            email=email,
-            project_key=project_key,
-            description_dialect=dialect,
-        )
+        # Pydantic validates the merged values and converts the url string to HttpUrl
+        connection = Connection(**{**stored_values, **changed_values})
 
         # Save connection
         if existing:
