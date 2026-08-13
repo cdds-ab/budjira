@@ -11,15 +11,17 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.22.1
+- **Current Version**: v1.23.0
 - **Branch**: master
 - **Status**: Local-first release workflow live (cz bump owns versioning)
-- **Last Update**: 2026-07-28
+- **Last Update**: 2026-08-13
 
 ### Recent Releases (seit v1.8.1)
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.23.0** | 2026-08-13 | feat | Per-connection description dialect (#106), transition screen fields (#101); connection write path no longer discards configuration (#108), AI usage prompt reproducible from code (#105) |
+| **v1.22.1** | 2026-07-29 | fix | Self-update detects the install method instead of shadow-installing (#99) |
 | **v1.22.0** | 2026-07-28 | feat | Worklog list: real Tempo author, JSON output, author/date filters (#92); install.sh update gating (#98) |
 | **v1.21.3** | 2026-07-17 | fix | Markdown→Wiki description upload (#95/#97), credential redaction in logs (#93/#94) |
 | **v1.21.2** | 2026-06-01 | fix | Guard partial-field fetch in Issue parsing (#89) |
@@ -449,8 +451,9 @@ budjira/
 | Tempo issueId Fix | v1.19.1 | `budjira tempo worklogs` |
 | Worklog List JSON + Author | v1.22.0 | `budjira worklog list --format json --mine` |
 | Install-Method-Aware Update | v1.22.1 | `budjira update` |
-| Transition Screen Fields | pending | `budjira issue update --status X --field k=v --dry-run` |
-| Description Dialect | pending | `budjira connect add --description-dialect wiki`, `create issue/issue update --description-dialect` |
+| Transition Screen Fields | v1.23.0 | `budjira issue update --status X --field k=v --dry-run` |
+| Description Dialect | v1.23.0 | `budjira connect add --description-dialect wiki`, `create issue/issue update --description-dialect` |
+| Reproducible AI Prompt | v1.23.0 | `budjira ai usage-prompt --defaults --plain` |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---
