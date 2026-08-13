@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 from budjira.models.custom_field import CustomFieldConfig  # noqa: TC001 - needed at runtime for Pydantic
+
+# How the description field is treated on upload. Modelled as an open set of string
+# values so a third dialect ("adf", once the client speaks REST v3 - epic #96) can be
+# added without changing the config format: unknown values simply fail validation today
+# and become valid the moment they are listed here.
+DescriptionDialect = Literal["markdown", "wiki"]
 
 
 class Connection(BaseModel):
@@ -51,6 +59,13 @@ class Connection(BaseModel):
     tempo_enabled: bool = Field(
         default=False,
         description="Whether Tempo Timesheets integration is enabled for this connection",
+    )
+    description_dialect: DescriptionDialect = Field(
+        default="markdown",
+        description=(
+            "Dialect descriptions are authored in: 'markdown' converts to Jira wiki markup on "
+            "upload, 'wiki' sends the text unchanged"
+        ),
     )
     custom_fields: dict[str, CustomFieldConfig] = Field(
         default_factory=dict,

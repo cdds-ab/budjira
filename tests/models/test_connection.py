@@ -94,6 +94,40 @@ class TestConnection:
 
         assert conn.tempo_enabled is True
 
+    def test_description_dialect_defaults_to_markdown(self) -> None:
+        """A connection without the key keeps today's converting behaviour."""
+        conn = Connection(
+            name="Test",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+        )
+
+        assert conn.description_dialect == "markdown"
+
+    def test_description_dialect_can_be_wiki(self) -> None:
+        """Instances with a wiki-markup house format declare it on the connection."""
+        conn = Connection(
+            name="Test",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+            description_dialect="wiki",
+        )
+
+        assert conn.description_dialect == "wiki"
+
+    def test_description_dialect_rejects_unknown_value(self) -> None:
+        """Unknown dialects are rejected rather than silently ignored."""
+        with pytest.raises(ValidationError):
+            Connection(
+                name="Test",
+                url="https://test.atlassian.net",
+                email="test@example.com",
+                project_key="TEST",
+                description_dialect="adf",
+            )
+
     def test_get_tempo_credential_key(self) -> None:
         """Test Tempo credential key generation."""
         conn = Connection(

@@ -105,6 +105,36 @@ class TestSettings:
         assert conn.email == test_connection.email
         assert conn.project_key == test_connection.project_key
 
+    def test_description_dialect_survives_round_trip(self, temp_settings: Settings) -> None:
+        """A wiki connection is still a wiki connection after save and reload."""
+        temp_settings.add_connection(
+            Connection(
+                name="Wiki House",
+                url="https://test.atlassian.net",
+                email="test@example.com",
+                project_key="TEST",
+                description_dialect="wiki",
+            )
+        )
+
+        loaded = temp_settings.load_connections()
+
+        assert loaded.connections[0].description_dialect == "wiki"
+
+    def test_config_without_description_dialect_defaults_to_markdown(self, temp_settings: Settings) -> None:
+        """An existing config file loads unmigrated and keeps today's behaviour."""
+        temp_settings.connections_file.write_text(
+            "[[connections]]\n"
+            'name = "Legacy"\n'
+            'url = "https://test.atlassian.net/"\n'
+            'email = "test@example.com"\n'
+            'project_key = "TEST"\n'
+        )
+
+        loaded = temp_settings.load_connections()
+
+        assert loaded.connections[0].description_dialect == "markdown"
+
     def test_add_connection(self, temp_settings: Settings, test_connection: Connection) -> None:
         """Test adding a connection."""
         temp_settings.add_connection(test_connection)
