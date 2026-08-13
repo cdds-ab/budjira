@@ -12,7 +12,7 @@ project hit.
 So this hook only DETECTS staleness and prints an actionable reminder.
 Regeneration stays an explicit, manual step:
 
-    uv run budjira -q ai usage-prompt --plain > .claude/ai-usage-prompt.md
+    uv run budjira -q ai usage-prompt --defaults --plain > .claude/ai-usage-prompt.md
 
 Exit code: always 0 (non-blocking reminder -- never aborts the commit).
 """
@@ -22,7 +22,13 @@ from pathlib import Path
 from subprocess import run  # nosec B404 - subprocess for git/budjira commands (trusted)
 
 PROMPT_FILE = Path(".claude/ai-usage-prompt.md")
-REGEN_COMMAND = "uv run budjira -q ai usage-prompt --plain > .claude/ai-usage-prompt.md"
+
+# --defaults renders the built-in template instead of the developer's local
+# ~/.config/budjira/ai-prompt-template.toml. Without it, both the baseline below and
+# the regeneration command below produce machine-dependent output, and the check
+# happily compares one stale rendering against another (issue #105).
+GENERATE_COMMAND = ["uv", "run", "budjira", "-q", "ai", "usage-prompt", "--defaults", "--plain"]
+REGEN_COMMAND = f"{' '.join(GENERATE_COMMAND)} > {PROMPT_FILE}"
 
 
 def get_staged_files() -> list[str]:
@@ -48,7 +54,7 @@ def check_cli_changes(staged_files: list[str]) -> bool:
 def generate_expected_prompt() -> str | None:
     """Generate the current prompt in memory. Returns None if generation fails."""
     result = run(  # nosec B603 B607 - controlled command (safe)
-        ["uv", "run", "budjira", "-q", "ai", "usage-prompt", "--plain"],
+        GENERATE_COMMAND,
         capture_output=True,
         text=True,
         check=False,
