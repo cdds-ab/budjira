@@ -313,6 +313,42 @@ class TestJiraClientCreateIssue:
         assert call_args["fields"]["labels"] == ["urgent", "bug"]
 
     @patch("budjira.core.jira_client.JIRA")
+    def test_create_issue_forwards_description_dialect(
+        self, mock_jira_class: Mock, connection: Connection, mock_jira_issue: MagicMock
+    ) -> None:
+        """The wrapper must not swallow the dialect the caller resolved."""
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.create_issue.return_value = mock_jira_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.create_issue(
+            project_key="TEST",
+            summary="Bug fix",
+            issue_type="Bug",
+            description="# first\n# second",
+            description_dialect="wiki",
+        )
+
+        call_args = mock_jira_instance.create_issue.call_args[1]
+        assert call_args["fields"]["description"] == "# first\n# second"
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_update_issue_forwards_description_dialect(
+        self, mock_jira_class: Mock, connection: Connection, mock_jira_issue: MagicMock
+    ) -> None:
+        """The wrapper must not swallow the dialect the caller resolved."""
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.issue.return_value = mock_jira_issue
+        mock_jira_class.return_value = mock_jira_instance
+
+        client = JiraClient(connection, "test-token")
+        client.update_issue("TEST-123", description="# first\n# second", description_dialect="wiki")
+
+        call_args = mock_jira_issue.update.call_args[1]
+        assert call_args["fields"]["description"] == "# first\n# second"
+
+    @patch("budjira.core.jira_client.JIRA")
     def test_create_issue_permission_error(self, mock_jira_class: Mock, connection: Connection) -> None:
         """Test create issue permission denied."""
         mock_jira_instance = MagicMock()

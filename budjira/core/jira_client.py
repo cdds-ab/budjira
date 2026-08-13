@@ -33,7 +33,7 @@ from budjira.utils.errors import (
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from budjira.models.connection import Connection
+    from budjira.models.connection import Connection, DescriptionDialect
     from budjira.models.issue import Issue
 
 logger = logging.getLogger(__name__)
@@ -178,6 +178,7 @@ class JiraClient:
         priority: str | None = None,
         assignee: str | None = None,
         labels: list[str] | None = None,
+        description_dialect: DescriptionDialect = "markdown",
         **extra_fields: Any,
     ) -> Issue:
         """Create a new issue.
@@ -185,7 +186,15 @@ class JiraClient:
         DEPRECATED: Use client.issues.create() instead.
         """
         return self.issues.create(
-            project_key, summary, issue_type, description, priority, assignee, labels, **extra_fields
+            project_key,
+            summary,
+            issue_type,
+            description,
+            priority,
+            assignee,
+            labels,
+            description_dialect,
+            **extra_fields,
         )
 
     def update_issue(
@@ -196,12 +205,13 @@ class JiraClient:
         priority: str | None = None,
         summary: str | None = None,
         description: str | None = None,
+        description_dialect: DescriptionDialect = "markdown",
     ) -> None:
         """Update issue fields.
 
         DEPRECATED: Use client.issues.update() instead.
         """
-        self.issues.update(issue_key, fields, assignee, priority, summary, description)
+        self.issues.update(issue_key, fields, assignee, priority, summary, description, description_dialect)
 
     # ==================== Worklog Operations (delegate to WorklogService) ====================
 

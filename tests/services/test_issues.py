@@ -93,3 +93,39 @@ class TestDescriptionConversion:
 
         fields = mock_issue.update.call_args.kwargs["fields"]
         assert fields["description"] == "h2. Title\n* (x) todo"
+
+
+WIKI_DESCRIPTION = "{panel:bgColor=#eae6ff}\nh3. Steps\n# first\n# second\n{panel}"
+
+
+class TestWikiDialectPassthrough:
+    """The wiki dialect uploads a description byte-for-byte (issue #106)."""
+
+    def test_create_sends_wiki_description_unchanged(self) -> None:
+        """Panel macro, h3. heading and # ordered list survive create()."""
+        mock_client = MagicMock()
+        service = IssueService(mock_client)
+
+        with patch("budjira.services.issues.Issue.from_jira_issue", return_value=MagicMock()):
+            service.create(
+                "PROJ",
+                "summary",
+                "Task",
+                description=WIKI_DESCRIPTION,
+                description_dialect="wiki",
+            )
+
+        fields = mock_client.create_issue.call_args.kwargs["fields"]
+        assert fields["description"] == WIKI_DESCRIPTION
+
+    def test_update_sends_wiki_description_unchanged(self) -> None:
+        """Panel macro, h3. heading and # ordered list survive update()."""
+        mock_client = MagicMock()
+        mock_issue = MagicMock()
+        mock_client.issue.return_value = mock_issue
+        service = IssueService(mock_client)
+
+        service.update("PROJ-1", description=WIKI_DESCRIPTION, description_dialect="wiki")
+
+        fields = mock_issue.update.call_args.kwargs["fields"]
+        assert fields["description"] == WIKI_DESCRIPTION
