@@ -454,6 +454,7 @@ budjira/
 | Transition Screen Fields | v1.23.0 | `budjira issue update --status X --field k=v --dry-run` |
 | Description Dialect | v1.23.0 | `budjira connect add --description-dialect wiki`, `create issue/issue update --description-dialect` |
 | Reproducible AI Prompt | v1.23.0 | `budjira ai usage-prompt --defaults --plain` |
+| Comment CRUD | unreleased (#81) | `budjira comment list/show/update/delete` |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---
@@ -514,5 +515,5 @@ budjira/
 
 ---
 
-**Letzte Aktualisierung**: 2026-04-01
+**Letzte Aktualisierung**: 2026-08-23
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen
