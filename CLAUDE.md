@@ -449,6 +449,14 @@ git push --follow-tags
 #    Release with auto-generated notes from PRs since the previous tag
 ```
 
+**`cz bump` does not update `uv.lock`.** The lock keeps the previous version
+until the next `uv run`/`uv sync` repairs it locally, leaving committed drift
+on master. Sync and commit it right after the release:
+
+```bash
+uv lock && git commit -am "chore(deps): sync uv.lock with project version X.Y.Z" && git push
+```
+
 **Version Bump Rules** (commitizen, conventional-commits):
 - `feat:` → minor version (1.20.0 → 1.21.0)
 - `fix:`, `perf:`, `refactor:`, `style:` → patch version (1.20.0 → 1.20.1)
