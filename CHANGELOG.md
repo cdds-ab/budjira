@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.24.0 (2026-08-24)
+
+### Feat
+
+- **comment**: add list, show, update and delete subcommands
+
 ## v1.23.0 (2026-08-13)
 
 ### Feat
