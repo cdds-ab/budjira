@@ -11,15 +11,16 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.23.0
+- **Current Version**: v1.24.0
 - **Branch**: master
 - **Status**: Local-first release workflow live (cz bump owns versioning)
-- **Last Update**: 2026-08-13
+- **Last Update**: 2026-08-24
 
 ### Recent Releases (seit v1.8.1)
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.24.0** | 2026-08-24 | feat | Full comment CRUD: `comment list/show/update/delete` (#81); update opens the editor prefilled with the current body; Jira's 400 permission quirk on delete/edit mapped to a clear error pointing at update |
 | **v1.23.0** | 2026-08-13 | feat | Per-connection description dialect (#106), transition screen fields (#101); connection write path no longer discards configuration (#108), AI usage prompt reproducible from code (#105) |
 | **v1.22.1** | 2026-07-29 | fix | Self-update detects the install method instead of shadow-installing (#99) |
 | **v1.22.0** | 2026-07-28 | feat | Worklog list: real Tempo author, JSON output, author/date filters (#92); install.sh update gating (#98) |
@@ -454,7 +455,7 @@ budjira/
 | Transition Screen Fields | v1.23.0 | `budjira issue update --status X --field k=v --dry-run` |
 | Description Dialect | v1.23.0 | `budjira connect add --description-dialect wiki`, `create issue/issue update --description-dialect` |
 | Reproducible AI Prompt | v1.23.0 | `budjira ai usage-prompt --defaults --plain` |
-| Comment CRUD | unreleased (#81) | `budjira comment list/show/update/delete` |
+| Comment CRUD | v1.24.0 | `budjira comment list/show/update/delete` |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---
