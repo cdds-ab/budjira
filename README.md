@@ -29,7 +29,7 @@
 - 📋 **Definition of Ready**: Customizable templates for Story, Bug, Task with validation
 - 🔄 **Update Issues**: Transition status, update fields, manage labels, delete issues
 - 🎯 **Epic Management**: Link stories to epics and view epic progress
-- 💬 **Comment Management**: Add comments to issues without time tracking
+- 💬 **Comment Management**: Full comment CRUD (add, list, show, update, delete) without time tracking
 - ⏱️ **Time Tracking**: Comprehensive worklog management and time estimates
 - 🎼 **Tempo Integration**: Full support for Tempo Timesheets API for enterprise time tracking
 - 📊 **JSON Output**: Machine-readable JSON format for automation and integration with other tools
@@ -559,7 +559,7 @@ budjira issue update PROJ-123 --log-work 2h --work-comment "Implemented API endp
 - Date only: `2025-10-25` (time defaults to 00:00)
 - Relative: `today`, `yesterday`
 
-### Add Comments
+### Manage Comments
 
 Add comments to Jira issues without logging time (unlike worklogs which combine comments with time tracking).
 
@@ -576,6 +576,30 @@ budjira comment add PROJ-123
 # Use specific connection
 budjira comment add PROJ-123 "Comment text" --connection my-connection
 ```
+
+Existing comments can be listed, inspected, corrected and deleted without leaving the CLI:
+
+```bash
+# List comments (id, author, date, first line)
+budjira comment list PROJ-123
+
+# Show the full body of a comment
+budjira comment show PROJ-123 10234
+
+# Replace a comment body directly
+budjira comment update PROJ-123 10234 "Corrected deployment note"
+
+# Or edit the current body in your editor (prefilled)
+budjira comment update PROJ-123 10234
+
+# Delete a comment (asks for confirmation; --force skips)
+budjira comment delete PROJ-123 10234
+```
+
+**Prefer `update` over `delete`:** Jira often forbids deleting comments, even for their
+author (it answers with a 400 permission error). `comment update` is the reliable path
+to correct a posted comment — the editor opens prefilled with the current body. If a
+deletion is denied, the error message points you to `comment update`.
 
 **Use Cases:**
 - Status updates without time tracking

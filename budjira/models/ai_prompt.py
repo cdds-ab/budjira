@@ -812,8 +812,8 @@ budjira epic show PROJ-100
             enabled=True,
         ),
         AiPromptSection(
-            title="Adding Comments",
-            content="""## Adding Comments
+            title="Managing Comments",
+            content="""## Managing Comments
 
 ### Add Comment to Issue
 
@@ -864,7 +864,44 @@ budjira comment add PROJ-789 "Status update" --connection prod-jira
 - Opens `$EDITOR` environment variable (defaults to vim)
 - Supports markdown formatting for rich text
 - Multi-line content for detailed updates
-- Empty content (whitespace only) aborts comment creation""",
+- Empty content (whitespace only) aborts comment creation
+
+### List Comments
+
+```bash
+budjira comment list ISSUE-KEY
+```
+
+Table with comment ID, author, creation date and first line of each body. Use `--format json` for machine-readable output.
+
+### Show Comment
+
+```bash
+budjira comment show ISSUE-KEY COMMENT-ID
+```
+
+Prints the full body of a single comment. Find COMMENT-ID via `comment list`.
+
+### Update Comment
+
+```bash
+budjira comment update ISSUE-KEY COMMENT-ID [TEXT] [OPTIONS]
+```
+
+Replaces the body of an existing comment. Same input rules as `comment add`:
+- If TEXT is omitted, the editor opens **prefilled with the current body** — the reliable way to fix wording in place
+- `--editor`, `-e`: Open editor (with TEXT as initial content if provided)
+- Empty content (whitespace only) aborts without an API call
+
+**Prefer update over delete:** Jira often forbids deleting comments, even for their author (reported as a 400 permission error). `comment update` is the reliable path to correct a posted comment.
+
+### Delete Comment
+
+```bash
+budjira comment delete ISSUE-KEY COMMENT-ID [--force]
+```
+
+Deletes a comment after a confirmation prompt (`--force`/`-f` skips it). If Jira denies the deletion, the error message points to `comment update` as the fallback.""",
             order=10,
             enabled=True,
         ),
