@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.25.0 (2026-08-25)
+
+### Feat
+
+- **tempo**: fall back to native Jira worklogs when Tempo is disabled
+
 ## v1.24.0 (2026-08-24)
 
 ### Feat
