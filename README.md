@@ -665,9 +665,29 @@ budjira tempo accounts
 - ✅ Secure token storage
 - ✅ Cross-instance workflow support (planning + booking Jira with Tempo)
 
+**Connections without Tempo (native Jira worklogs):**
+
+The `budjira tempo` commands work transparently on connections where Tempo is not
+installed (Tempo: Disabled) by falling back to the native Jira worklog API:
+
+- `budjira tempo log PROJ-123 2h --comment "..."` creates a native Jira worklog
+- `budjira tempo worklogs PROJ-123` lists the issue's worklogs (only your own);
+  without an issue key, a user-scoped search (`worklogAuthor = currentUser()`)
+  covers your bookings — the range defaults to the current month when `--from`
+  is not set
+- `budjira tempo update-worklog 67890 --issue PROJ-123 --time-spent 3h` and
+  `budjira tempo delete-worklog 67890 --issue PROJ-123` update/delete native
+  worklogs — `--issue` is required there because native worklog IDs are
+  per-issue (find them via `budjira worklog list PROJ-123`)
+
+Tempo-only concepts (accounts, billing keys, attributes) do not apply to native
+worklogs and are silently ignored; `--no-epic` and `--format json` work on both
+backends.
+
 **When to use Tempo vs. Standard Jira:**
-- Use `budjira tempo` commands when your organization uses Tempo for time tracking
-- Use `budjira worklog` commands for standard Jira time tracking
+- Use `budjira tempo` commands for time tracking — they use Tempo where available
+  and native Jira worklogs everywhere else
+- Use `budjira worklog` commands for standard Jira time tracking only
 - Tempo integration is optional and requires a separate API token
 
 ### JSON Output Format
