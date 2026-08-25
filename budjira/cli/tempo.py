@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 from rich.console import Console
@@ -14,7 +15,7 @@ from budjira.config.settings import get_settings
 from budjira.core.jira_client import JiraClient
 from budjira.tempo.client import TempoClient
 from budjira.utils.connection import get_active_connection
-from budjira.utils.datetime_parser import parse_datetime_string
+from budjira.utils.datetime_parser import parse_datetime_string, parse_jira_timestamp
 from budjira.utils.errors import (
     AuthenticationError,
     BudjiraError,
@@ -25,6 +26,7 @@ from budjira.utils.errors import (
 from budjira.utils.formatter import OutputFormatter
 from budjira.utils.time_parser import parse_time_string
 
+logger = logging.getLogger(__name__)
 console = Console()
 app = typer.Typer(help="Tempo Timesheets integration commands")
 
@@ -157,6 +159,8 @@ def tempo_log_worklog(
     """Log work to Tempo Timesheets.
 
     Create a worklog entry in Tempo with time tracking and optional billing account.
+    On connections without Tempo (Tempo: Disabled), a native Jira worklog is
+    created instead.
 
     If the issue belongs to a workflow profile's planning side, direct booking
     is blocked. Use 'budjira workflow book' instead, or --force to bypass.
@@ -182,6 +186,11 @@ def tempo_log_worklog(
 
         # Get active connection
         connection = get_active_connection(connection_name)
+
+        # Connections without Tempo log a native Jira worklog instead
+        if not connection.tempo_enabled:
+            _log_worklog_native(issue_key, time_spent, comment, started, connection)
+            return
 
         # Get Tempo client
         tempo_client = get_tempo_client(connection_name)
@@ -270,6 +279,10 @@ def tempo_list_worklogs(
     """List Tempo worklog entries.
 
     Display worklog entries from Tempo Timesheets with optional filters.
+    On connections without Tempo (Tempo: Disabled), native Jira worklogs are
+    listed instead: with an issue key via the issue's worklogs, without one via
+    a user-scoped search (worklogAuthor = currentUser(), default range: current
+    month).
 
     Examples:
 
@@ -283,8 +296,7 @@ def tempo_list_worklogs(
         budjira tempo worklogs --max 50
     """
     try:
-        # Get Tempo client
-        tempo_client = get_tempo_client(connection_name)
+        connection = get_active_connection(connection_name)
 
         # Parse dates
         from_date_obj = date.fromisoformat(from_date) if from_date else None
@@ -293,11 +305,26 @@ def tempo_list_worklogs(
         # Get format from context
         output_format = ctx.obj.get("format", "table") if ctx.obj else "table"
 
+        # Connections without Tempo read native Jira worklogs instead
+        if not connection.tempo_enabled:
+            _list_worklogs_native(
+                issue_key=issue_key,
+                connection=connection,
+                output_format=output_format,
+                from_date=from_date_obj,
+                to_date=to_date_obj,
+                max_results=max_results,
+                no_epic=no_epic,
+            )
+            return
+
+        # Get Tempo client
+        tempo_client = get_tempo_client(connection_name)
+
         # Get Jira client - needed for:
         # 1. issue_id conversion when filtering by issue_key
         # 2. JSON epic fetching
         # 3. Table output issue_key backfill (Tempo API often returns null issue.key)
-        connection = get_active_connection(connection_name)
         jira_client = JiraClient.from_connection(connection)
 
         # Convert issue_key to issue_id if provided (Tempo API requires numeric ID)
@@ -452,12 +479,20 @@ def tempo_list_worklogs(
 def tempo_delete_worklog(
     worklog_id: Annotated[
         int,
-        typer.Argument(help="Tempo worklog ID to delete"),
+        typer.Argument(help="Worklog ID to delete (Tempo or native Jira)"),
     ],
     force: Annotated[
         bool,
         typer.Option("--force", "-f", help="Skip confirmation prompt"),
     ] = False,
+    issue_key: Annotated[
+        str | None,
+        typer.Option(
+            "--issue",
+            help="Issue key the worklog belongs to (required on connections without Tempo; "
+            "native Jira worklog IDs are per-issue)",
+        ),
+    ] = None,
     connection_name: Annotated[
         str | None,
         typer.Option(
@@ -467,9 +502,11 @@ def tempo_delete_worklog(
         ),
     ] = None,
 ) -> None:
-    """Delete a Tempo worklog entry.
+    """Delete a worklog entry.
 
-    Remove a worklog entry from Tempo Timesheets by its ID.
+    Remove a worklog entry from Tempo Timesheets by its ID. On connections
+    without Tempo (Tempo: Disabled), the native Jira worklog is deleted
+    instead — pass --issue there, since native worklog IDs are per-issue.
 
     Examples:
 
@@ -478,8 +515,18 @@ def tempo_delete_worklog(
 
         # Delete worklog without confirmation
         budjira tempo delete-worklog 12345 --force
+
+        # Delete a native Jira worklog (connection without Tempo)
+        budjira tempo delete-worklog 67890 --issue PROJ-123
     """
     try:
+        connection = get_active_connection(connection_name)
+
+        # Connections without Tempo delete native Jira worklogs instead
+        if not connection.tempo_enabled:
+            _delete_worklog_native(worklog_id, issue_key, force, connection)
+            return
+
         # Get Tempo client
         tempo_client = get_tempo_client(connection_name)
 
@@ -531,6 +578,14 @@ def tempo_update_worklog(
         bool,
         typer.Option("--force", "-f", help="Skip confirmation prompt"),
     ] = False,
+    issue_key: Annotated[
+        str | None,
+        typer.Option(
+            "--issue",
+            help="Issue key the worklog belongs to (required on connections without Tempo; "
+            "native Jira worklog IDs are per-issue)",
+        ),
+    ] = None,
     connection_name: Annotated[
         str | None,
         typer.Option(
@@ -540,10 +595,12 @@ def tempo_update_worklog(
         ),
     ] = None,
 ) -> None:
-    """Update an existing Tempo worklog entry.
+    """Update an existing worklog entry.
 
     Modify time, date, or comment without deleting and recreating.
-    Preserves worklog ID and audit trail.
+    Preserves worklog ID and audit trail. On connections without Tempo
+    (Tempo: Disabled), the native Jira worklog is updated instead — pass
+    --issue there, since native worklog IDs are per-issue.
 
     Examples:
 
@@ -558,6 +615,9 @@ def tempo_update_worklog(
 
         # Force update (no confirmation)
         budjira tempo update-worklog 642 --started yesterday --force
+
+        # Update a native Jira worklog (connection without Tempo)
+        budjira tempo update-worklog 67890 --issue PROJ-123 --time-spent 3h
     """
     try:
         # Check if at least one field is being updated
@@ -566,6 +626,13 @@ def tempo_update_worklog(
                 "[yellow]No updates specified. Use --time-spent, --started, or --comment to update fields.[/yellow]"
             )
             raise typer.Exit(1)
+
+        connection = get_active_connection(connection_name)
+
+        # Connections without Tempo update native Jira worklogs instead
+        if not connection.tempo_enabled:
+            _update_worklog_native(worklog_id, issue_key, time_spent, started, comment, force, connection)
+            return
 
         # Get Tempo client
         tempo_client = get_tempo_client(connection_name)
@@ -576,7 +643,6 @@ def tempo_update_worklog(
         # Resolve issue ID: prefer Jira API lookup over Tempo's stored ID
         issue_id = current_worklog.issue.id
         if issue_id is None and current_worklog.issue.key:
-            connection = get_active_connection(connection_name)
             jira_client = JiraClient.from_connection(connection)
             jira_issue = jira_client.client.issue(current_worklog.issue.key)
             issue_id = int(jira_issue.id)
@@ -744,3 +810,241 @@ def tempo_list_accounts(
     except Exception as e:
         console.print(f"❌ [red]Unexpected error:[/red] {e}")
         raise typer.Exit(1)  # noqa: B904
+
+
+# --- Native Jira worklog fallbacks (connections without Tempo) ---
+
+if TYPE_CHECKING:
+    from budjira.models.connection import Connection
+
+
+def _log_worklog_native(
+    issue_key: str,
+    time_spent: str,
+    comment: str | None,
+    started: str | None,
+    connection: Connection,
+) -> None:
+    """Log a native Jira worklog (fallback for connections without Tempo)."""
+    jira_client = JiraClient.from_connection(connection)
+
+    time_spent_minutes = parse_time_string(time_spent)
+    started_dt = parse_datetime_string(started) if started else datetime.now()
+
+    worklog_id = jira_client.worklogs.add(issue_key, time_spent_minutes, comment, started_dt)
+
+    console.print(f"✅ [green]Logged {time_spent} to {issue_key} (native Jira worklog)[/green]")
+    if comment:
+        console.print(f"   Comment: {comment}")
+    console.print(f"   Started: {started_dt.strftime('%Y-%m-%d %H:%M')}")
+    console.print(f"   Worklog ID: {worklog_id}")
+
+
+def _list_worklogs_native(
+    *,
+    issue_key: str | None,
+    connection: Connection,
+    output_format: str,
+    from_date: date | None,
+    to_date: date | None,
+    max_results: int,
+    no_epic: bool,
+) -> None:
+    """List native Jira worklogs (fallback for connections without Tempo).
+
+    With an issue key, the issue's worklogs are read directly. Without one, a
+    user-scoped JQL search (worklogAuthor = currentUser()) finds the issues —
+    the date range defaults to the current month when --from is not given.
+    Only worklogs authored by the current user are shown.
+    """
+    jira_client = JiraClient.from_connection(connection)
+    myself = jira_client.client.myself()
+    account_id = myself["accountId"]
+
+    if issue_key:
+        worklogs_by_issue = {issue_key: jira_client.worklogs.list(issue_key)}
+    else:
+        # User-scoped: find issues with my worklogs via JQL
+        effective_from = from_date or date.today().replace(day=1)
+        jql = f"worklogAuthor = currentUser() AND worklogDate >= '{effective_from.isoformat()}'"
+        if to_date:
+            jql += f" AND worklogDate <= '{to_date.isoformat()}'"
+        logger.debug(f"Native worklog search JQL: {jql}")
+
+        issues = jira_client.client.search_issues(jql, fields="key", maxResults=200)
+        logger.debug(f"Native worklog search: {len(issues)} issue(s) to scan")
+        worklogs_by_issue = {}
+        for issue in issues:
+            entries = jira_client.worklogs.list(issue.key)
+            if entries:
+                worklogs_by_issue[issue.key] = entries
+
+    # Flatten, filter by author + date range, newest first
+    records: list[tuple[str, dict[str, Any], datetime]] = []
+    for key, worklogs in worklogs_by_issue.items():
+        for worklog in worklogs:
+            if worklog.get("authorAccountId") and worklog["authorAccountId"] != account_id:
+                continue
+            started_dt = parse_jira_timestamp(worklog.get("started"))
+            if started_dt is None:
+                continue
+            started_date = started_dt.date()
+            if from_date and started_date < from_date:
+                continue
+            if to_date and started_date > to_date:
+                continue
+            records.append((key, worklog, started_dt))
+
+    records.sort(key=lambda record: record[2], reverse=True)
+    records = records[:max_results]
+
+    if not records:
+        if OutputFormatter.is_json_format(output_format):
+            OutputFormatter.output_json({"total": 0, "worklogs": []})
+        else:
+            console.print("[yellow]No worklogs found matching the criteria[/yellow]")
+        return
+
+    if OutputFormatter.is_json_format(output_format):
+        epic_cache: dict[str, tuple[str, str] | None] = {}
+        worklog_dicts = []
+        for key, worklog, started_dt in records:
+            hours, remainder = divmod(worklog["timeSpentSeconds"], 3600)
+            worklog_dict = {
+                "id": worklog["id"],
+                "issue_key": key,
+                "time_spent_seconds": worklog["timeSpentSeconds"],
+                "time_spent_display": f"{hours}h {remainder // 60}m" if hours else f"{remainder // 60}m",
+                "date": started_dt.date().isoformat(),
+                "author_account_id": worklog.get("authorAccountId"),
+                "author_display_name": worklog["author"],
+                "description": worklog.get("comment", ""),
+            }
+
+            if not no_epic:
+                if key not in epic_cache:
+                    try:
+                        epic_cache[key] = jira_client.get_issue_epic(key)
+                    except Exception:
+                        epic_cache[key] = None
+                epic_info = epic_cache[key]
+                worklog_dict["epic_key"] = epic_info[0] if epic_info else None
+                worklog_dict["epic_name"] = epic_info[1] if epic_info else None
+
+            worklog_dicts.append(worklog_dict)
+
+        OutputFormatter.output_json({"total": len(worklog_dicts), "worklogs": worklog_dicts})
+        return
+
+    table = Table(title=f"Jira Worklogs ({len(records)} entries)")
+    table.add_column("ID", style="cyan")
+    table.add_column("Issue", style="magenta")
+    table.add_column("Time Spent", style="green")
+    table.add_column("Date", style="blue")
+    table.add_column("Author", style="yellow")
+    table.add_column("Description", style="white", max_width=40)
+
+    for key, worklog, started_dt in records:
+        hours, remainder = divmod(worklog["timeSpentSeconds"], 3600)
+        time_display = f"{hours}h {remainder // 60}m" if hours else f"{remainder // 60}m"
+        table.add_row(
+            str(worklog["id"]),
+            key,
+            time_display,
+            started_dt.strftime("%Y-%m-%d"),
+            worklog["author"],
+            worklog.get("comment", ""),
+        )
+
+    console.print(table)
+
+
+def _delete_worklog_native(
+    worklog_id: int,
+    issue_key: str | None,
+    force: bool,
+    connection: Connection,
+) -> None:
+    """Delete a native Jira worklog (fallback for connections without Tempo)."""
+    if not issue_key:
+        raise ValidationError(
+            "--issue is required on connections without Tempo: native worklog IDs are per-issue. "
+            "Use 'budjira worklog list <KEY>' to find the worklog ID."
+        )
+
+    jira_client = JiraClient.from_connection(connection)
+
+    if not force:
+        confirm = typer.confirm(f"Delete worklog {worklog_id} on {issue_key}?")
+        if not confirm:
+            console.print("[yellow]Deletion cancelled[/yellow]")
+            return
+
+    jira_client.worklogs.delete(issue_key, str(worklog_id))
+    console.print(f"✅ [green]Deleted worklog {worklog_id} from {issue_key} (native Jira)[/green]")
+
+
+def _update_worklog_native(
+    worklog_id: int,
+    issue_key: str | None,
+    time_spent: str | None,
+    started: str | None,
+    comment: str | None,
+    force: bool,
+    connection: Connection,
+) -> None:
+    """Update a native Jira worklog (fallback for connections without Tempo)."""
+    if not issue_key:
+        raise ValidationError(
+            "--issue is required on connections without Tempo: native worklog IDs are per-issue. "
+            "Use 'budjira worklog list <KEY>' to find the worklog ID."
+        )
+
+    jira_client = JiraClient.from_connection(connection)
+    current = jira_client.worklogs.get(issue_key, str(worklog_id))
+
+    time_spent_minutes = parse_time_string(time_spent) if time_spent is not None else None
+    started_dt = parse_datetime_string(started) if started is not None else None
+
+    if not force:
+        console.print("\n[bold]Worklog Update Preview:[/bold]")
+        console.print(f"  Worklog ID: {worklog_id}")
+        console.print(f"  Issue: {issue_key}")
+
+        if time_spent_minutes is not None:
+            console.print(
+                f"  Time: {current['timeSpentSeconds'] / 3600:.2f}h → [cyan]{time_spent_minutes / 60:.2f}h[/cyan]"
+            )
+        else:
+            console.print(f"  Time: {current['timeSpentSeconds'] / 3600:.2f}h (unchanged)")
+
+        if started_dt is not None:
+            console.print(f"  Started: {current.get('started')} → [cyan]{started_dt.strftime('%Y-%m-%d %H:%M')}[/cyan]")
+        elif current.get("started"):
+            console.print(f"  Started: {current['started']} (unchanged)")
+
+        if comment is not None:
+            console.print(f"  Comment: {current.get('comment') or '(none)'} → [cyan]{comment}[/cyan]")
+        elif current.get("comment"):
+            console.print(f"  Comment: {current['comment']} (unchanged)")
+
+        console.print()
+        confirm = typer.confirm("Update this worklog?")
+        if not confirm:
+            console.print("[yellow]Update cancelled[/yellow]")
+            return
+
+    updated = jira_client.worklogs.update(
+        issue_key,
+        str(worklog_id),
+        time_spent_minutes=time_spent_minutes,
+        comment=comment,
+        started=started_dt,
+    )
+
+    console.print(f"✅ [green]Updated worklog {worklog_id} on {issue_key} (native Jira)[/green]")
+    console.print(f"   Time: {updated['timeSpentSeconds'] / 3600:.2f}h")
+    if updated.get("started"):
+        console.print(f"   Started: {updated['started']}")
+    if updated.get("comment"):
+        console.print(f"   Comment: {updated['comment']}")

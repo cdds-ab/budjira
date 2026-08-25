@@ -456,6 +456,7 @@ budjira/
 | Description Dialect | v1.23.0 | `budjira connect add --description-dialect wiki`, `create issue/issue update --description-dialect` |
 | Reproducible AI Prompt | v1.23.0 | `budjira ai usage-prompt --defaults --plain` |
 | Comment CRUD | v1.24.0 | `budjira comment list/show/update/delete` |
+| Native Worklog Fallback | unreleased (#113) | `budjira tempo log/worklogs/update-worklog/delete-worklog` ohne Tempo (nativ) |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---

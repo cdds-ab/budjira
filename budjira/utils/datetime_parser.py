@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 
 from budjira.utils.errors import ValidationError
@@ -77,3 +78,33 @@ def parse_datetime_string(datetime_str: str, allow_future: bool = False) -> date
         raise ValidationError(f"Datetime cannot be in the future: {result.strftime('%Y-%m-%d %H:%M')}")
 
     return result
+
+
+def parse_jira_timestamp(timestamp: str | None) -> datetime | None:
+    """Parse a Jira REST API timestamp (e.g., "2026-08-20T10:00:00.000+0000").
+
+    Jira returns timezone offsets without a colon ("+0000"), which Python's
+    ``datetime.fromisoformat`` only accepts since 3.11. This normalizes the
+    offset ("Z", "+0000" → "+00:00") before parsing.
+
+    Args:
+        timestamp: Jira timestamp string, or None
+
+    Returns:
+        Parsed datetime, or None if the input is None or unparseable
+
+    Examples:
+        >>> dt = parse_jira_timestamp("2026-08-20T10:00:00.000+0000")
+        >>> dt.hour
+        10
+        >>> parse_jira_timestamp(None) is None
+        True
+    """
+    if not timestamp:
+        return None
+
+    normalized = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", timestamp.replace("Z", "+00:00"))
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
