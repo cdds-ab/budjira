@@ -895,6 +895,24 @@ budjira issue update PROJ-789 \
 
 **Note:** Tempo integration requires separate setup and API token.
 
+### Connections without Tempo (native Jira worklogs)
+
+All `budjira tempo` commands work on connections where Tempo is not installed
+(Tempo: Disabled) by falling back to the native Jira worklog API:
+
+- `budjira tempo log ISSUE-KEY TIME` creates a native Jira worklog
+- `budjira tempo worklogs ISSUE-KEY` lists the issue's worklogs authored by the
+  current user; without an issue key, a user-scoped JQL search
+  (`worklogAuthor = currentUser()`) is used — the range defaults to the current
+  month when `--from` is not set
+- `budjira tempo update-worklog ID --issue ISSUE-KEY ...` and
+  `budjira tempo delete-worklog ID --issue ISSUE-KEY` update/delete native
+  worklogs; `--issue` is required because native worklog IDs are per-issue
+  (find IDs via `budjira worklog list ISSUE-KEY`)
+
+Tempo-only concepts (accounts, billing keys, attributes) are silently ignored on
+native worklogs. `--no-epic` and `--format json` work on both backends.
+
 ### Setup Tempo Integration
 
 ```bash
