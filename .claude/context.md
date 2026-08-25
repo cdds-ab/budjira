@@ -11,15 +11,16 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.24.0
+- **Current Version**: v1.25.0
 - **Branch**: master
 - **Status**: Local-first release workflow live (cz bump owns versioning)
-- **Last Update**: 2026-08-24
+- **Last Update**: 2026-08-25
 
 ### Recent Releases (seit v1.8.1)
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.25.0** | 2026-08-25 | feat | Native Jira worklog fallback on connections without Tempo (#113): tempo log/worklogs/update-worklog/delete-worklog work everywhere; user-scoped listing via worklogAuthor JQL; --issue for native update/delete |
 | **v1.24.0** | 2026-08-24 | feat | Full comment CRUD: `comment list/show/update/delete` (#81); update opens the editor prefilled with the current body; Jira's 400 permission quirk on delete/edit mapped to a clear error pointing at update |
 | **v1.23.0** | 2026-08-13 | feat | Per-connection description dialect (#106), transition screen fields (#101); connection write path no longer discards configuration (#108), AI usage prompt reproducible from code (#105) |
 | **v1.22.1** | 2026-07-29 | fix | Self-update detects the install method instead of shadow-installing (#99) |
@@ -456,7 +457,7 @@ budjira/
 | Description Dialect | v1.23.0 | `budjira connect add --description-dialect wiki`, `create issue/issue update --description-dialect` |
 | Reproducible AI Prompt | v1.23.0 | `budjira ai usage-prompt --defaults --plain` |
 | Comment CRUD | v1.24.0 | `budjira comment list/show/update/delete` |
-| Native Worklog Fallback | unreleased (#113) | `budjira tempo log/worklogs/update-worklog/delete-worklog` ohne Tempo (nativ) |
+| Native Worklog Fallback | v1.25.0 | `budjira tempo log/worklogs/update-worklog/delete-worklog` ohne Tempo (nativ) |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---
