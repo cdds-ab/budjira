@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## v1.26.0 (2026-08-29)
+
+### Feat
+
+- **attach**: add attach command and comment file upload/embed support
+- **worklog**: add worklog update command for Tempo and native Jira worklogs
+
 ## v1.25.0 (2026-08-25)
 
 ### Feat
