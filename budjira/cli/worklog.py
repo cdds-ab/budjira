@@ -204,6 +204,115 @@ def delete_worklog(
         raise typer.Exit(1) from e
 
 
+@app.command(name="update")
+def update_worklog(
+    issue_key: Annotated[
+        str,
+        typer.Argument(help="Issue key the worklog belongs to (e.g., PROJ-123)"),
+    ],
+    worklog_id: Annotated[
+        str,
+        typer.Argument(help="Worklog ID to update (use 'worklog list' to find IDs)"),
+    ],
+    time_spent: Annotated[
+        str | None,
+        typer.Option("--time-spent", "-t", help="Update time spent (e.g., 2h, 30m, 2h30m)"),
+    ] = None,
+    started: Annotated[
+        str | None,
+        typer.Option(
+            "--started",
+            "-s",
+            help="Update when work started (YYYY-MM-DD HH:MM, YYYY-MM-DD, today, yesterday)",
+        ),
+    ] = None,
+    comment: Annotated[
+        str | None,
+        typer.Option("--comment", "-c", help="Update worklog comment/description"),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Skip confirmation prompt"),
+    ] = False,
+    connection_name: Annotated[
+        str | None,
+        typer.Option(
+            "--connection",
+            help="Connection to use (overrides default)",
+            envvar="BUDJIRA_CONNECTION",
+        ),
+    ] = None,
+) -> None:
+    """Update an existing work log entry on an issue.
+
+    Modify time, date, or comment without deleting and recreating — the worklog
+    ID and audit trail are preserved. Only the given fields change; everything
+    else stays as is. On Tempo-enabled connections the Tempo worklog is updated
+    (use the Tempo worklog ID from 'worklog list'), otherwise the native Jira
+    worklog. You can only update your own worklogs.
+
+    Examples:
+
+        # Fix a wrong duration
+        budjira worklog update PROJ-123 12345 --time-spent 6h
+
+        # Move a booking to another day and fix the comment
+        budjira worklog update PROJ-123 12345 --started yesterday --comment "Re-balanced estimate"
+
+        # Skip the confirmation prompt
+        budjira worklog update PROJ-123 12345 --time-spent 2h15m --force
+    """
+    try:
+        if not any([time_spent, started, comment is not None]):
+            console.print(
+                "[yellow]No updates specified. Use --time-spent, --started, or --comment to update fields.[/yellow]"
+            )
+            raise typer.Exit(1)
+
+        connection = get_active_connection(connection_name)
+
+        if connection.tempo_enabled:
+            _update_worklog_tempo(
+                issue_key=issue_key,
+                worklog_id=worklog_id,
+                connection_name=connection_name,
+                connection=connection,
+                time_spent=time_spent,
+                started=started,
+                comment=comment,
+                force=force,
+            )
+        else:
+            _update_worklog_jira(
+                issue_key=issue_key,
+                worklog_id=worklog_id,
+                connection=connection,
+                time_spent=time_spent,
+                started=started,
+                comment=comment,
+                force=force,
+            )
+
+    except ConnectionError as e:
+        console.print(f"[red]Connection Error:[/red] {e}")
+        raise typer.Exit(1) from e
+    except AuthenticationError as e:
+        console.print(f"[red]Authentication Error:[/red] {e}")
+        raise typer.Exit(1) from e
+    except InvalidIssueError as e:
+        console.print(f"[red]Invalid Issue:[/red] {e}")
+        raise typer.Exit(1) from e
+    except PermissionError as e:
+        console.print(f"[red]Permission Denied:[/red] {e}")
+        raise typer.Exit(1) from e
+    except ValidationError as e:
+        console.print(f"[red]Validation Error:[/red] {e}")
+        raise typer.Exit(1) from e
+    except BudjiraError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from e
+
+
 @app.command(name="list")
 def list_worklogs(
     ctx: typer.Context,
@@ -471,3 +580,193 @@ def _list_worklogs_jira(issue_key: str, connection: Connection, output_format: s
 
     console.print(table)
     console.print(f"\n[green]Total: {len(worklogs)} work log(s)[/green]")
+
+
+def _check_worklog_ownership(
+    jira_client: JiraClient, worklog_id: str, author_account_id: str | None, author_name: str
+) -> None:
+    """Refuse to update a worklog owned by someone else (pre-flight, clearer than the API 403)."""
+    account_id = jira_client.client.myself()["accountId"]
+    if author_account_id and author_account_id != account_id:
+        raise PermissionError(f"Worklog {worklog_id} belongs to {author_name}. You may only update your own worklogs.")
+
+
+def _update_worklog_jira(
+    *,
+    issue_key: str,
+    worklog_id: str,
+    connection: Connection,
+    time_spent: str | None,
+    started: str | None,
+    comment: str | None,
+    force: bool,
+) -> None:
+    """Update a native Jira worklog (non-Tempo connections)."""
+    jira_client = JiraClient.from_connection(connection)
+    current = jira_client.worklogs.get(issue_key, worklog_id)
+
+    _check_worklog_ownership(
+        jira_client,
+        worklog_id,
+        current.get("authorAccountId"),
+        current.get("author") or "Unknown",
+    )
+
+    time_spent_minutes = parse_time_string(time_spent) if time_spent is not None else None
+    started_dt = parse_datetime_string(started) if started is not None else None
+
+    if not force:
+        console.print("\n[bold]Worklog Update Preview:[/bold]")
+        console.print(f"  Worklog ID: {worklog_id}")
+        console.print(f"  Issue: {issue_key}")
+
+        if time_spent_minutes is not None:
+            console.print(
+                f"  Time: {current['timeSpentSeconds'] / 3600:.2f}h → [cyan]{time_spent_minutes / 60:.2f}h[/cyan]"
+            )
+        else:
+            console.print(f"  Time: {current['timeSpentSeconds'] / 3600:.2f}h (unchanged)")
+
+        if started_dt is not None:
+            console.print(f"  Started: {current.get('started')} → [cyan]{started_dt.strftime('%Y-%m-%d %H:%M')}[/cyan]")
+        elif current.get("started"):
+            console.print(f"  Started: {current['started']} (unchanged)")
+
+        if comment is not None:
+            console.print(f"  Comment: {current.get('comment') or '(none)'} → [cyan]{comment}[/cyan]")
+        elif current.get("comment"):
+            console.print(f"  Comment: {current['comment']} (unchanged)")
+
+        console.print()
+        confirm = typer.confirm("Update this worklog?")
+        if not confirm:
+            console.print("[yellow]Update cancelled[/yellow]")
+            return
+
+    updated = jira_client.worklogs.update(
+        issue_key,
+        worklog_id,
+        time_spent_minutes=time_spent_minutes,
+        comment=comment,
+        started=started_dt,
+    )
+
+    console.print(f"✅ [green]Updated worklog {worklog_id} on {issue_key}[/green]")
+    console.print(f"   Time: {updated['timeSpentSeconds'] / 3600:.2f}h")
+    if updated.get("started"):
+        console.print(f"   Started: {updated['started']}")
+    if updated.get("comment"):
+        console.print(f"   Comment: {updated['comment']}")
+
+
+def _update_worklog_tempo(
+    *,
+    issue_key: str,
+    worklog_id: str,
+    connection_name: str | None,
+    connection: Connection,
+    time_spent: str | None,
+    started: str | None,
+    comment: str | None,
+    force: bool,
+) -> None:
+    """Update a Tempo-managed worklog (Tempo-enabled connections)."""
+    try:
+        tempo_worklog_id = int(worklog_id)
+    except ValueError:
+        raise ValidationError(
+            f"Invalid Tempo worklog ID: '{worklog_id}' (expected a number). "
+            f"Use 'budjira worklog list {issue_key}' to find the ID."
+        ) from None
+
+    tempo_client = get_tempo_client(connection_name)
+    jira_client = JiraClient.from_connection(connection)
+
+    current_worklog = tempo_client.get_worklog(tempo_worklog_id)
+
+    if current_worklog.issue.key and current_worklog.issue.key != issue_key:
+        raise ValidationError(f"Worklog {worklog_id} belongs to {current_worklog.issue.key}, not {issue_key}.")
+
+    _check_worklog_ownership(
+        jira_client,
+        worklog_id,
+        current_worklog.author.accountId,
+        current_worklog.author.displayName or current_worklog.author.accountId,
+    )
+
+    # Resolve issue ID: prefer Tempo's stored ID over a Jira API lookup
+    issue_id = current_worklog.issue.id
+    if issue_id is None:
+        issue_id = int(jira_client.client.issue(issue_key).id)
+
+    # Prepare update data (only changed fields); Tempo's PUT replaces the entry,
+    # so unchanged fields are preserved from the current worklog.
+    update_data: dict[str, str | int] = {}
+
+    if time_spent is not None:
+        time_spent_seconds = parse_time_string(time_spent) * 60
+        update_data["time_spent_seconds"] = time_spent_seconds
+    else:
+        time_spent_seconds = current_worklog.timeSpentSeconds
+
+    if started is not None:
+        started_dt = parse_datetime_string(started)
+        update_data["start_date"] = started_dt.strftime("%Y-%m-%d")
+        update_data["start_time"] = started_dt.strftime("%H:%M:%S")
+    else:
+        update_data["start_date"] = current_worklog.startDate.strftime("%Y-%m-%d")
+        update_data["start_time"] = current_worklog.startTime or "09:00:00"
+        started_dt = datetime.combine(
+            current_worklog.startDate,
+            datetime.strptime(current_worklog.startTime or "09:00:00", "%H:%M:%S").time(),
+        )
+
+    if comment is not None:
+        update_data["description"] = comment
+    elif current_worklog.description:
+        update_data["description"] = current_worklog.description
+
+    if not force:
+        console.print("\n[bold]Worklog Update Preview:[/bold]")
+        console.print(f"  Worklog ID: {worklog_id}")
+        console.print(f"  Issue: {issue_key}")
+
+        if time_spent is not None:
+            console.print(
+                f"  Time: {current_worklog.timeSpentSeconds / 3600:.2f}h → [cyan]{time_spent_seconds / 3600:.2f}h[/cyan]"
+            )
+        else:
+            console.print(f"  Time: {current_worklog.timeSpentSeconds / 3600:.2f}h (unchanged)")
+
+        if started is not None:
+            console.print(
+                f"  Started: {current_worklog.startDate} {current_worklog.startTime} → "
+                f"[cyan]{started_dt.strftime('%Y-%m-%d %H:%M:%S')}[/cyan]"
+            )
+        else:
+            console.print(f"  Started: {current_worklog.startDate} {current_worklog.startTime} (unchanged)")
+
+        if comment is not None:
+            console.print(f"  Comment: {current_worklog.description or '(none)'} → [cyan]{comment}[/cyan]")
+        elif current_worklog.description:
+            console.print(f"  Comment: {current_worklog.description} (unchanged)")
+
+        console.print()
+        confirm = typer.confirm("Update this worklog?")
+        if not confirm:
+            console.print("[yellow]Update cancelled[/yellow]")
+            return
+
+    # Always preserve issueId and authorAccountId (Tempo's PUT replaces the entry)
+    updated_worklog = tempo_client.update_worklog(
+        worklog_id=tempo_worklog_id,
+        issue_id=issue_id,
+        author_account_id=current_worklog.author.accountId,
+        **update_data,  # type: ignore[arg-type]
+    )
+
+    console.print(f"✅ [green]Updated worklog {worklog_id} on {issue_key}[/green]")
+    console.print(f"   Time: {updated_worklog.timeSpentSeconds / 3600:.2f}h")
+    console.print(f"   Started: {updated_worklog.startDate} {updated_worklog.startTime}")
+    if updated_worklog.description:
+        console.print(f"   Comment: {updated_worklog.description}")

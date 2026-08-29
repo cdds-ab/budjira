@@ -782,3 +782,265 @@ class TestWorklogListNonTempo:
 
         assert result.exit_code == 1
         assert "tempo" in result.stdout.lower()
+
+
+class TestWorklogUpdateCommand:
+    """Tests for 'budjira worklog update' command (#116)."""
+
+    def _native_worklog(self, *, account_id: str = "557058:me") -> dict[str, object]:
+        """Build a native Jira worklog dict as returned by WorklogService._to_dict."""
+        return {
+            "id": "10001",
+            "author": "Me",
+            "authorAccountId": account_id,
+            "timeSpent": "4h",
+            "timeSpentSeconds": 14400,
+            "started": "2025-10-24T09:00:00.000+0000",
+            "comment": "Original comment",
+        }
+
+    def _wire_native(self, mock_jira_class: MagicMock, *, account_id: str = "557058:me") -> MagicMock:
+        """Wire JiraClient mock for the native update path."""
+        client = MagicMock()
+        client.worklogs.get.return_value = self._native_worklog()
+        client.worklogs.update.return_value = self._native_worklog()
+        client.client.myself.return_value = {"accountId": account_id, "displayName": "Me"}
+        mock_jira_class.from_connection.return_value = client
+        return client
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_update_native_force(self, mock_get_conn, mock_jira_class, mock_connection):
+        """Update a native worklog with --force skips the confirmation prompt."""
+        mock_get_conn.return_value = mock_connection  # tempo_enabled=False
+        client = self._wire_native(mock_jira_class)
+
+        result = runner.invoke(
+            app,
+            ["worklog", "update", "TEST-123", "10001", "--time-spent", "6h", "--comment", "Fixed", "--force"],
+        )
+
+        assert result.exit_code == 0
+        assert "Updated worklog 10001 on TEST-123" in result.stdout
+        client.worklogs.update.assert_called_once_with(
+            "TEST-123",
+            "10001",
+            time_spent_minutes=360,
+            comment="Fixed",
+            started=None,
+        )
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_update_native_preview_confirm(self, mock_get_conn, mock_jira_class, mock_connection):
+        """Without --force a preview is shown and confirmed interactively."""
+        mock_get_conn.return_value = mock_connection
+        client = self._wire_native(mock_jira_class)
+
+        result = runner.invoke(
+            app,
+            ["worklog", "update", "TEST-123", "10001", "--time-spent", "6h"],
+            input="y\n",
+        )
+
+        assert result.exit_code == 0
+        assert "Worklog Update Preview" in result.stdout
+        assert "4.00h" in result.stdout  # before
+        assert "6.00h" in result.stdout  # after
+        client.worklogs.update.assert_called_once()
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_update_native_preview_abort(self, mock_get_conn, mock_jira_class, mock_connection):
+        """Declining the confirmation leaves the worklog untouched."""
+        mock_get_conn.return_value = mock_connection
+        client = self._wire_native(mock_jira_class)
+
+        result = runner.invoke(
+            app,
+            ["worklog", "update", "TEST-123", "10001", "--time-spent", "6h"],
+            input="n\n",
+        )
+
+        assert result.exit_code == 0
+        assert "Update cancelled" in result.stdout
+        client.worklogs.update.assert_not_called()
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_update_native_started_parsed(self, mock_get_conn, mock_jira_class, mock_connection):
+        """--started is parsed into a datetime for the service call."""
+        mock_get_conn.return_value = mock_connection
+        client = self._wire_native(mock_jira_class)
+
+        result = runner.invoke(
+            app,
+            ["worklog", "update", "TEST-123", "10001", "--started", "2025-10-28 14:30", "--force"],
+        )
+
+        assert result.exit_code == 0
+        call_kwargs = client.worklogs.update.call_args.kwargs
+        assert call_kwargs["started"] == datetime(2025, 10, 28, 14, 30)
+        assert call_kwargs["time_spent_minutes"] is None
+        assert call_kwargs["comment"] is None
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_update_no_fields_specified(self, mock_get_conn, mock_jira_class, mock_connection):
+        """At least one of --time-spent/--started/--comment is required."""
+        mock_get_conn.return_value = mock_connection
+
+        result = runner.invoke(app, ["worklog", "update", "TEST-123", "10001"])
+
+        assert result.exit_code == 1
+        assert "No updates specified" in result.stdout
+        mock_jira_class.from_connection.assert_not_called()
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_update_native_refuses_foreign_worklog(self, mock_get_conn, mock_jira_class, mock_connection):
+        """Updating someone else's worklog is refused with a clear message."""
+        mock_get_conn.return_value = mock_connection
+        client = self._wire_native(mock_jira_class, account_id="557058:me")
+        client.worklogs.get.return_value = self._native_worklog(account_id="557058:someone-else")
+
+        result = runner.invoke(
+            app,
+            ["worklog", "update", "TEST-123", "10001", "--time-spent", "6h", "--force"],
+        )
+
+        assert result.exit_code == 1
+        assert "You may only update your own" in result.stdout
+        client.worklogs.update.assert_not_called()
+
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_update_native_worklog_not_found(self, mock_get_conn, mock_jira_class, mock_connection):
+        """A missing worklog surfaces the service's InvalidIssueError."""
+        mock_get_conn.return_value = mock_connection
+        client = self._wire_native(mock_jira_class)
+        client.worklogs.get.side_effect = InvalidIssueError(
+            "Worklog '99999' not found on issue 'TEST-123'. Use 'budjira worklog list TEST-123' to find worklog IDs."
+        )
+
+        result = runner.invoke(app, ["worklog", "update", "TEST-123", "99999", "--time-spent", "1h", "--force"])
+
+        assert result.exit_code == 1
+        assert "not found" in result.stdout
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_update_tempo_force(self, mock_get_conn, mock_jira_class, mock_get_tempo, mock_connection):
+        """On Tempo connections the Tempo API is used and unchanged fields are preserved."""
+        mock_connection.tempo_enabled = True
+        mock_get_conn.return_value = mock_connection
+        jira = MagicMock()
+        jira.client.myself.return_value = {"accountId": "557058:me", "displayName": "Me"}
+        mock_jira_class.from_connection.return_value = jira
+        tempo = MagicMock()
+        tempo.get_worklog.return_value = _tempo_worklog(
+            worklog_id=642, account_id="557058:me", seconds=14400, description="Original"
+        )
+        tempo.update_worklog.return_value = _tempo_worklog(
+            worklog_id=642, account_id="557058:me", seconds=21600, description="Original"
+        )
+        mock_get_tempo.return_value = tempo
+
+        result = runner.invoke(
+            app,
+            ["worklog", "update", "TEST-123", "642", "--time-spent", "6h", "--force"],
+        )
+
+        assert result.exit_code == 0
+        assert "Updated worklog 642 on TEST-123" in result.stdout
+        tempo.update_worklog.assert_called_once()
+        call_kwargs = tempo.update_worklog.call_args.kwargs
+        assert call_kwargs["worklog_id"] == 642
+        assert call_kwargs["issue_id"] == 12345
+        assert call_kwargs["author_account_id"] == "557058:me"
+        assert call_kwargs["time_spent_seconds"] == 21600
+        # Unchanged fields preserved from the current worklog
+        assert call_kwargs["start_date"] == "2025-10-24"
+        assert call_kwargs["start_time"] == "14:00:00"
+        assert call_kwargs["description"] == "Original"
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_update_tempo_refuses_foreign_worklog(
+        self, mock_get_conn, mock_jira_class, mock_get_tempo, mock_connection
+    ):
+        """Tempo path: ownership is checked against the real Tempo author, not the sync account."""
+        mock_connection.tempo_enabled = True
+        mock_get_conn.return_value = mock_connection
+        jira = MagicMock()
+        jira.client.myself.return_value = {"accountId": "557058:me", "displayName": "Me"}
+        mock_jira_class.from_connection.return_value = jira
+        tempo = MagicMock()
+        tempo.get_worklog.return_value = _tempo_worklog(
+            worklog_id=642, account_id="557058:someone-else", display_name="Someone Else"
+        )
+        mock_get_tempo.return_value = tempo
+
+        result = runner.invoke(app, ["worklog", "update", "TEST-123", "642", "--time-spent", "6h", "--force"])
+
+        assert result.exit_code == 1
+        assert "Someone Else" in result.stdout
+        assert "only update your" in result.stdout
+        tempo.update_worklog.assert_not_called()
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_update_tempo_invalid_worklog_id(self, mock_get_conn, mock_jira_class, mock_get_tempo, mock_connection):
+        """Non-numeric IDs cannot address a Tempo worklog."""
+        mock_connection.tempo_enabled = True
+        mock_get_conn.return_value = mock_connection
+
+        result = runner.invoke(app, ["worklog", "update", "TEST-123", "abc", "--time-spent", "6h"])
+
+        assert result.exit_code == 1
+        assert "Invalid Tempo worklog ID" in result.stdout
+        mock_get_tempo.assert_not_called()
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_update_tempo_issue_key_mismatch(self, mock_get_conn, mock_jira_class, mock_get_tempo, mock_connection):
+        """A worklog that belongs to another issue is refused before any update."""
+        mock_connection.tempo_enabled = True
+        mock_get_conn.return_value = mock_connection
+        tempo = MagicMock()
+        tempo.get_worklog.return_value = _tempo_worklog(worklog_id=642)  # issue key TEST-123
+        mock_get_tempo.return_value = tempo
+
+        result = runner.invoke(app, ["worklog", "update", "OTHER-99", "642", "--time-spent", "6h", "--force"])
+
+        assert result.exit_code == 1
+        assert "belongs to TEST-123" in result.stdout
+        tempo.update_worklog.assert_not_called()
+
+    @patch("budjira.cli.worklog.get_tempo_client")
+    @patch("budjira.cli.worklog.JiraClient")
+    @patch("budjira.cli.worklog.get_active_connection")
+    def test_update_tempo_preview_abort(self, mock_get_conn, mock_jira_class, mock_get_tempo, mock_connection):
+        """Tempo path: declining the confirmation leaves the worklog untouched."""
+        mock_connection.tempo_enabled = True
+        mock_get_conn.return_value = mock_connection
+        jira = MagicMock()
+        jira.client.myself.return_value = {"accountId": "557058:me", "displayName": "Me"}
+        mock_jira_class.from_connection.return_value = jira
+        tempo = MagicMock()
+        tempo.get_worklog.return_value = _tempo_worklog(worklog_id=642, account_id="557058:me")
+        mock_get_tempo.return_value = tempo
+
+        result = runner.invoke(
+            app,
+            ["worklog", "update", "TEST-123", "642", "--started", "2025-10-28"],
+            input="n\n",
+        )
+
+        assert result.exit_code == 0
+        assert "Update cancelled" in result.stdout
+        tempo.update_worklog.assert_not_called()
