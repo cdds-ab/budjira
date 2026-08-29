@@ -1235,3 +1235,85 @@ class TestBillingContributorScope:
 
         assert report.contributors == 0
         assert report.mine_only is False
+
+
+class TestBillingDefaultBucket:
+    """Test default_bucket: everything is chargeable unless stated otherwise (#123)."""
+
+    def _service_with_default(self, **kwargs) -> tuple[WorkflowService, MagicMock, MagicMock, MagicMock]:
+        billing = _BILLING.model_copy(update={"default_bucket": "billable", "rate": 100.0})
+        return _make_billing_service(profile=_make_billing_profile(billing=billing), **kwargs)
+
+    def test_unlabelled_issue_lands_in_default_bucket(self) -> None:
+        """No label, no issue mapping: the default bucket applies (and is chargeable here)."""
+        service, _, _, _ = self._service_with_default(
+            worklogs=[_wl(100, 7200, "K-1")],
+            booking_issues=[_issue("K-1", "EK-10 Unlabelled work")],
+            planning_issues=[_issue("EK-10", "Unlabelled work", [])],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        line = report.groups[0].lines[0]
+        assert line.bucket == "billable"
+        assert line.category is None  # default, not a label
+        assert line.amount == 200.0
+        assert report.totals.amount == 200.0
+
+    def test_label_still_wins_over_default(self) -> None:
+        """Precedence: label path beats the default bucket."""
+        service, _, _, _ = self._service_with_default(
+            worklogs=[_wl(100, 3600, "K-1")],
+            booking_issues=[_issue("K-1", "EK-10 Warranty fix")],
+            planning_issues=[_issue("EK-10", "Warranty fix", ["warranty"])],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        line = report.groups[0].lines[0]
+        assert line.bucket == "non-billable"  # label wins over the 'billable' default
+        assert line.amount is None  # non-billable is not chargeable
+
+    def test_issue_mapping_wins_over_default(self) -> None:
+        """Precedence: issue path beats the default bucket."""
+        billing = _BILLING.model_copy(
+            update={"default_bucket": "billable", "issue_categories": {"ACME-101": "project"}}
+        )
+        service, _, _, _ = _make_billing_service(
+            profile=_make_billing_profile(billing=billing),
+            worklogs=[_wl(200, 3600, "ACME-101")],
+            booking_issues=[_issue("ACME-101", "Collective ticket")],
+            planning_issues=[],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        line = report.groups[0].lines[0]
+        assert line.bucket == "project"
+        assert line.category == "ACME-101"
+
+    def test_unresolvable_shadow_lands_in_default_bucket(self) -> None:
+        """Without a planning twin the default bucket applies, and the warning says so."""
+        service, _, _, _ = self._service_with_default(
+            worklogs=[_wl(100, 3600, "K-1")],
+            booking_issues=[_issue("K-1", "Manually created ticket")],
+            planning_issues=[],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert report.groups[0].name == "billable"
+        assert any("counted under 'billable'" in warning for warning in report.warnings)
+
+    def test_validate_skips_missing_when_default_configured(self) -> None:
+        """With a default bucket, unlabelled issues are by design — only ambiguity violates."""
+        service, _, _, _ = self._service_with_default(
+            planning_issues=[
+                _issue("EK-10", "Fine (default)", []),
+                _issue("EK-11", "Ambiguous", ["analysis", "support"]),
+            ],
+        )
+
+        validation = service.validate_billing_labels()
+
+        assert [(v.issue, v.kind) for v in validation.violations] == [("EK-11", "multiple")]

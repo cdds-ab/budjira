@@ -768,10 +768,14 @@ require_exactly_one = true        # fail loudly on issues with several category 
 exclude_from_total = ["project"]  # shown in the report, but outside the grand total
 chargeable_buckets = ["billable"] # only these get amounts and feed the money total
 
-# bucket from the booking issue itself, for collective-ticket booking (the
-# ticket *is* the category). Wins over labels; named issues are in scope
-# regardless of project mapping.
+# Collective-ticket booking: the ticket itself is the category. Wins over labels;
+# named issues are in scope regardless of project mapping.
 # issue_categories = { "ACME-101" = "billable", "ACME-102" = "non-billable" }
+
+# Bucket for issues matched by neither of the above — for setups where everything
+# is chargeable unless stated otherwise. Precedence: issue -> label -> default ->
+# uncategorised. With a default set, --validate reports only ambiguous labels.
+# default_bucket = "billable"
 
 # Single-person profile: report only your own worklogs unless --all is given.
 # On a shared Tempo instance an unfiltered report silently includes other

@@ -384,7 +384,8 @@ class WorkflowService:
         3. Extract the planning key from each booking summary (summary strategy, read backwards)
         4. Batch-fetch the planning issues for labels and summaries
         5. Categorize: `issue_categories` (the ticket is the category, wins over labels),
-           else planning labels via `categories`, else 'uncategorised'; group and total
+           else planning labels via `categories`, else `default_bucket` if configured,
+           else 'uncategorised'; group and total
 
         Args:
             from_date: First day of the period (inclusive)
@@ -531,17 +532,19 @@ class WorkflowService:
 
             if planning_key is None or planning_issue is None:
                 reason = "no planning key in its summary" if planning_key is None else "planning issue not found"
-                warnings.append(f"{booking_key}: {reason}; counted as uncategorised")
+                # #123: with a default bucket, unmatched means the default, not uncategorised
+                fallback_bucket = billing.default_bucket or UNCATEGORISED_BUCKET
+                warnings.append(f"{booking_key}: {reason}; counted under '{fallback_bucket}'")
                 lines.append(
                     self._billing_line(
                         issue=planning_key or booking_key,
                         booking_issue=booking_key,
                         category=None,
-                        bucket=UNCATEGORISED_BUCKET,
+                        bucket=fallback_bucket,
                         summary=booking_summary,
                         seconds=seconds,
                         rate=rate,
-                        chargeable=UNCATEGORISED_BUCKET in billing.chargeable_buckets,
+                        chargeable=fallback_bucket in billing.chargeable_buckets,
                     )
                 )
                 continue
@@ -555,7 +558,8 @@ class WorkflowService:
                     f"{planning_key} carries multiple category labels ({', '.join(matching)}); using '{matching[0]}'"
                 )
             category = matching[0] if matching else None
-            bucket = billing.categories[category] if category else UNCATEGORISED_BUCKET
+            # #123: label -> default -> uncategorised
+            bucket = billing.categories[category] if category else (billing.default_bucket or UNCATEGORISED_BUCKET)
             lines.append(
                 self._billing_line(
                     issue=planning_key,
@@ -681,8 +685,9 @@ class WorkflowService:
     def validate_billing_labels(self) -> BillingValidation:
         """Check category-label hygiene across the profile's planning projects.
 
-        Finds issues with no category label ('missing') and issues with more
-        than one ('multiple'), without producing a report.
+        Finds issues with more than one category label ('multiple'), and issues
+        with none ('missing') — unless a default_bucket is configured, where
+        unlabelled issues are by design and only ambiguity is a violation.
 
         Returns:
             BillingValidation with all violations found
@@ -706,7 +711,9 @@ class WorkflowService:
                 issues_checked += 1
                 matching = sorted(label for label in issue.labels if label in billing.categories)
                 if not matching:
-                    violations.append(BillingViolation(issue=issue.key, kind="missing", summary=issue.summary))
+                    # With a default bucket, unlabelled is a configuration, not a violation
+                    if billing.default_bucket is None:
+                        violations.append(BillingViolation(issue=issue.key, kind="missing", summary=issue.summary))
                 elif len(matching) > 1:
                     violations.append(
                         BillingViolation(issue=issue.key, kind="multiple", labels=matching, summary=issue.summary)

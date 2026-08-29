@@ -54,6 +54,12 @@ class BillingConfig(BaseModel):
         "itself is the category (e.g., {'ACME-101': 'billable'}). Wins over the label path, and named "
         "issues are in scope regardless of project mapping.",
     )
+    default_bucket: str | None = Field(
+        default=None,
+        description="Bucket for issues matched by neither issue_categories nor labels — for setups where "
+        "everything is chargeable unless stated otherwise. Precedence: booking issue -> label -> default "
+        "-> uncategorised (uncategorised keeps its job when no default is configured).",
+    )
     require_exactly_one: bool = Field(
         default=True,
         description="Fail loudly when an issue carries more than one category label (Jira cannot enforce this)",

@@ -1428,6 +1428,9 @@ chargeable_buckets = ["billable"] # default: only these buckets get amounts and 
 # Collective-ticket booking: the ticket itself is the category. Wins over labels;
 # named issues are in scope regardless of project mapping.
 # issue_categories = { "ACME-101" = "billable", "ACME-102" = "non-billable" }
+# Bucket when neither matches (everything chargeable unless stated otherwise).
+# Precedence: issue -> label -> default -> uncategorised.
+# default_bucket = "billable"
 # mine_by_default = true            # single-person profile: only your worklogs unless --all
 # rate = 95                       # optional; absent or 0 => hours-only report
 # currency = "EUR"
@@ -1441,8 +1444,12 @@ chargeable_buckets = ["billable"] # default: only these buckets get amounts and 
   billing semantics, so the money total cannot be mistaken for an invoice it is not
 - Two bucket sources, one precedence rule: `issue_categories` (booking issue key -> bucket,
   for collective tickets; in scope regardless of project mapping) wins over `categories`
-  (label -> bucket); everything unmatched lands in `uncategorised`
-- Issues without a category label land in an explicit `uncategorised` bucket — never silently dropped
+  (label -> bucket); `default_bucket` covers everything else (setups where all work is
+  chargeable unless stated otherwise); only with no default does `uncategorised` apply
+- With `default_bucket` set, `--validate` reports only ambiguous (multiple) labels —
+  unlabelled issues are by design then
+- Issues without any category signal land in an explicit `uncategorised` bucket (when no
+  `default_bucket` is configured) — never silently dropped
 - `--group category` groups by label instead of bucket; `--bucket NAME` filters to one bucket
 - `--mine` restricts to your worklogs (server-side account filter); `--all` overrides a profile's
   `mine_by_default`. The header always names the number of distinct contributors — on a shared

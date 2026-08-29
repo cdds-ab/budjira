@@ -24,6 +24,7 @@ class TestBillingConfig:
         assert config.exclude_from_total == ["project"]
         assert config.chargeable_buckets == ["billable"]
         assert config.issue_categories == {}
+        assert config.default_bucket is None
         assert config.rate is None
         assert config.currency == "EUR"
 
