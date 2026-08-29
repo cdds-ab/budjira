@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.27.3 (2026-08-29)
+
+### Fix
+
+- **output**: emit non-ASCII text as UTF-8 in JSON output
+
 ## v1.27.2 (2026-08-29)
 
 ### Fix
