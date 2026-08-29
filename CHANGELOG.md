@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.28.0 (2026-08-29)
+
+### Feat
+
+- **workflow**: support collective-ticket booking via issue_categories
+
 ## v1.27.4 (2026-08-29)
 
 ### Fix
