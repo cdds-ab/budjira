@@ -27,13 +27,19 @@ Connections are stored in `~/.config/budjira/` following XDG Base Directory spec
 
 #### Create New Connection
 ```bash
-budjira connect
+budjira connect add
 ```
-Interactive prompts for:
+Interactive prompts for (when the options are omitted):
 - Jira URL (e.g., https://your-company.atlassian.net)
 - Email address
 - API Token (create at: https://id.atlassian.com/manage-profile/security/api-tokens)
 - Default project key
+
+Non-interactive (scripting):
+
+```bash
+budjira connect add --name work --url https://company.atlassian.net   --email user@example.com --project PROJ
+```
 
 #### List All Connections
 ```bash
@@ -1453,6 +1459,8 @@ budjira --format json workflow sprint --profile ek-to-k
 
 ```bash
 budjira update --check
+# or equivalently
+budjira update check
 ```
 
 Checks GitHub Releases for newer versions (respects 24h cache).
