@@ -54,7 +54,6 @@ app.add_typer(dor.app, name="dor")
 app.add_typer(epic.app, name="epic")
 app.add_typer(issue.app, name="issue")
 app.add_typer(project.app, name="project")
-app.add_typer(search.app, name="search")
 app.add_typer(sprint.app, name="sprint")
 app.add_typer(tempo.app, name="tempo")
 app.add_typer(update.app, name="update")
@@ -66,6 +65,10 @@ app.command(name="show")(show.show_issue)
 
 # Register top-level attach command
 app.command(name="attach")(attach.attach_files)
+
+# Register top-level search command (single command, no group — documented
+# and used as `budjira search "JQL"`, grouping would force `search search`)
+app.command(name="search")(search.search)
 
 
 def is_quiet_mode() -> bool:
