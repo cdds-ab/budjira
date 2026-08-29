@@ -11,7 +11,7 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.27.2
+- **Current Version**: v1.27.3
 - **Branch**: master
 - **Status**: Local-first release workflow live (cz bump owns versioning)
 - **Last Update**: 2026-08-29
