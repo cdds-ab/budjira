@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.29.0 (2026-08-29)
+
+### Feat
+
+- **workflow**: add contributor scope to billing reports (--mine, contributor count)
+
 ## v1.28.0 (2026-08-29)
 
 ### Feat
