@@ -109,7 +109,12 @@ budjira tempo log PROJ-123 2h --comment "Bug fixing"
 budjira worklog list PROJ-123    # Standard Jira
 budjira tempo worklogs PROJ-123   # Tempo
 
-# Delete wrong worklog entry
+# Correct a wrong worklog entry (preferred: keeps ID + audit trail)
+budjira worklog update PROJ-123 12345 --time-spent 6h
+budjira worklog update PROJ-123 12345 --started yesterday --comment "Fixed"
+budjira tempo update-worklog 12345 --time-spent 4h --force   # Tempo
+
+# Delete wrong worklog entry (only if update is not enough)
 budjira worklog delete PROJ-123 12345         # Standard Jira (with confirmation)
 budjira worklog delete PROJ-123 12345 --force # Standard Jira (skip confirmation)
 budjira tempo delete-worklog 12345 --force    # Tempo
@@ -119,7 +124,7 @@ budjira tempo delete-worklog 12345 --force    # Tempo
 - Daily time logging
 - End of day time tracking
 - Tracking time across multiple issues
-- Correcting accidentally logged worklogs
+- Correcting accidentally logged worklogs (prefer `update` over delete + re-add — delete creates a new worklog ID and breaks the audit trail)
 
 ### 8. Delete Issues (Cleanup)
 ```bash
@@ -139,6 +144,24 @@ budjira issue delete PROJ-123 --delete-subtasks --force
 - Batch cleanup in scripting workflows
 
 **Note:** Requires 'Delete Issues' permission in Jira. Always confirms unless `--force` is used.
+
+### 9. Attachments & Inline Images
+```bash
+# Attach file(s) to an issue (no comment)
+budjira attach PROJ-123 chart.png report.pdf
+
+# Comment with attachment references (images embed via !file! wiki markup)
+budjira comment add PROJ-123 "See the chart" --attach chart.png
+
+# Comment with an image rendered inline in the body (Jira Cloud)
+budjira comment add PROJ-123 "Before/after:" --embed chart.png
+```
+
+**When to use:**
+- Documenting results on a ticket (charts, screenshots, logs)
+- Before/after comparisons that should render inside the comment
+
+**Note:** `--embed` posts the comment as ADF via REST API v3 — Jira Cloud only. On Jira Server/DC use `--attach` instead.
 
 ### 10. Cross-Instance Workflow (Planning + Booking)
 ```bash

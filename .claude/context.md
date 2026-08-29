@@ -11,15 +11,16 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.25.0
+- **Current Version**: v1.26.0
 - **Branch**: master
 - **Status**: Local-first release workflow live (cz bump owns versioning)
-- **Last Update**: 2026-08-25
+- **Last Update**: 2026-08-29
 
 ### Recent Releases (seit v1.8.1)
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.26.0** | 2026-08-29 | feat | `worklog update` für Tempo + native Jira-Worklogs mit Ownership-Check (#116); `attach`-Command + `comment add --attach/--embed` (ADF mediaSingle inline images, Jira Cloud v3) (#115) |
 | **v1.25.0** | 2026-08-25 | feat | Native Jira worklog fallback on connections without Tempo (#113): tempo log/worklogs/update-worklog/delete-worklog work everywhere; user-scoped listing via worklogAuthor JQL; --issue for native update/delete |
 | **v1.24.0** | 2026-08-24 | feat | Full comment CRUD: `comment list/show/update/delete` (#81); update opens the editor prefilled with the current body; Jira's 400 permission quirk on delete/edit mapped to a clear error pointing at update |
 | **v1.23.0** | 2026-08-13 | feat | Per-connection description dialect (#106), transition screen fields (#101); connection write path no longer discards configuration (#108), AI usage prompt reproducible from code (#105) |
@@ -262,7 +263,8 @@ Die monolithische `JiraClient`-Klasse wurde in spezialisierte Services decompose
 budjira/services/
 ├── __init__.py         # Service exports
 ├── base.py             # BaseService with shared functionality
-├── comments.py         # CommentService - add_comment()
+├── attachments.py      # AttachmentService - add() (v1.26.0)
+├── comments.py         # CommentService - add_comment(), add_adf()
 ├── epics.py            # EpicService - get_epic_issues(), link_to_epic()
 ├── issues.py           # IssueService - get_issue(), create_issue(), update_issue()
 ├── labels.py           # LabelService - add_labels(), remove_labels()
@@ -288,10 +290,10 @@ budjira/services/
 
 | Metrik | Wert |
 |--------|------|
-| **Total Tests** | 962 |
+| **Total Tests** | 1110 |
 | **Skipped Tests** | 3 |
-| **Coverage** | 86.90% |
-| **Test Duration** | ~14s |
+| **Coverage** | 87.7% |
+| **Test Duration** | ~12s |
 
 ### Coverage by Module (Top)
 ```
@@ -362,7 +364,8 @@ budjira/
 ├── cli/                     # Command-line interface
 │   ├── main.py             # Main CLI app, global flags (--format, --quiet)
 │   ├── ai.py               # AI usage prompt generation (+ --connection flag) ✨ UPDATED v1.13.0
-│   ├── comment.py          # Comment commands
+│   ├── attach.py           # ✨ NEW v1.26.0 - File attachment uploads
+│   ├── comment.py          # Comment commands (+ --attach/--embed) ✨ UPDATED v1.26.0
 │   ├── connect.py          # Connection management (+ tempo-setup)
 │   ├── create.py           # Issue creation (+ --epic, --custom flags) ✨ UPDATED v1.13.0
 │   ├── dor.py              # Definition of Ready templates
@@ -375,12 +378,13 @@ budjira/
 │   ├── tempo.py            # Tempo Timesheets (+ update-worklog)
 │   ├── update.py           # Self-update commands
 │   ├── workflow.py         # Workflow profiles (cross-instance)
-│   └── worklog.py          # Worklog commands
+│   └── worklog.py          # Worklog commands (+ update) ✨ UPDATED v1.26.0
 ├── core/                    # Core business logic (lightweight after refactoring)
 │   └── jira_client.py      # Jira API wrapper (delegates to services)
 ├── services/                # ✨ NEW v1.12.x - Decomposed JiraClient
 │   ├── base.py             # BaseService class
-│   ├── comments.py         # Comment operations
+│   ├── attachments.py      # ✨ NEW v1.26.0 - Attachment uploads
+│   ├── comments.py         # Comment operations (+ add_adf v3) ✨ UPDATED v1.26.0
 │   ├── epics.py            # Epic operations
 │   ├── issues.py           # Issue operations (+ delete) ✨ UPDATED v1.15.0
 │   ├── labels.py           # Label operations
@@ -458,6 +462,8 @@ budjira/
 | Reproducible AI Prompt | v1.23.0 | `budjira ai usage-prompt --defaults --plain` |
 | Comment CRUD | v1.24.0 | `budjira comment list/show/update/delete` |
 | Native Worklog Fallback | v1.25.0 | `budjira tempo log/worklogs/update-worklog/delete-worklog` ohne Tempo (nativ) |
+| Worklog Update | v1.26.0 | `budjira worklog update ISSUE WORKLOG_ID` (Tempo + nativ, Ownership-Check) |
+| Attachments + Inline Images | v1.26.0 | `budjira attach`, `budjira comment add --attach/--embed` |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---
@@ -518,5 +524,5 @@ budjira/
 
 ---
 
-**Letzte Aktualisierung**: 2026-08-23
+**Letzte Aktualisierung**: 2026-08-29
 **Nächste Aktualisierung**: Bei "sichere context" oder signifikanten Änderungen

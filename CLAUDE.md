@@ -68,6 +68,7 @@ budjira/
 │   ├── __init__.py
 │   ├── main.py       # Main CLI entry point and global flags
 │   ├── ai.py         # AI usage prompt generation
+│   ├── attach.py     # File attachment uploads
 │   ├── connect.py    # Connection management (+ tempo-setup)
 │   ├── create.py     # Issue creation (interactive + DoR templates)
 │   ├── dor.py        # Definition of Ready template management
@@ -77,7 +78,7 @@ budjira/
 │   ├── show.py       # Issue detail view ✨ NEW v1.8.0
 │   ├── tempo.py      # Tempo Timesheets integration ✨ NEW v1.6.0
 │   ├── update.py     # Self-update commands
-│   └── worklog.py    # Worklog commands (add, list)
+│   └── worklog.py    # Worklog commands (add, list, update, delete)
 ├── core/             # Core business logic
 │   ├── __init__.py
 │   └── jira_client.py    # Wrapper around jira library (+ get_issue_details)

@@ -675,10 +675,12 @@ Add comments to Jira issues without logging time (unlike worklogs which combine 
 
 **Options:**
 - `--editor`, `-e`: Open editor for multi-line comment
+- `--attach FILE`: Attach file(s) to the issue and reference them in the comment (repeatable; images are embedded via `!file!` wiki markup, other files linked via `[^file]`)
+- `--embed FILE`: Embed image file(s) inline in the comment body (repeatable; Jira Cloud only — posts the comment as ADF via REST API v3 so the image renders inside the body)
 - `--connection NAME`, `-c`: Use specific connection
 
 **Behavior:**
-- If TEXT is omitted, editor opens automatically
+- If TEXT is omitted, editor opens automatically (unless `--attach`/`--embed` files carry the comment)
 - If TEXT is provided with `--editor`, editor opens with TEXT as initial content
 - Supports markdown formatting
 - Comments are posted immediately without time tracking
@@ -692,15 +694,23 @@ budjira comment add PROJ-123 "Deployed to production environment"
 # Multi-line comment via editor
 budjira comment add PROJ-123 --editor
 
-# Editor opens automatically if no text provided
-budjira comment add PROJ-123
+# Comment with an attachment reference
+budjira comment add PROJ-123 "See the chart" --attach chart.png
 
-# Edit initial text in editor
-budjira comment add PROJ-456 "Initial text" --editor
+# Comment with an image embedded inline (Jira Cloud)
+budjira comment add PROJ-123 "Before/after:" --embed chart.png
 
 # Use specific connection
 budjira comment add PROJ-789 "Status update" --connection prod-jira
 ```
+
+### Attach Files to Issue
+
+```bash
+budjira attach ISSUE-KEY FILE... [--connection NAME]
+```
+
+Upload one or more files as issue attachments (no comment needed). Prints one confirmation per file; `--format json` emits the attachment ids (needed e.g. for `--embed` workflows).
 
 **Use Cases:**
 - Status updates without time tracking
@@ -816,6 +826,33 @@ Display all worklog entries for an issue.
 ```bash
 budjira worklog list PROJ-123
 # Shows table with ID, author, time, started, comment
+```
+
+### Update Worklog Entry
+
+```bash
+budjira worklog update ISSUE-KEY WORKLOG_ID [OPTIONS]
+```
+
+Correct an existing worklog in place (wrong duration, wrong date, typo in the comment) without delete + re-add — the worklog ID and audit trail are preserved. Only the given fields change. On Tempo-enabled connections the Tempo worklog is updated (use the ID from `worklog list`), otherwise the native Jira worklog. You can only update your own worklogs; the command refuses foreign worklogs with a clear message.
+
+**Options:**
+- `--time-spent TIME`, `-t`: New duration (e.g., 2h, 30m, 2h30m)
+- `--started DATETIME`, `-s`: New start date/time (same formats as `worklog add`)
+- `--comment TEXT`, `-c`: New comment/description
+- `--force`, `-f`: Skip confirmation prompt
+- `--connection`, `-c`: Connection to use
+
+**Examples:**
+```bash
+# Fix a wrong duration
+budjira worklog update PROJ-123 12345 --time-spent 6h
+
+# Move a booking to another day and fix the comment
+budjira worklog update PROJ-123 12345 --started yesterday --comment "Re-balanced estimate"
+
+# Skip the confirmation prompt (scripting)
+budjira worklog update PROJ-123 12345 --time-spent 2h15m --force
 ```
 
 ### Delete Worklog Entry

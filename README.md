@@ -30,7 +30,8 @@
 - 🔄 **Update Issues**: Transition status, update fields, manage labels, delete issues
 - 🎯 **Epic Management**: Link stories to epics and view epic progress
 - 💬 **Comment Management**: Full comment CRUD (add, list, show, update, delete) without time tracking
-- ⏱️ **Time Tracking**: Comprehensive worklog management and time estimates
+- 📎 **Attachments**: Upload files to issues and embed images inline in comments
+- ⏱️ **Time Tracking**: Comprehensive worklog management (add, list, update, delete) and time estimates
 - 🎼 **Tempo Integration**: Full support for Tempo Timesheets API for enterprise time tracking
 - 📊 **JSON Output**: Machine-readable JSON format for automation and integration with other tools
 
@@ -532,6 +533,11 @@ budjira worklog add PROJ-123 2h --started "yesterday" --comment "Bug fixing"
 # List all worklogs for an issue (shows worklog IDs)
 budjira worklog list PROJ-123
 
+# Correct an existing worklog (keeps ID and audit trail; only your own worklogs)
+budjira worklog update PROJ-123 12345 --time-spent 6h
+budjira worklog update PROJ-123 12345 --started yesterday --comment "Re-balanced estimate"
+budjira worklog update PROJ-123 12345 --time-spent 2h15m --force   # Skip confirmation
+
 # Delete a worklog entry
 budjira worklog delete PROJ-123 12345
 budjira worklog delete PROJ-123 12345 --force   # Skip confirmation
@@ -575,6 +581,20 @@ budjira comment add PROJ-123
 
 # Use specific connection
 budjira comment add PROJ-123 "Comment text" --connection my-connection
+
+# Attach file(s) to the issue and reference them in the comment
+budjira comment add PROJ-123 "See the chart" --attach chart.png
+
+# Embed image(s) inline in the comment body (Jira Cloud)
+budjira comment add PROJ-123 "Before/after:" --embed chart.png
+```
+
+Files can also be attached without a comment:
+
+```bash
+# Attach one or more files to an issue
+budjira attach PROJ-123 chart.png
+budjira attach PROJ-123 chart.png report.pdf
 ```
 
 Existing comments can be listed, inspected, corrected and deleted without leaving the CLI:
