@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.27.1 (2026-08-29)
+
+### Fix
+
+- **cli**: register search as a top-level command
+
 ## v1.27.0 (2026-08-29)
 
 ### Feat
