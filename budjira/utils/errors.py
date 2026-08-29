@@ -79,6 +79,12 @@ class OverbookingError(WorkflowError):
     pass
 
 
+class BillingValidationError(WorkflowError):
+    """Raised when billing category labels violate the profile's rules."""
+
+    pass
+
+
 class WorkflowConfigError(ConfigurationError):
     """Raised when workflow profile configuration is invalid."""
 

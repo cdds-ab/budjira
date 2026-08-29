@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import TYPE_CHECKING, Annotated
 
 if TYPE_CHECKING:
@@ -12,6 +13,7 @@ from rich.console import Console
 from rich.table import Table
 
 from budjira.config.settings import get_settings
+from budjira.models.billing import UNCATEGORISED_BUCKET, BillingReport, BillingTotals, BillingValidation
 from budjira.models.workflow import (
     OverbookingPolicy,
     ProjectMapping,
@@ -19,11 +21,14 @@ from budjira.models.workflow import (
     WorkflowProfile,
 )
 from budjira.services.workflow import WorkflowService, _format_seconds
+from budjira.utils.datetime_parser import parse_month_range
 from budjira.utils.errors import (
+    BillingValidationError,
     BudjiraError,
     OverbookingError,
     ShadowTicketAmbiguousError,
     ShadowTicketNotFoundError,
+    ValidationError,
     WorkflowConfigError,
 )
 from budjira.utils.formatter import OutputFormatter
@@ -678,3 +683,208 @@ def workflow_book(
     except Exception as e:
         console.print(f"[red]Unexpected error:[/red] {e}")
         raise typer.Exit(1) from e
+
+
+@app.command("billing")
+def workflow_billing(
+    ctx: typer.Context,
+    profile_name: Annotated[
+        str,
+        typer.Option("--profile", "-p", help="Workflow profile to use"),
+    ],
+    month: Annotated[
+        str | None,
+        typer.Option("--month", "-m", help="Report month (YYYY-MM, default: current month)"),
+    ] = None,
+    from_date: Annotated[
+        str | None,
+        typer.Option("--from", help="Period start (YYYY-MM-DD; combine with --to, overrides --month)"),
+    ] = None,
+    to_date: Annotated[
+        str | None,
+        typer.Option("--to", help="Period end (YYYY-MM-DD; combine with --from, overrides --month)"),
+    ] = None,
+    group_by: Annotated[
+        str,
+        typer.Option("--group", help="Group lines by 'bucket' (default) or 'category'"),
+    ] = "bucket",
+    bucket: Annotated[
+        str | None,
+        typer.Option("--bucket", help="Only include lines of this bucket (custom reports)"),
+    ] = None,
+    validate: Annotated[
+        bool,
+        typer.Option("--validate", help="Check category-label hygiene without producing a report"),
+    ] = False,
+) -> None:
+    """Billing report over a period: billable vs. non-billable booked time.
+
+    Groups the time booked via the booking instance (Tempo) by billing bucket,
+    driven by the profile's [profiles.billing] block (label -> bucket mapping,
+    optional rate/currency). Issues without a category label are listed under
+    'uncategorised' so nothing is silently dropped from the total.
+
+    Examples:
+        budjira workflow billing --profile acme-shadow --month 2026-08
+        budjira workflow billing --profile acme-shadow --from 2026-08-01 --to 2026-09-30
+        budjira workflow billing --profile acme-shadow --month 2026-08 --group category
+        budjira workflow billing --profile acme-shadow --bucket billable
+        budjira workflow billing --profile acme-shadow --validate
+        budjira --format json workflow billing --profile acme-shadow --month 2026-08
+    """
+    try:
+        period_from, period_to = _resolve_billing_period(month, from_date, to_date)
+
+        service = WorkflowService.from_profile(profile_name)
+        output_format = ctx.obj.get("format", "table") if ctx.obj else "table"
+
+        if validate:
+            validation = service.validate_billing_labels()
+            if OutputFormatter.is_json_format(output_format):
+                OutputFormatter.output_json(validation)
+            else:
+                _render_billing_validation(validation)
+            if validation.violations:
+                raise typer.Exit(1)
+            return
+
+        report = service.get_billing_report(period_from, period_to, group_by=group_by)
+        if bucket is not None:
+            report = _filter_report_by_bucket(report, bucket)
+
+        if OutputFormatter.is_json_format(output_format):
+            OutputFormatter.output_json(report)
+        else:
+            _render_billing_report(report)
+
+    except typer.Exit:
+        raise  # usage errors and --validate's exit code pass through untouched
+    except (WorkflowConfigError, BillingValidationError, ValidationError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from e
+    except BudjiraError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        console.print(f"[red]Unexpected error:[/red] {e}")
+        raise typer.Exit(1) from e
+
+
+def _resolve_billing_period(month: str | None, from_date: str | None, to_date: str | None) -> tuple[date, date]:
+    """Resolve the report period from --month or --from/--to (default: current month)."""
+    if month and (from_date or to_date):
+        console.print("[red]Error:[/red] --month cannot be combined with --from/--to.")
+        raise typer.Exit(1)
+    if (from_date is None) != (to_date is None):
+        console.print("[red]Error:[/red] --from and --to must be given together.")
+        raise typer.Exit(1)
+
+    if from_date and to_date:
+        try:
+            period_from = date.fromisoformat(from_date)
+            period_to = date.fromisoformat(to_date)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] Invalid date ({e}). Expected YYYY-MM-DD.")
+            raise typer.Exit(1) from e
+        if period_from > period_to:
+            console.print(f"[red]Error:[/red] --from ({period_from}) must not be after --to ({period_to}).")
+            raise typer.Exit(1)
+        return period_from, period_to
+
+    return parse_month_range(month or date.today().strftime("%Y-%m"))
+
+
+def _filter_report_by_bucket(report: BillingReport, bucket: str) -> BillingReport:
+    """Filter a report to a single bucket; totals then reflect the shown lines."""
+    report.groups = [group for group in report.groups if group.bucket == bucket]
+    lines = [line for group in report.groups for line in group.lines]
+    total_seconds = sum(line.seconds for line in lines)
+    report.totals = BillingTotals(
+        seconds=total_seconds,
+        hours=round(total_seconds / 3600, 2),
+        amount=round(total_seconds / 3600 * report.rate, 2) if report.rate else None,
+    )
+    return report
+
+
+def _render_billing_report(report: BillingReport) -> None:
+    """Render a billing report as Rich tables (one per group)."""
+    console.print(f"\n[cyan bold]Billing Report: {report.profile}[/cyan bold]")
+    console.print(f"  Period: {report.period_from} → {report.period_to}")
+    if report.rate:
+        console.print(f"  Rate:   {report.rate:.2f} {report.currency}/h")
+
+    if not report.groups:
+        console.print("\n[yellow]No worklogs booked in this period.[/yellow]")
+        return
+
+    for group in report.groups:
+        is_uncategorised = group.name == UNCATEGORISED_BUCKET
+        title_style = "yellow" if is_uncategorised else "green"
+        title = f"{group.name} — {_format_seconds(group.total_seconds)}"
+        if group.total_amount is not None:
+            title += f" ({group.total_amount:.2f} {report.currency})"
+
+        table = Table(title=title, title_style=title_style, show_header=True)
+        table.add_column("Issue", style="cyan")
+        table.add_column("Booking", style="dim")
+        if report.grouped_by == "bucket":
+            table.add_column("Category")
+        table.add_column("Hours", justify="right", style="green")
+        if report.rate:
+            table.add_column("Amount", justify="right")
+        table.add_column("Summary")
+
+        for line in group.lines:
+            row = [line.issue, line.booking_issue]
+            if report.grouped_by == "bucket":
+                row.append(line.category or "[yellow]-[/yellow]")
+            row.append(f"{line.hours:.2f}")
+            if report.rate:
+                row.append(f"{line.amount:.2f} {report.currency}" if line.amount is not None else "-")
+            row.append(line.summary)
+            table.add_row(*row)
+
+        console.print()
+        console.print(table)
+
+    excluded_note = ""
+    excluded_present = [b for b in report.excluded_from_total if any(g.bucket == b for g in report.groups)]
+    if excluded_present:
+        excluded_note = f" [dim](excluding: {', '.join(excluded_present)})[/dim]"
+    total_line = f"\n[bold]Total:[/bold] {_format_seconds(report.totals.seconds)} ({report.totals.hours:.2f}h)"
+    if report.totals.amount is not None:
+        total_line += f" — {report.totals.amount:.2f} {report.currency}"
+    console.print(total_line + excluded_note)
+
+    for warning in report.warnings:
+        console.print(f"[yellow]Warning:[/yellow] {warning}")
+
+
+def _render_billing_validation(validation: BillingValidation) -> None:
+    """Render the --validate label-hygiene result."""
+    console.print(f"\n[cyan bold]Billing label check: {validation.profile}[/cyan bold]")
+
+    if not validation.violations:
+        console.print(f"[green]✓ All {validation.issues_checked} issues have exactly one category label.[/green]")
+    else:
+        table = Table(show_header=True)
+        table.add_column("Issue", style="cyan")
+        table.add_column("Violation", style="red")
+        table.add_column("Category labels")
+        table.add_column("Summary")
+        for violation in validation.violations:
+            table.add_row(
+                violation.issue,
+                violation.kind,
+                ", ".join(violation.labels) or "[dim](none)[/dim]",
+                violation.summary,
+            )
+        console.print(table)
+        console.print(f"\n[red]{len(validation.violations)} violation(s)[/red] in {validation.issues_checked} issues.")
+
+    if validation.truncated:
+        console.print(
+            "[yellow]Warning: a planning project has more issues than the fetch limit; "
+            "the check may be incomplete.[/yellow]"
+        )

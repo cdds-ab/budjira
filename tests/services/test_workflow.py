@@ -1,9 +1,12 @@
 """Tests for WorkflowService."""
 
+from datetime import date
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from budjira.models.billing import UNCATEGORISED_BUCKET
 from budjira.models.workflow import (
+    BillingConfig,
     OverbookingPolicy,
     ProjectMapping,
     ShadowTicketStrategy,
@@ -12,10 +15,12 @@ from budjira.models.workflow import (
 )
 from budjira.services.workflow import WorkflowService, _format_seconds
 from budjira.utils.errors import (
+    BillingValidationError,
     JiraAPIError,
     OverbookingError,
     ShadowTicketAmbiguousError,
     ShadowTicketNotFoundError,
+    ValidationError,
     WorkflowConfigError,
 )
 
@@ -716,3 +721,338 @@ class TestFromProfile:
 
         with pytest.raises(ConnectionError, match="Tempo is not enabled"):
             WorkflowService.from_profile("test-profile")
+
+
+# --- Billing report tests (#117) ---
+
+_BILLING = BillingConfig(
+    categories={
+        "analysis": "billable",
+        "support": "billable",
+        "warranty": "non-billable",
+        "onboarding": "project",
+    }
+)
+
+
+def _make_billing_profile(
+    billing: BillingConfig | None = _BILLING,
+    strategy: ShadowTicketStrategy = ShadowTicketStrategy.SUMMARY_SEARCH,
+) -> WorkflowProfile:
+    """Profile with a billing block for report tests."""
+    profile = _make_profile()
+    profile.billing = billing
+    profile.shadow_strategy = strategy
+    return profile
+
+
+def _wl(issue_id: int, seconds: int, issue_key: str | None = None) -> MagicMock:
+    """Mock a Tempo worklog (only the fields the billing join reads)."""
+    worklog = MagicMock()
+    worklog.issue.id = issue_id
+    worklog.issue.key = issue_key
+    worklog.timeSpentSeconds = seconds
+    return worklog
+
+
+def _issue(key: str, summary: str, labels: list[str] | None = None) -> MagicMock:
+    """Mock an Issue (key, summary, labels)."""
+    issue = MagicMock()
+    issue.key = key
+    issue.summary = summary
+    issue.labels = labels or []
+    return issue
+
+
+def _make_billing_service(
+    *,
+    worklogs: list[MagicMock] | None = None,
+    booking_issues: list[MagicMock] | None = None,
+    planning_issues: list[MagicMock] | None = None,
+    profile: WorkflowProfile | None = None,
+) -> tuple[WorkflowService, MagicMock, MagicMock, MagicMock]:
+    """Wire a WorkflowService with mocked Tempo/Jira for billing tests."""
+    tempo = MagicMock()
+    tempo.get_worklogs.return_value = worklogs or []
+    booking = MagicMock()
+    booking.search_issues.return_value = booking_issues or []
+    planning = MagicMock()
+    planning.search_issues.return_value = planning_issues or []
+    service = _make_service(
+        profile=profile or _make_billing_profile(),
+        planning_jira=planning,
+        booking_jira=booking,
+        tempo_client=tempo,
+    )
+    return service, tempo, booking, planning
+
+
+class TestBillingReport:
+    """Test WorkflowService.get_billing_report."""
+
+    def test_groups_by_bucket_and_excludes_project_from_total(self) -> None:
+        """Lines land in their configured buckets; the 'project' bucket stays out of the grand total."""
+        service, tempo, _, _ = _make_billing_service(
+            worklogs=[
+                _wl(100, 7200, "K-1"),
+                _wl(101, 3600, "K-2"),
+                _wl(102, 1800, "K-3"),
+            ],
+            booking_issues=[
+                _issue("K-1", "EK-10 Analysis work"),
+                _issue("K-2", "EK-11 Warranty fix"),
+                _issue("K-3", "EK-12 Onboarding"),
+            ],
+            planning_issues=[
+                _issue("EK-10", "Analysis work", ["analysis"]),
+                _issue("EK-11", "Warranty fix", ["warranty"]),
+                _issue("EK-12", "Onboarding", ["onboarding"]),
+            ],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert [group.name for group in report.groups] == ["billable", "non-billable", "project"]
+        assert report.groups[0].total_seconds == 7200
+        assert report.groups[0].lines[0].issue == "EK-10"
+        assert report.groups[0].lines[0].category == "analysis"
+        assert report.groups[0].lines[0].booking_issue == "K-1"
+        # Grand total excludes the 'project' bucket (1800s onboarding)
+        assert report.totals.seconds == 10800
+        assert report.excluded_from_total == ["project"]
+        assert report.warnings == []
+        # Tempo was queried for the booking project with the period
+        tempo.get_worklogs.assert_called_once_with(
+            from_date=date(2026, 8, 1),
+            to_date=date(2026, 8, 31),
+            project_key="K",
+            limit=1000,
+            offset=0,
+        )
+
+    def test_unlabelled_issue_lands_in_uncategorised(self) -> None:
+        """An issue without a category label is visible in the uncategorised bucket."""
+        service, _, _, _ = _make_billing_service(
+            worklogs=[_wl(100, 3600, "K-1")],
+            booking_issues=[_issue("K-1", "EK-10 Undocumented work")],
+            planning_issues=[_issue("EK-10", "Undocumented work", [])],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert [group.name for group in report.groups] == [UNCATEGORISED_BUCKET]
+        assert report.groups[0].lines[0].category is None
+        assert report.totals.seconds == 3600
+
+    def test_unresolvable_shadow_is_uncategorised_with_warning(self) -> None:
+        """A booking issue whose summary carries no planning key is not silently dropped."""
+        service, _, _, _ = _make_billing_service(
+            worklogs=[_wl(100, 3600, "K-1")],
+            booking_issues=[_issue("K-1", "Manually created ticket")],
+            planning_issues=[],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert [group.name for group in report.groups] == [UNCATEGORISED_BUCKET]
+        assert report.groups[0].lines[0].issue == "K-1"
+        assert any("K-1" in warning for warning in report.warnings)
+
+    def test_multiple_category_labels_fail_loudly(self) -> None:
+        """require_exactly_one=true aborts the report, naming the offending labels."""
+        service, _, _, _ = _make_billing_service(
+            worklogs=[_wl(100, 3600, "K-1")],
+            booking_issues=[_issue("K-1", "EK-10 Ambiguous")],
+            planning_issues=[_issue("EK-10", "Ambiguous", ["analysis", "support"])],
+        )
+
+        with pytest.raises(BillingValidationError, match="EK-10"):
+            service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+    def test_multiple_category_labels_lenient_mode(self) -> None:
+        """require_exactly_one=false picks the alphabetically first label and warns."""
+        billing = _BILLING.model_copy(update={"require_exactly_one": False})
+        service, _, _, _ = _make_billing_service(
+            profile=_make_billing_profile(billing=billing),
+            worklogs=[_wl(100, 3600, "K-1")],
+            booking_issues=[_issue("K-1", "EK-10 Ambiguous")],
+            planning_issues=[_issue("EK-10", "Ambiguous", ["support", "analysis"])],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert report.groups[0].lines[0].category == "analysis"
+        assert report.groups[0].bucket == "billable"
+        assert any("multiple category labels" in warning for warning in report.warnings)
+
+    def test_rate_adds_amounts(self) -> None:
+        """A configured rate yields amounts on lines, groups and totals."""
+        billing = _BILLING.model_copy(update={"rate": 100.0})
+        service, _, _, _ = _make_billing_service(
+            profile=_make_billing_profile(billing=billing),
+            worklogs=[_wl(100, 7200, "K-1")],
+            booking_issues=[_issue("K-1", "EK-10 Analysis")],
+            planning_issues=[_issue("EK-10", "Analysis", ["analysis"])],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert report.groups[0].lines[0].amount == 200.0
+        assert report.groups[0].total_amount == 200.0
+        assert report.totals.amount == 200.0
+        assert report.currency == "EUR"
+
+    def test_rate_zero_means_hours_only(self) -> None:
+        """rate = 0 is treated like an absent rate: no amounts anywhere."""
+        billing = _BILLING.model_copy(update={"rate": 0.0})
+        service, _, _, _ = _make_billing_service(
+            profile=_make_billing_profile(billing=billing),
+            worklogs=[_wl(100, 7200, "K-1")],
+            booking_issues=[_issue("K-1", "EK-10 Analysis")],
+            planning_issues=[_issue("EK-10", "Analysis", ["analysis"])],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert report.rate is None
+        assert report.groups[0].lines[0].amount is None
+        assert report.totals.amount is None
+
+    def test_paginates_full_tempo_pages(self) -> None:
+        """A full page of worklogs triggers a second request with an offset."""
+        full_page = [_wl(100, 36, "K-1") for _ in range(1000)]
+        service, tempo, _, _ = _make_billing_service(
+            booking_issues=[_issue("K-1", "EK-10 Analysis")],
+            planning_issues=[_issue("EK-10", "Analysis", ["analysis"])],
+        )
+        tempo.get_worklogs.side_effect = [
+            full_page,
+            [_wl(100, 3600, "K-1")],
+        ]
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert tempo.get_worklogs.call_count == 2
+        assert tempo.get_worklogs.call_args_list[1].kwargs["offset"] == 1000
+        assert report.totals.seconds == 1000 * 36 + 3600
+
+    def test_empty_period_yields_empty_report(self) -> None:
+        """No worklogs in the period => no groups, zero totals, no warnings."""
+        service, _, _, _ = _make_billing_service(worklogs=[])
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert report.groups == []
+        assert report.totals.seconds == 0
+        assert report.warnings == []
+
+    def test_requires_billing_block(self) -> None:
+        """A profile without a billing block fails with a configuration hint."""
+        service, _, _, _ = _make_billing_service(profile=_make_billing_profile(billing=None))
+
+        with pytest.raises(WorkflowConfigError, match="no billing configuration"):
+            service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+    def test_requires_summary_strategy(self) -> None:
+        """Shadow strategies other than 'summary' are refused explicitly."""
+        service, _, _, _ = _make_billing_service(
+            profile=_make_billing_profile(strategy=ShadowTicketStrategy.CUSTOM_FIELD)
+        )
+
+        with pytest.raises(WorkflowConfigError, match="shadow_strategy"):
+            service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+    def test_group_by_category(self) -> None:
+        """--group category groups lines by their category label."""
+        service, _, _, _ = _make_billing_service(
+            worklogs=[_wl(100, 3600, "K-1"), _wl(101, 3600, "K-2")],
+            booking_issues=[_issue("K-1", "EK-10 A"), _issue("K-2", "EK-11 B")],
+            planning_issues=[_issue("EK-10", "A", ["analysis"]), _issue("EK-11", "B", ["support"])],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31), group_by="category")
+
+        assert report.grouped_by == "category"
+        assert [group.name for group in report.groups] == ["analysis", "support"]
+        assert all(group.bucket == "billable" for group in report.groups)
+
+    def test_invalid_group_by(self) -> None:
+        """An unknown grouping is rejected."""
+        service, _, _, _ = _make_billing_service()
+
+        with pytest.raises(ValidationError, match="Invalid group_by"):
+            service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31), group_by="project")
+
+    def test_tempo_key_backfill(self) -> None:
+        """Worklogs without an issue key are resolved via the booking instance."""
+        service, _, booking, _ = _make_billing_service(
+            worklogs=[_wl(100, 3600, None)],
+            booking_issues=[_issue("K-1", "EK-10 Analysis")],
+            planning_issues=[_issue("EK-10", "Analysis", ["analysis"])],
+        )
+        booking.client.issue.return_value = MagicMock(key="K-1")
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        booking.client.issue.assert_called_once_with("100")
+        assert report.groups[0].lines[0].booking_issue == "K-1"
+
+    def test_worklog_without_issue_id_is_skipped(self) -> None:
+        """A Tempo worklog without an issue reference contributes nothing."""
+        worklog = MagicMock()
+        worklog.issue.id = None
+        worklog.issue.key = None
+        service, _, _, _ = _make_billing_service(worklogs=[worklog])
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert report.groups == []
+
+
+class TestValidateBillingLabels:
+    """Test WorkflowService.validate_billing_labels."""
+
+    def test_finds_missing_and_multiple(self) -> None:
+        """Issues with zero or multiple category labels are reported."""
+        service, _, _, planning = _make_billing_service(
+            planning_issues=[
+                _issue("EK-10", "Fine", ["analysis"]),
+                _issue("EK-11", "No label", []),
+                _issue("EK-12", "Two labels", ["analysis", "support"]),
+            ],
+        )
+
+        validation = service.validate_billing_labels()
+
+        planning.search_issues.assert_called_once_with("project = EK", max_results=1000)
+        assert validation.issues_checked == 3
+        assert [(v.issue, v.kind) for v in validation.violations] == [("EK-11", "missing"), ("EK-12", "multiple")]
+        assert validation.violations[1].labels == ["analysis", "support"]
+
+    def test_clean_project_has_no_violations(self) -> None:
+        """A fully labelled project validates clean."""
+        service, _, _, _ = _make_billing_service(
+            planning_issues=[_issue("EK-10", "Fine", ["analysis"])],
+        )
+
+        validation = service.validate_billing_labels()
+
+        assert validation.violations == []
+        assert validation.issues_checked == 1
+
+    def test_truncation_flag(self) -> None:
+        """A project at the fetch limit marks the validation as truncated."""
+        service, _, _, _ = _make_billing_service(
+            planning_issues=[_issue(f"EK-{i}", f"Issue {i}", ["analysis"]) for i in range(1000)],
+        )
+
+        validation = service.validate_billing_labels()
+
+        assert validation.truncated is True
+
+    def test_requires_billing_block(self) -> None:
+        """Validation needs the category labels from the billing block."""
+        service, _, _, _ = _make_billing_service(profile=_make_billing_profile(billing=None))
+
+        with pytest.raises(WorkflowConfigError, match="no billing configuration"):
+            service.validate_billing_labels()

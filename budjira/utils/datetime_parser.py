@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import calendar
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from budjira.utils.errors import ValidationError
 
@@ -108,3 +109,28 @@ def parse_jira_timestamp(timestamp: str | None) -> datetime | None:
         return datetime.fromisoformat(normalized)
     except ValueError:
         return None
+
+
+def parse_month_range(month_str: str) -> tuple[date, date]:
+    """Parse a YYYY-MM string into the first and last day of that month.
+
+    Args:
+        month_str: Month string (e.g., "2026-08")
+
+    Returns:
+        Tuple of (first day, last day) of the month
+
+    Raises:
+        ValidationError: If the format is invalid
+
+    Examples:
+        >>> parse_month_range("2026-02")
+        (datetime.date(2026, 2, 1), datetime.date(2026, 2, 28))
+    """
+    value = month_str.strip()
+    try:
+        first = date.fromisoformat(f"{value}-01")
+    except ValueError:
+        raise ValidationError(f"Invalid month format: '{month_str}'. Expected YYYY-MM (e.g., 2026-08).") from None
+    last_day = calendar.monthrange(first.year, first.month)[1]
+    return first, first.replace(day=last_day)

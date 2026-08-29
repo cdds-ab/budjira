@@ -36,6 +36,36 @@ class ProjectMapping(BaseModel):
     )
 
 
+class BillingConfig(BaseModel):
+    """Billing report configuration for a workflow profile.
+
+    Maps issue labels to free-form billing buckets. Buckets are configuration,
+    not code: every customer contract names them differently, and the report
+    groups by whatever values are configured here.
+    """
+
+    categories: dict[str, str] = Field(
+        default_factory=dict,
+        description="Issue label -> billing bucket (e.g., {'analysis': 'billable', 'warranty': 'non-billable'})",
+    )
+    require_exactly_one: bool = Field(
+        default=True,
+        description="Fail loudly when an issue carries more than one category label (Jira cannot enforce this)",
+    )
+    exclude_from_total: list[str] = Field(
+        default_factory=lambda: ["project"],
+        description="Buckets shown in the report but excluded from the grand total (e.g., fixed-fee work)",
+    )
+    rate: float | None = Field(
+        default=None,
+        description="Hourly rate for amount columns; absent or 0 produces an hours-only report",
+    )
+    currency: str = Field(
+        default="EUR",
+        description="Currency for amounts (display only, no conversion)",
+    )
+
+
 class WorkflowProfile(BaseModel):
     """A workflow profile defining cross-instance relationships."""
 
@@ -66,6 +96,10 @@ class WorkflowProfile(BaseModel):
     overbooking_policy: OverbookingPolicy = Field(
         default=OverbookingPolicy.WARN,
         description="Policy when booking would exceed estimate",
+    )
+    billing: BillingConfig | None = Field(
+        default=None,
+        description="Billing report configuration (label -> bucket mapping, rate); None disables 'workflow billing'",
     )
 
 

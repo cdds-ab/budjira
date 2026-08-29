@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
-from typing import TYPE_CHECKING
+import re
+from datetime import date, datetime
+from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
@@ -12,17 +13,34 @@ from rich.console import Console
 from budjira.config.credentials import CredentialStore
 from budjira.config.settings import get_settings
 from budjira.core.jira_client import JiraClient
-from budjira.models.workflow import BookingStatus, OverbookingPolicy, WorkflowProfile
+from budjira.models.billing import (
+    UNCATEGORISED_BUCKET,
+    BillingGroup,
+    BillingLine,
+    BillingReport,
+    BillingTotals,
+    BillingValidation,
+    BillingViolation,
+)
+from budjira.models.workflow import (
+    BillingConfig,
+    BookingStatus,
+    OverbookingPolicy,
+    ShadowTicketStrategy,
+    WorkflowProfile,
+)
 from budjira.tempo.client import TempoClient
 from budjira.utils.connection import get_active_connection
 from budjira.utils.datetime_parser import parse_datetime_string
 from budjira.utils.errors import (
     AuthenticationError,
+    BillingValidationError,
     ConnectionError,
     JiraAPIError,
     OverbookingError,
     ShadowTicketAmbiguousError,
     ShadowTicketNotFoundError,
+    ValidationError,
     WorkflowConfigError,
 )
 from budjira.utils.time_parser import parse_time_string
@@ -32,6 +50,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 console = Console()
+
+# Tempo API hard cap per request; billing pages through results at this size.
+_BILLING_PAGE_LIMIT = 1000
+
+# Jira search single-page cap for batch fetches (issues per planning project / batch).
+_BILLING_SEARCH_LIMIT = 1000
 
 
 class WorkflowService:
@@ -331,6 +355,300 @@ class WorkflowService:
                 )
 
         return statuses
+
+    def _require_billing_config(self) -> BillingConfig:
+        """Return the profile's billing config, or raise with a TOML hint.
+
+        Raises:
+            WorkflowConfigError: If the profile has no billing block
+        """
+        if self.profile.billing is None:
+            raise WorkflowConfigError(
+                f"Workflow profile '{self.profile.name}' has no billing configuration. "
+                "Add a billing block to the profile in workflows.toml, e.g.:\n"
+                "  [profiles.billing]\n"
+                '  categories = { analysis = "billable", warranty = "non-billable" }'
+            )
+        return self.profile.billing
+
+    def get_billing_report(self, from_date: date, to_date: date, group_by: str = "bucket") -> BillingReport:
+        """Build a billing report over a period by joining Tempo worklogs back to planning issues.
+
+        Inverted join (a handful of API calls regardless of issue count):
+        1. Fetch all Tempo worklogs in the period for each mapped booking project
+        2. Batch-fetch the booking issues (summaries carry the planning key)
+        3. Extract the planning key from each booking summary (summary strategy, read backwards)
+        4. Batch-fetch the planning issues for labels and summaries
+        5. Categorize by label, group by bucket (or category), total
+
+        Args:
+            from_date: First day of the period (inclusive)
+            to_date: Last day of the period (inclusive)
+            group_by: Group lines by "bucket" (default) or "category"
+
+        Returns:
+            BillingReport with groups, totals (excluding configured buckets) and warnings
+
+        Raises:
+            WorkflowConfigError: If no billing block is configured or the shadow
+                strategy is not 'summary'
+            ValidationError: If group_by is invalid
+            BillingValidationError: If require_exactly_one is set and issues carry
+                multiple category labels
+        """
+        billing = self._require_billing_config()
+
+        if group_by not in ("bucket", "category"):
+            raise ValidationError(f"Invalid group_by: '{group_by}'. Expected 'bucket' or 'category'.")
+
+        if self.profile.shadow_strategy != ShadowTicketStrategy.SUMMARY_SEARCH:
+            raise WorkflowConfigError(
+                f"workflow billing requires shadow_strategy = 'summary', but profile '{self.profile.name}' "
+                f"uses '{self.profile.shadow_strategy}'."
+            )
+
+        # A configured rate of 0 means hours-only, same as absent
+        rate = billing.rate if billing.rate else None
+        warnings: list[str] = []
+
+        # 1) Booked seconds per booking issue, paged per booking project
+        seconds_by_issue_id: dict[int, int] = {}
+        issue_keys: dict[int, str] = {}
+        for mapping in self.profile.project_mappings:
+            offset = 0
+            while True:
+                page = self.tempo_client.get_worklogs(
+                    from_date=from_date,
+                    to_date=to_date,
+                    project_key=mapping.booking_project,
+                    limit=_BILLING_PAGE_LIMIT,
+                    offset=offset,
+                )
+                for worklog in page:
+                    if worklog.issue.id is None:
+                        continue
+                    seconds_by_issue_id[worklog.issue.id] = (
+                        seconds_by_issue_id.get(worklog.issue.id, 0) + worklog.timeSpentSeconds
+                    )
+                    if worklog.issue.key:
+                        issue_keys[worklog.issue.id] = worklog.issue.key
+                if len(page) < _BILLING_PAGE_LIMIT:
+                    break
+                offset += _BILLING_PAGE_LIMIT
+
+        if not seconds_by_issue_id:
+            return BillingReport(
+                profile=self.profile.name,
+                period_from=from_date,
+                period_to=to_date,
+                rate=rate,
+                currency=billing.currency,
+                grouped_by=group_by,
+                excluded_from_total=list(billing.exclude_from_total),
+                warnings=warnings,
+            )
+
+        # 2) Backfill booking issue keys Tempo omitted (rare; per-issue lookup)
+        for issue_id in seconds_by_issue_id:
+            if issue_id not in issue_keys:
+                try:
+                    issue_keys[issue_id] = self.booking_jira.client.issue(str(issue_id)).key
+                except JiraAPIError as e:
+                    warnings.append(f"Booking issue ID {issue_id} could not be resolved ({e}); skipped")
+
+        # 3) Batch-fetch booking issue summaries and extract planning keys
+        booking_keys = sorted(issue_keys.values())
+        booking_summaries: dict[str, str] = {}
+        if booking_keys:
+            jql = f"key in ({', '.join(booking_keys)})"
+            for issue in self.booking_jira.search_issues(jql, max_results=max(len(booking_keys), 1)):
+                booking_summaries[issue.key] = issue.summary
+
+        planning_projects = sorted({m.planning_project for m in self.profile.project_mappings})
+        planning_key_pattern = re.compile(r"\b(?:" + "|".join(re.escape(p) for p in planning_projects) + r")-\d+\b")
+
+        # 4) Batch-fetch planning issues for labels and summaries
+        planning_keys_found = {
+            match.group(0) for summary in booking_summaries.values() if (match := planning_key_pattern.search(summary))
+        }
+        planning_issues: dict[str, Any] = {}
+        if planning_keys_found:
+            jql = f"key in ({', '.join(sorted(planning_keys_found))})"
+            for issue in self.planning_jira.search_issues(jql, max_results=max(len(planning_keys_found), 1)):
+                planning_issues[issue.key] = issue
+
+        # 5) Build lines
+        lines: list[BillingLine] = []
+        multi_label_violations: list[str] = []
+        for issue_id, seconds in seconds_by_issue_id.items():
+            booking_key = issue_keys.get(issue_id)
+            if booking_key is None:
+                continue  # already reported in warnings
+
+            booking_summary = booking_summaries.get(booking_key, "")
+            match = planning_key_pattern.search(booking_summary)
+            planning_key = match.group(0) if match else None
+            planning_issue = planning_issues.get(planning_key) if planning_key else None
+
+            if planning_key is None or planning_issue is None:
+                reason = "no planning key in its summary" if planning_key is None else "planning issue not found"
+                warnings.append(f"{booking_key}: {reason}; counted as uncategorised")
+                lines.append(
+                    self._billing_line(
+                        issue=planning_key or booking_key,
+                        booking_issue=booking_key,
+                        category=None,
+                        bucket=UNCATEGORISED_BUCKET,
+                        summary=booking_summary,
+                        seconds=seconds,
+                        rate=rate,
+                    )
+                )
+                continue
+
+            matching = sorted(label for label in planning_issue.labels if label in billing.categories)
+            if len(matching) > 1:
+                if billing.require_exactly_one:
+                    multi_label_violations.append(f"{planning_key} ({', '.join(matching)})")
+                    continue
+                warnings.append(
+                    f"{planning_key} carries multiple category labels ({', '.join(matching)}); using '{matching[0]}'"
+                )
+            category = matching[0] if matching else None
+            bucket = billing.categories[category] if category else UNCATEGORISED_BUCKET
+            lines.append(
+                self._billing_line(
+                    issue=planning_key,
+                    booking_issue=booking_key,
+                    category=category,
+                    bucket=bucket,
+                    summary=planning_issue.summary,
+                    seconds=seconds,
+                    rate=rate,
+                )
+            )
+
+        if multi_label_violations:
+            raise BillingValidationError(
+                f"Issues with multiple category labels: {'; '.join(multi_label_violations)}. "
+                "A report cannot decide between them — fix the labels or set require_exactly_one = false "
+                f"in profile '{self.profile.name}'. "
+                f"Run 'budjira workflow billing --profile {self.profile.name} --validate' to find all violations."
+            )
+
+        # 6) Group, order, total
+        groups = self._group_billing_lines(lines, billing, group_by, rate)
+        included = [line for line in lines if line.bucket not in billing.exclude_from_total]
+        totals = BillingTotals(
+            seconds=sum(line.seconds for line in included),
+            hours=round(sum(line.seconds for line in included) / 3600, 2),
+            amount=round(sum(line.seconds for line in included) / 3600 * rate, 2) if rate else None,
+        )
+
+        return BillingReport(
+            profile=self.profile.name,
+            period_from=from_date,
+            period_to=to_date,
+            rate=rate,
+            currency=billing.currency,
+            grouped_by=group_by,
+            groups=groups,
+            excluded_from_total=list(billing.exclude_from_total),
+            totals=totals,
+            warnings=warnings,
+        )
+
+    @staticmethod
+    def _billing_line(
+        *,
+        issue: str,
+        booking_issue: str,
+        category: str | None,
+        bucket: str,
+        summary: str,
+        seconds: int,
+        rate: float | None,
+    ) -> BillingLine:
+        """Build a BillingLine with derived hours/amount."""
+        return BillingLine(
+            issue=issue,
+            booking_issue=booking_issue,
+            category=category,
+            bucket=bucket,
+            summary=summary,
+            seconds=seconds,
+            hours=round(seconds / 3600, 2),
+            amount=round(seconds / 3600 * rate, 2) if rate else None,
+        )
+
+    @staticmethod
+    def _group_billing_lines(
+        lines: list[BillingLine],
+        billing: BillingConfig,
+        group_by: str,
+        rate: float | None,
+    ) -> list[BillingGroup]:
+        """Group lines by bucket or category, in config order with uncategorised last."""
+        groups: dict[str, BillingGroup] = {}
+        for line in sorted(lines, key=lambda line_: line_.issue):
+            name = line.bucket if group_by == "bucket" else (line.category or UNCATEGORISED_BUCKET)
+            group = groups.setdefault(name, BillingGroup(name=name, bucket=line.bucket))
+            group.lines.append(line)
+        for group in groups.values():
+            group.total_seconds = sum(line.seconds for line in group.lines)
+            group.total_hours = round(group.total_seconds / 3600, 2)
+            group.total_amount = round(sum(line.amount or 0.0 for line in group.lines), 2) if rate else None
+
+        order = list(dict.fromkeys(billing.categories.values())) if group_by == "bucket" else list(billing.categories)
+        return sorted(
+            groups.values(),
+            key=lambda g: (
+                g.name == UNCATEGORISED_BUCKET,
+                order.index(g.name) if g.name in order else len(order),
+                g.name,
+            ),
+        )
+
+    def validate_billing_labels(self) -> BillingValidation:
+        """Check category-label hygiene across the profile's planning projects.
+
+        Finds issues with no category label ('missing') and issues with more
+        than one ('multiple'), without producing a report.
+
+        Returns:
+            BillingValidation with all violations found
+
+        Raises:
+            WorkflowConfigError: If the profile has no billing block
+        """
+        billing = self._require_billing_config()
+
+        violations: list[BillingViolation] = []
+        issues_checked = 0
+        truncated = False
+        for mapping in self.profile.project_mappings:
+            issues = self.planning_jira.search_issues(
+                f"project = {mapping.planning_project}",
+                max_results=_BILLING_SEARCH_LIMIT,
+            )
+            if len(issues) >= _BILLING_SEARCH_LIMIT:
+                truncated = True
+            for issue in issues:
+                issues_checked += 1
+                matching = sorted(label for label in issue.labels if label in billing.categories)
+                if not matching:
+                    violations.append(BillingViolation(issue=issue.key, kind="missing", summary=issue.summary))
+                elif len(matching) > 1:
+                    violations.append(
+                        BillingViolation(issue=issue.key, kind="multiple", labels=matching, summary=issue.summary)
+                    )
+
+        return BillingValidation(
+            profile=self.profile.name,
+            issues_checked=issues_checked,
+            violations=violations,
+            truncated=truncated,
+        )
 
     def _check_overbooking(
         self,

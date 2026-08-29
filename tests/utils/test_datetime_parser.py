@@ -1,6 +1,6 @@
 """Tests for datetime parsing utilities."""
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from budjira.utils.datetime_parser import parse_datetime_string
@@ -155,3 +155,39 @@ class TestParseDatetimeString:
         """'tomorrow' is rejected when future dates are not allowed."""
         with pytest.raises(ValidationError, match="cannot be in the future"):
             parse_datetime_string("tomorrow")
+
+
+class TestParseMonthRange:
+    """Tests for parse_month_range function (#117)."""
+
+    def test_regular_month(self) -> None:
+        """A month resolves to its first and last day."""
+        from budjira.utils.datetime_parser import parse_month_range
+
+        assert parse_month_range("2026-08") == (date(2026, 8, 1), date(2026, 8, 31))
+
+    def test_february_non_leap_year(self) -> None:
+        """February ends on the 28th in a non-leap year."""
+        from budjira.utils.datetime_parser import parse_month_range
+
+        assert parse_month_range("2026-02") == (date(2026, 2, 1), date(2026, 2, 28))
+
+    def test_february_leap_year(self) -> None:
+        """February ends on the 29th in a leap year."""
+        from budjira.utils.datetime_parser import parse_month_range
+
+        assert parse_month_range("2028-02") == (date(2028, 2, 1), date(2028, 2, 29))
+
+    def test_invalid_format(self) -> None:
+        """Non-YYYY-MM input is rejected with a clear message."""
+        from budjira.utils.datetime_parser import parse_month_range
+
+        with pytest.raises(ValidationError, match="Invalid month format"):
+            parse_month_range("2026-8")
+
+    def test_invalid_month_number(self) -> None:
+        """A month outside 1-12 is rejected."""
+        from budjira.utils.datetime_parser import parse_month_range
+
+        with pytest.raises(ValidationError, match="Invalid month format"):
+            parse_month_range("2026-13")
