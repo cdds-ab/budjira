@@ -299,3 +299,90 @@ class TestDeleteComment:
 
         with pytest.raises(JiraAPIError, match="Unexpected error deleting comment"):
             service.delete("PROJ-123", "10234")
+
+
+class TestAddAdfComment:
+    """Test add_adf method (REST API v3, inline media embeds)."""
+
+    def _doc(self) -> dict[str, object]:
+        """Build a minimal ADF document."""
+        return {
+            "type": "doc",
+            "version": 1,
+            "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Hello"}]}],
+        }
+
+    def _wire(self, mock_client: MagicMock, *, ok: bool = True, status_code: int = 200, text: str = "") -> MagicMock:
+        """Wire the private URL/session members used by add_adf."""
+        mock_client._get_url.return_value = "https://test.atlassian.net/rest/api/3/issue/PROJ-123/comment"
+        response = MagicMock()
+        response.ok = ok
+        response.status_code = status_code
+        response.text = text
+        response.json.return_value = {
+            "id": "10234",
+            "author": {"displayName": "John Doe"},
+            "created": "2026-08-20T10:00:00.000+0000",
+        }
+        mock_client._session.post.return_value = response
+        return response
+
+    def test_add_adf_success(self) -> None:
+        """Test posting an ADF document to the v3 comment endpoint."""
+        mock_client = MagicMock()
+        self._wire(mock_client)
+        doc = self._doc()
+
+        service = CommentService(mock_client)
+        result = service.add_adf("PROJ-123", doc)
+
+        mock_client._get_url.assert_called_once_with(
+            "issue/PROJ-123/comment",
+            base="{server}/rest/api/3/{path}",
+        )
+        mock_client._session.post.assert_called_once_with(
+            "https://test.atlassian.net/rest/api/3/issue/PROJ-123/comment",
+            json={"body": doc},
+        )
+        assert result == {
+            "id": "10234",
+            "author": "John Doe",
+            "created": "2026-08-20T10:00:00.000+0000",
+        }
+
+    def test_add_adf_issue_not_found(self) -> None:
+        """Test 404 response raises InvalidIssueError."""
+        mock_client = MagicMock()
+        self._wire(mock_client, ok=False, status_code=404, text="Issue does not exist")
+
+        service = CommentService(mock_client)
+        with pytest.raises(InvalidIssueError, match="PROJ-123"):
+            service.add_adf("PROJ-123", self._doc())
+
+    def test_add_adf_permission_denied(self) -> None:
+        """Test 403 response raises PermissionError."""
+        mock_client = MagicMock()
+        self._wire(mock_client, ok=False, status_code=403, text="Forbidden")
+
+        service = CommentService(mock_client)
+        with pytest.raises(BudjiraPermissionError, match="permission"):
+            service.add_adf("PROJ-123", self._doc())
+
+    def test_add_adf_api_error(self) -> None:
+        """Test other error responses raise JiraAPIError."""
+        mock_client = MagicMock()
+        self._wire(mock_client, ok=False, status_code=500, text="Internal Server Error")
+
+        service = CommentService(mock_client)
+        with pytest.raises(JiraAPIError, match="Add ADF comment failed"):
+            service.add_adf("PROJ-123", self._doc())
+
+    def test_add_adf_unexpected_error(self) -> None:
+        """Test an unexpected session failure raises JiraAPIError."""
+        mock_client = MagicMock()
+        mock_client._get_url.return_value = "https://test.atlassian.net/rest/api/3/issue/PROJ-123/comment"
+        mock_client._session.post.side_effect = ValueError("boom")
+
+        service = CommentService(mock_client)
+        with pytest.raises(JiraAPIError, match="Unexpected error adding ADF comment"):
+            service.add_adf("PROJ-123", self._doc())

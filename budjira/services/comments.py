@@ -61,6 +61,65 @@ class CommentService(BaseJiraService):
         except Exception as e:
             raise JiraAPIError(f"Unexpected error adding comment: {e}") from e
 
+    def add_adf(self, issue_key: str, doc: dict[str, Any]) -> dict[str, Any]:
+        """Add a comment whose body is an ADF document (REST API v3).
+
+        Needed for inline media embeds: the v2 endpoint stores wiki markup, which
+        cannot render images inside a comment body. The doc is posted verbatim to
+        ``/rest/api/3/issue/{key}/comment``.
+
+        Args:
+            issue_key: Issue key (e.g., PROJ-123)
+            doc: ADF document ({"type": "doc", "version": 1, "content": [...]})
+
+        Returns:
+            Dictionary with comment details (id, author, created)
+
+        Raises:
+            InvalidIssueError: If issue not found
+            PermissionError: If user lacks permission to comment
+            JiraAPIError: If comment creation fails
+        """
+        try:
+            self._log_operation("Add ADF comment", issue_key=issue_key)
+            # The jira library has no public v3 comment endpoint; build the URL
+            # and reuse its authenticated session (private members by necessity).
+            url = self.client._get_url(
+                f"issue/{issue_key}/comment",
+                base="{server}/rest/api/3/{path}",
+            )
+            response = self.client._session.post(url, json={"body": doc})
+            if not response.ok:
+                raise JIRAError(
+                    text=response.text,
+                    status_code=response.status_code,
+                    url=url,
+                )
+            data: dict[str, Any] = response.json()
+            return {
+                "id": data.get("id"),
+                "author": (data.get("author") or {}).get("displayName", "Unknown"),
+                "created": data.get("created"),
+            }
+
+        except JIRAError as e:
+            if e.status_code == 404:
+                raise InvalidIssueError(
+                    f"Issue '{issue_key}' not found. Check that the issue exists and you have permission to view it."
+                ) from e
+            elif e.status_code == 403:
+                raise PermissionError(
+                    f"You don't have permission to comment on '{issue_key}'. "
+                    f"Check your Jira permissions or contact your administrator."
+                ) from e
+            else:
+                self._handle_jira_error(e, "Add ADF comment", issue_key=issue_key)
+                raise  # Ensure type checker knows this path raises
+        except (InvalidIssueError, PermissionError, JiraAPIError):
+            raise
+        except Exception as e:
+            raise JiraAPIError(f"Unexpected error adding ADF comment to '{issue_key}': {e}") from e
+
     def list(self, issue_key: str) -> list[dict[str, Any]]:
         """List all comments on an issue.
 

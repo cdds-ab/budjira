@@ -8,6 +8,7 @@ from rich.console import Console
 from budjira import __version__
 from budjira.cli import (
     ai,
+    attach,
     comment,
     connect,
     create,
@@ -62,6 +63,9 @@ app.add_typer(worklog.app, name="worklog")
 
 # Register top-level show command
 app.command(name="show")(show.show_issue)
+
+# Register top-level attach command
+app.command(name="attach")(attach.attach_files)
 
 
 def is_quiet_mode() -> bool:

@@ -8,6 +8,7 @@ from budjira.models.connection import Connection
 from budjira.utils.errors import (
     InvalidIssueError,
     PermissionError,
+    ValidationError,
 )
 from typer.testing import CliRunner
 
@@ -725,3 +726,196 @@ class TestCommentDeleteCommand:
         assert result.exit_code == 1
         assert "Error:" in result.stdout
         assert "not found" in result.stdout
+
+
+class TestCommentAddAttachHelpers:
+    """Unit tests for the attachment reference helpers."""
+
+    def test_is_image(self):
+        """Known image extensions are detected case-insensitively."""
+        from budjira.cli.comment import _is_image
+
+        assert _is_image("chart.png")
+        assert _is_image("PHOTO.JPG")
+        assert _is_image("anim.webp")
+        assert not _is_image("report.pdf")
+        assert not _is_image("archive.zip")
+
+    def test_append_attachment_refs_image(self):
+        """Images are referenced with wiki !file! markup."""
+        from budjira.cli.comment import _append_attachment_refs
+
+        result = _append_attachment_refs("See below", [{"filename": "chart.png"}])
+        assert result == "See below\n!chart.png!"
+
+    def test_append_attachment_refs_file(self):
+        """Non-image files are referenced with wiki [^file] markup."""
+        from budjira.cli.comment import _append_attachment_refs
+
+        result = _append_attachment_refs("Details", [{"filename": "report.pdf"}])
+        assert result == "Details\n[^report.pdf]"
+
+    def test_append_attachment_refs_empty_text(self):
+        """Without text the references stand alone."""
+        from budjira.cli.comment import _append_attachment_refs
+
+        result = _append_attachment_refs("", [{"filename": "chart.png"}])
+        assert result == "!chart.png!"
+
+    def test_build_adf_comment_text_and_media(self):
+        """ADF doc has paragraphs first, then one mediaSingle per embedded file."""
+        from budjira.cli.comment import _build_adf_comment
+
+        doc = _build_adf_comment(
+            "Before/after:\nsecond line",
+            [{"id": "10001", "filename": "chart.png"}],
+            [{"id": "10002", "filename": "report.pdf"}],
+        )
+
+        assert doc["type"] == "doc"
+        assert doc["version"] == 1
+        paragraphs = [node for node in doc["content"] if node["type"] == "paragraph"]
+        media = [node for node in doc["content"] if node["type"] == "mediaSingle"]
+        assert [p["content"][0]["text"] for p in paragraphs] == ["Before/after:", "second line", "Attached: report.pdf"]
+        assert len(media) == 1
+        assert media[0]["content"][0]["type"] == "media"
+        assert media[0]["content"][0]["attrs"] == {"id": "10001", "type": "file"}
+
+    def test_build_adf_comment_media_only(self):
+        """An ADF doc without text is valid when it carries media nodes."""
+        from budjira.cli.comment import _build_adf_comment
+
+        doc = _build_adf_comment("", [{"id": "10001", "filename": "chart.png"}], [])
+
+        assert len(doc["content"]) == 1
+        assert doc["content"][0]["type"] == "mediaSingle"
+
+
+class TestCommentAddAttachments:
+    """Tests for 'budjira comment add --attach/--embed' (#115)."""
+
+    @pytest.fixture
+    def sample_file(self, tmp_path):
+        """Create a non-empty image file."""
+        file = tmp_path / "chart.png"
+        file.write_bytes(b"\x89PNG fake image data")
+        return file
+
+    def _wire_client(
+        self, mock_jira_client_class: MagicMock, *, filename: str = "chart.png", attachment_id: str = "10001"
+    ) -> MagicMock:
+        """Wire a JiraClient mock with attachment upload and comment creation."""
+        mock_client = MagicMock()
+        mock_client.attachments.add.return_value = {
+            "id": attachment_id,
+            "filename": filename,
+            "size": 100,
+            "mime_type": "image/png",
+            "content": f"https://test.atlassian.net/attachments/content/{attachment_id}",
+        }
+        mock_client.add_comment.return_value = {
+            "id": "20001",
+            "author": "John Doe",
+            "created": "2026-08-20T10:00:00.000+0000",
+        }
+        mock_client.comments.add_adf.return_value = {
+            "id": "20002",
+            "author": "John Doe",
+            "created": "2026-08-20T10:00:00.000+0000",
+        }
+        mock_jira_client_class.from_connection.return_value = mock_client
+        return mock_client
+
+    @patch("budjira.cli.comment.JiraClient")
+    @patch("budjira.cli.comment.get_active_connection")
+    def test_add_with_attach_image(self, mock_get_conn, mock_jira_client_class, mock_connection, sample_file):
+        """--attach uploads the file and references it via wiki markup."""
+        mock_get_conn.return_value = mock_connection
+        mock_client = self._wire_client(mock_jira_client_class)
+
+        result = runner.invoke(app, ["comment", "add", "TEST-123", "See the chart", "--attach", str(sample_file)])
+
+        assert result.exit_code == 0
+        assert "Attached: chart.png" in result.stdout
+        mock_client.attachments.add.assert_called_once_with("TEST-123", sample_file)
+        mock_client.add_comment.assert_called_once_with("TEST-123", "See the chart\n!chart.png!")
+        mock_client.comments.add_adf.assert_not_called()
+
+    @patch("budjira.cli.comment.JiraClient")
+    @patch("budjira.cli.comment.get_active_connection")
+    def test_add_with_attach_no_text_skips_editor(
+        self, mock_get_conn, mock_jira_client_class, mock_connection, sample_file
+    ):
+        """Files alone carry the comment; the editor does not open."""
+        mock_get_conn.return_value = mock_connection
+        mock_client = self._wire_client(mock_jira_client_class)
+
+        with patch("budjira.cli.comment.open_editor") as mock_editor:
+            result = runner.invoke(app, ["comment", "add", "TEST-123", "--attach", str(sample_file)])
+
+        assert result.exit_code == 0
+        mock_editor.assert_not_called()
+        mock_client.add_comment.assert_called_once_with("TEST-123", "!chart.png!")
+
+    @patch("budjira.cli.comment.JiraClient")
+    @patch("budjira.cli.comment.get_active_connection")
+    def test_add_with_embed_uses_adf(self, mock_get_conn, mock_jira_client_class, mock_connection, sample_file):
+        """--embed uploads and posts an ADF comment with a mediaSingle node."""
+        mock_get_conn.return_value = mock_connection
+        mock_client = self._wire_client(mock_jira_client_class)
+
+        result = runner.invoke(app, ["comment", "add", "TEST-123", "Before/after:", "--embed", str(sample_file)])
+
+        assert result.exit_code == 0
+        assert "Embedded: chart.png" in result.stdout
+        mock_client.attachments.add.assert_called_once_with("TEST-123", sample_file)
+        mock_client.add_comment.assert_not_called()
+        mock_client.comments.add_adf.assert_called_once()
+        issue_key, doc = mock_client.comments.add_adf.call_args.args
+        assert issue_key == "TEST-123"
+        assert doc["type"] == "doc"
+        media = [node for node in doc["content"] if node["type"] == "mediaSingle"]
+        assert media[0]["content"][0]["attrs"]["id"] == "10001"
+
+    @patch("budjira.cli.comment.JiraClient")
+    @patch("budjira.cli.comment.get_active_connection")
+    def test_add_with_attach_and_embed(
+        self, mock_get_conn, mock_jira_client_class, mock_connection, sample_file, tmp_path
+    ):
+        """--attach and --embed combine into one ADF comment."""
+        report = tmp_path / "report.pdf"
+        report.write_bytes(b"%PDF fake report")
+        mock_get_conn.return_value = mock_connection
+        mock_client = self._wire_client(mock_jira_client_class)
+        mock_client.attachments.add.side_effect = [
+            {"id": "10001", "filename": "chart.png", "size": 100, "mime_type": "image/png", "content": ""},
+            {"id": "10002", "filename": "report.pdf", "size": 100, "mime_type": "application/pdf", "content": ""},
+        ]
+
+        result = runner.invoke(
+            app,
+            ["comment", "add", "TEST-123", "Results", "--embed", str(sample_file), "--attach", str(report)],
+        )
+
+        assert result.exit_code == 0
+        assert mock_client.attachments.add.call_count == 2
+        mock_client.add_comment.assert_not_called()
+        doc = mock_client.comments.add_adf.call_args.args[1]
+        texts = [
+            node["content"][0]["text"] for node in doc["content"] if node["type"] == "paragraph" and node.get("content")
+        ]
+        assert "Attached: report.pdf" in texts
+
+    @patch("budjira.cli.comment.JiraClient")
+    @patch("budjira.cli.comment.get_active_connection")
+    def test_add_attach_upload_fails(self, mock_get_conn, mock_jira_client_class, mock_connection, sample_file):
+        """A failed upload aborts before the comment is posted."""
+        mock_get_conn.return_value = mock_connection
+        mock_client = self._wire_client(mock_jira_client_class)
+        mock_client.attachments.add.side_effect = ValidationError("File is empty: 'chart.png'")
+
+        result = runner.invoke(app, ["comment", "add", "TEST-123", "text", "--attach", str(sample_file)])
+
+        assert result.exit_code == 1
+        assert "File is empty" in result.stdout
+        mock_client.add_comment.assert_not_called()

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -22,12 +24,77 @@ app = typer.Typer(help="Manage comments on Jira issues (add, list, show, update,
 _PREVIEW_LENGTH = 100
 _LIST_PREVIEW_LENGTH = 80
 
+# Extensions Jira renders as images in wiki markup (!file!) and inline media
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg", ".webp"}
+
+
+def _is_image(filename: str) -> bool:
+    """Check whether a filename looks like an embeddable image."""
+    return Path(filename).suffix.lower() in _IMAGE_EXTENSIONS
+
+
+def _append_attachment_refs(text: str, attachments: list[dict[str, Any]]) -> str:
+    """Append wiki-markup references for uploaded attachments to the comment text.
+
+    Images are embedded as ``!file!`` (rendered in the comment on API v2), other
+    files are linked as ``[^file]``.
+    """
+    refs = [f"!{a['filename']}!" if _is_image(a["filename"]) else f"[^{a['filename']}]" for a in attachments]
+    parts = [text.rstrip()] if text.strip() else []
+    parts.extend(refs)
+    return "\n".join(parts)
+
+
+def _build_adf_comment(
+    text: str,
+    embedded: list[dict[str, Any]],
+    attached: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build an ADF comment body with inline media for embedded attachments.
+
+    Text becomes one paragraph per non-empty line; each embedded file becomes a
+    ``mediaSingle`` node referencing the uploaded attachment's id, so the image
+    renders inside the comment body (Jira Cloud, REST API v3).
+    """
+    content: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        if line.strip():
+            content.append({"type": "paragraph", "content": [{"type": "text", "text": line}]})
+    if attached:
+        names = ", ".join(a["filename"] for a in attached)
+        content.append({"type": "paragraph", "content": [{"type": "text", "text": f"Attached: {names}"}]})
+    for attachment in embedded:
+        content.append(
+            {
+                "type": "mediaSingle",
+                "attrs": {"layout": "center"},
+                "content": [{"type": "media", "attrs": {"id": str(attachment["id"]), "type": "file"}}],
+            }
+        )
+    return {"type": "doc", "version": 1, "content": content}
+
 
 @app.command(name="add")
 def add_comment(
     issue_key: str = typer.Argument(..., help="Issue key (e.g., PROJ-123)"),
     text: str | None = typer.Argument(None, help="Comment text (omit to open editor)"),
     editor: bool = typer.Option(False, "--editor", "-e", help="Open editor for multi-line comment"),
+    attach: list[Path] | None = typer.Option(
+        None,
+        "--attach",
+        help="Attach file(s) to the issue and reference them in the comment",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+    ),
+    embed: list[Path] | None = typer.Option(
+        None,
+        "--embed",
+        help="Embed image file(s) inline in the comment body (Jira Cloud)",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+    ),
     connection_name: str | None = typer.Option(
         None,
         "--connection",
@@ -37,7 +104,10 @@ def add_comment(
 ) -> None:
     """Add a comment to a Jira issue.
 
-    Add comments without logging time (unlike worklog add).
+    Add comments without logging time (unlike worklog add). Files can be
+    uploaded along with the comment: '--attach' references them from the
+    comment text, '--embed' renders images inline in the comment body
+    (Jira Cloud only).
 
     Examples:
         # Quick single-line comment
@@ -46,15 +116,21 @@ def add_comment(
         # Multi-line comment via editor
         budjira comment add PROJ-123 --editor
 
-        # Open editor if no text provided
-        budjira comment add PROJ-123
+        # Comment with an attachment reference
+        budjira comment add PROJ-123 "See the chart" --attach chart.png
+
+        # Comment with an image embedded inline (Jira Cloud)
+        budjira comment add PROJ-123 "Before/after:" --embed chart.png
     """
     try:
         # Resolve connection
         connection = get_active_connection(connection_name)
 
-        # Get comment text
-        if editor or text is None:
+        attach = attach or []
+        embed = embed or []
+
+        # Get comment text (skip the editor when files carry the comment)
+        if editor or (text is None and not attach and not embed):
             # Open editor for multi-line input
             initial_content = text if text else ""
             comment_text = open_editor(initial_content, file_extension=".md")
@@ -64,11 +140,28 @@ def add_comment(
                 console.print("[yellow]No comment text provided. Aborting.[/yellow]")
                 raise typer.Exit(0)
         else:
-            comment_text = text
+            comment_text = text or ""
 
-        # Create Jira client and add comment
+        # Create Jira client
         jira_client = JiraClient.from_connection(connection)
-        result = jira_client.add_comment(issue_key, comment_text)
+
+        if embed:
+            # Inline media needs ADF (REST API v3); upload first, then reference
+            # the attachment ids in media nodes.
+            embedded = [jira_client.attachments.add(issue_key, path) for path in embed]
+            attached = [jira_client.attachments.add(issue_key, path) for path in attach]
+            doc = _build_adf_comment(comment_text, embedded, attached)
+            result = jira_client.comments.add_adf(issue_key, doc)
+            for attachment in embedded:
+                console.print(f"  [dim]Embedded:[/dim] {attachment['filename']}")
+        elif attach:
+            attached = [jira_client.attachments.add(issue_key, path) for path in attach]
+            comment_text = _append_attachment_refs(comment_text, attached)
+            result = jira_client.add_comment(issue_key, comment_text)
+            for attachment in attached:
+                console.print(f"  [dim]Attached:[/dim] {attachment['filename']}")
+        else:
+            result = jira_client.add_comment(issue_key, comment_text)
 
         # Display success message
         console.print(f"\n[green]✓[/green] Comment added to {issue_key}")
@@ -78,10 +171,11 @@ def add_comment(
             console.print(f"  [dim]Created:[/dim] {result['created']}")
 
         # Show preview of comment (first 100 chars)
-        preview = comment_text[:100]
-        if len(comment_text) > 100:
-            preview += "..."
-        console.print(f"\n[dim]Preview:[/dim] {preview}")
+        if comment_text:
+            preview = comment_text[:100]
+            if len(comment_text) > 100:
+                preview += "..."
+            console.print(f"\n[dim]Preview:[/dim] {preview}")
 
     except BudjiraError as e:
         console.print(f"[red]Error:[/red] {e}")

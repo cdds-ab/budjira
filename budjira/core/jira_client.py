@@ -14,6 +14,7 @@ from jira.exceptions import JIRAError
 
 from budjira.config.credentials import CredentialStore
 from budjira.services import (
+    AttachmentService,
     CommentService,
     EpicService,
     IssueService,
@@ -50,6 +51,7 @@ class JiraClient:
     - TransitionService: Status workflows
     - LabelService: Label management
     - CommentService: Comments
+    - AttachmentService: File attachments
     - MetadataService: Projects, issue types, priorities, users
     """
 
@@ -97,6 +99,7 @@ class JiraClient:
         self.transitions = TransitionService(self._client)
         self.labels = LabelService(self._client)
         self.comments = CommentService(self._client)
+        self.attachments = AttachmentService(self._client)
         self.metadata = MetadataService(self._client)
         self.links = LinkService(self._client)
         self.sprints = SprintService(self._client)
