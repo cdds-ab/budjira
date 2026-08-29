@@ -1,6 +1,6 @@
 [project]
 name = "budjira"
-version = "1.26.0"
+version = "1.27.0"
 description = "A CLI buddy for Jira - efficient command-line interaction with Jira Cloud"
 authors = [
     {name = "cdds-ab", email = "info@cdds.de"}
@@ -192,7 +192,7 @@ skips = ["B101"]  # assert_used - we use asserts in tests
 # Commitizen configuration
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "1.26.0"
+version = "1.27.0"
 version_files = [
     "pyproject.toml:version",
     "budjira/__init__.py:__version__",

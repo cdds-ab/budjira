@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.27.0 (2026-08-29)
+
+### Feat
+
+- **workflow**: add billing report command for workflow profiles
+
 ## v1.26.0 (2026-08-29)
 
 ### Feat
