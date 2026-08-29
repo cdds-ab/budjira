@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.27.4 (2026-08-29)
+
+### Fix
+
+- **workflow**: never sum money across buckets with different billing semantics
+
 ## v1.27.3 (2026-08-29)
 
 ### Fix
