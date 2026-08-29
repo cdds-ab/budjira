@@ -56,6 +56,12 @@ class BillingConfig(BaseModel):
         default_factory=lambda: ["project"],
         description="Buckets shown in the report but excluded from the grand total (e.g., fixed-fee work)",
     )
+    chargeable_buckets: list[str] = Field(
+        default_factory=lambda: ["billable"],
+        description="Buckets that are actually charged to the customer — amounts and the money total "
+        "cover only these. Invariant: no single currency figure may span buckets with different "
+        "billing semantics, so non-chargeable buckets render hours-only even when a rate is set.",
+    )
     rate: float | None = Field(
         default=None,
         description="Hourly rate for amount columns; absent or 0 produces an hours-only report",

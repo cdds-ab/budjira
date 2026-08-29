@@ -74,7 +74,12 @@ class BillingGroup(BaseModel):
 
 
 class BillingTotals(BaseModel):
-    """Grand totals over all non-excluded buckets."""
+    """Grand totals: hours over all non-excluded buckets, money over chargeable buckets only.
+
+    The invariant from the billing design: no single currency figure may span
+    buckets with different billing semantics, so ``amount`` sums only lines in
+    the profile's chargeable buckets (and is None for hours-only reports).
+    """
 
     seconds: int = 0
     hours: float = 0.0
@@ -112,6 +117,10 @@ class BillingReport(BaseModel):
     excluded_from_total: list[str] = Field(
         default_factory=list,
         description="Buckets excluded from the grand total",
+    )
+    chargeable_buckets: list[str] = Field(
+        default_factory=list,
+        description="Buckets the money column and money total cover (others render hours-only)",
     )
     totals: BillingTotals = Field(
         default_factory=BillingTotals,

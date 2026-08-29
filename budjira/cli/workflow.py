@@ -799,10 +799,11 @@ def _filter_report_by_bucket(report: BillingReport, bucket: str) -> BillingRepor
     report.groups = [group for group in report.groups if group.bucket == bucket]
     lines = [line for group in report.groups for line in group.lines]
     total_seconds = sum(line.seconds for line in lines)
+    is_chargeable = bucket in report.chargeable_buckets
     report.totals = BillingTotals(
         seconds=total_seconds,
         hours=round(total_seconds / 3600, 2),
-        amount=round(total_seconds / 3600 * report.rate, 2) if report.rate else None,
+        amount=round(total_seconds / 3600 * report.rate, 2) if report.rate and is_chargeable else None,
     )
     return report
 
@@ -852,10 +853,12 @@ def _render_billing_report(report: BillingReport) -> None:
     excluded_present = [b for b in report.excluded_from_total if any(g.bucket == b for g in report.groups)]
     if excluded_present:
         excluded_note = f" [dim](excluding: {', '.join(excluded_present)})[/dim]"
-    total_line = f"\n[bold]Total:[/bold] {_format_seconds(report.totals.seconds)} ({report.totals.hours:.2f}h)"
+    total_line = f"\n[bold]Total:[/bold] {_format_seconds(report.totals.seconds)}{excluded_note}"
     if report.totals.amount is not None:
-        total_line += f" — {report.totals.amount:.2f} {report.currency}"
-    console.print(total_line + excluded_note)
+        # Labeled explicitly so the figure cannot be mistaken for an invoice total:
+        # it sums only the profile's chargeable buckets.
+        total_line += f" [dim]|[/dim] [bold]Chargeable:[/bold] {report.totals.amount:.2f} {report.currency}"
+    console.print(total_line)
 
     for warning in report.warnings:
         console.print(f"[yellow]Warning:[/yellow] {warning}")

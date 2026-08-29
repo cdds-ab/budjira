@@ -766,9 +766,15 @@ categories = { analysis = "billable", warranty = "non-billable", onboarding = "p
 
 require_exactly_one = true        # fail loudly on issues with several category labels
 exclude_from_total = ["project"]  # shown in the report, but outside the grand total
+chargeable_buckets = ["billable"] # only these get amounts and feed the money total
 # rate = 95                       # optional; absent or 0 => hours-only report
 # currency = "EUR"
 ```
+
+With a rate set, amounts and the `Chargeable:` money total cover only the
+chargeable buckets — non-chargeable buckets render hours-only. The report never
+sums a single currency figure across buckets with different billing semantics,
+so the money total cannot be mistaken for an invoice it is not.
 
 ```bash
 # Monthly report (defaults to the current month)

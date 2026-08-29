@@ -1422,6 +1422,7 @@ time booked on shadow tickets (Tempo) by billing bucket. Driven by an optional
 categories = { analysis = "billable", warranty = "non-billable", onboarding = "project" }
 require_exactly_one = true        # default: fail loudly on issues with several category labels
 exclude_from_total = ["project"]  # shown in the report, but outside the grand total
+chargeable_buckets = ["billable"] # default: only these buckets get amounts and feed the money total
 # rate = 95                       # optional; absent or 0 => hours-only report
 # currency = "EUR"
 ```
@@ -1429,6 +1430,9 @@ exclude_from_total = ["project"]  # shown in the report, but outside the grand t
 **Behavior:**
 - Period: `--month YYYY-MM` (default: current month) or `--from`/`--to` (YYYY-MM-DD)
 - Rows: planning issue, booking issue, category, hours, summary (+ amount when a rate is set)
+- Amounts and the money total cover only `chargeable_buckets` (default `["billable"]`);
+  other buckets render hours-only — no currency figure ever spans buckets with different
+  billing semantics, so the money total cannot be mistaken for an invoice it is not
 - Issues without a category label land in an explicit `uncategorised` bucket — never silently dropped
 - `--group category` groups by label instead of bucket; `--bucket NAME` filters to one bucket
 - `--validate` checks label hygiene across the profile's planning projects (no category label /

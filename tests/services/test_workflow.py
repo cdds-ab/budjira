@@ -936,6 +936,50 @@ class TestBillingReport:
         assert report.groups[0].lines[0].amount is None
         assert report.totals.amount is None
 
+    def test_money_never_spans_billing_semantics(self) -> None:
+        """#120: amounts and the money total cover only chargeable buckets.
+
+        A combined figure over billable + non-billable would look like an
+        invoice total without being one.
+        """
+        billing = _BILLING.model_copy(update={"rate": 100.0})
+        service, _, _, _ = _make_billing_service(
+            profile=_make_billing_profile(billing=billing),
+            worklogs=[_wl(100, 7200, "K-1"), _wl(101, 3600, "K-2")],
+            booking_issues=[_issue("K-1", "EK-10 Analysis"), _issue("K-2", "EK-11 Warranty fix")],
+            planning_issues=[_issue("EK-10", "Analysis", ["analysis"]), _issue("EK-11", "Warranty fix", ["warranty"])],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        billable = next(g for g in report.groups if g.name == "billable")
+        non_billable = next(g for g in report.groups if g.name == "non-billable")
+        assert billable.lines[0].amount == 200.0
+        assert billable.total_amount == 200.0
+        # Non-chargeable bucket: hours only, no line/group amounts
+        assert non_billable.lines[0].amount is None
+        assert non_billable.total_amount is None
+        # Hours total spans both, money total only the chargeable one
+        assert report.totals.seconds == 10800
+        assert report.totals.amount == 200.0
+        assert report.chargeable_buckets == ["billable"]
+
+    def test_chargeable_buckets_are_configurable(self) -> None:
+        """Contracts with different vocabulary name their chargeable bucket(s) in the config."""
+        billing = _BILLING.model_copy(update={"rate": 100.0, "chargeable_buckets": ["non-billable"]})
+        service, _, _, _ = _make_billing_service(
+            profile=_make_billing_profile(billing=billing),
+            worklogs=[_wl(100, 7200, "K-1"), _wl(101, 3600, "K-2")],
+            booking_issues=[_issue("K-1", "EK-10 Analysis"), _issue("K-2", "EK-11 Warranty fix")],
+            planning_issues=[_issue("EK-10", "Analysis", ["analysis"]), _issue("EK-11", "Warranty fix", ["warranty"])],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert next(g for g in report.groups if g.name == "billable").total_amount is None
+        assert next(g for g in report.groups if g.name == "non-billable").total_amount == 100.0
+        assert report.totals.amount == 100.0
+
     def test_paginates_full_tempo_pages(self) -> None:
         """A full page of worklogs triggers a second request with an offset."""
         full_page = [_wl(100, 36, "K-1") for _ in range(1000)]

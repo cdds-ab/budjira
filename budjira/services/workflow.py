@@ -501,6 +501,7 @@ class WorkflowService:
                         summary=booking_summary,
                         seconds=seconds,
                         rate=rate,
+                        chargeable=UNCATEGORISED_BUCKET in billing.chargeable_buckets,
                     )
                 )
                 continue
@@ -524,6 +525,7 @@ class WorkflowService:
                     summary=planning_issue.summary,
                     seconds=seconds,
                     rate=rate,
+                    chargeable=bucket in billing.chargeable_buckets,
                 )
             )
 
@@ -538,10 +540,13 @@ class WorkflowService:
         # 5) Group, order, total
         groups = self._group_billing_lines(lines, billing, group_by, rate)
         included = [line for line in lines if line.bucket not in billing.exclude_from_total]
+        # Money only over chargeable buckets: no currency figure may span
+        # buckets with different billing semantics.
+        chargeable = [line for line in included if line.bucket in billing.chargeable_buckets]
         totals = BillingTotals(
             seconds=sum(line.seconds for line in included),
             hours=round(sum(line.seconds for line in included) / 3600, 2),
-            amount=round(sum(line.seconds for line in included) / 3600 * rate, 2) if rate else None,
+            amount=round(sum(line.seconds for line in chargeable) / 3600 * rate, 2) if rate else None,
         )
 
         return BillingReport(
@@ -553,6 +558,7 @@ class WorkflowService:
             grouped_by=group_by,
             groups=groups,
             excluded_from_total=list(billing.exclude_from_total),
+            chargeable_buckets=list(billing.chargeable_buckets),
             totals=totals,
             warnings=warnings,
         )
@@ -584,8 +590,9 @@ class WorkflowService:
         summary: str,
         seconds: int,
         rate: float | None,
+        chargeable: bool,
     ) -> BillingLine:
-        """Build a BillingLine with derived hours/amount."""
+        """Build a BillingLine with derived hours/amount (amount only for chargeable buckets)."""
         return BillingLine(
             issue=issue,
             booking_issue=booking_issue,
@@ -594,7 +601,7 @@ class WorkflowService:
             summary=summary,
             seconds=seconds,
             hours=round(seconds / 3600, 2),
-            amount=round(seconds / 3600 * rate, 2) if rate else None,
+            amount=round(seconds / 3600 * rate, 2) if rate and chargeable else None,
         )
 
     @staticmethod
@@ -613,7 +620,11 @@ class WorkflowService:
         for group in groups.values():
             group.total_seconds = sum(line.seconds for line in group.lines)
             group.total_hours = round(group.total_seconds / 3600, 2)
-            group.total_amount = round(sum(line.amount or 0.0 for line in group.lines), 2) if rate else None
+            group.total_amount = (
+                round(sum(line.amount or 0.0 for line in group.lines), 2)
+                if rate and group.bucket in billing.chargeable_buckets
+                else None
+            )
 
         order = list(dict.fromkeys(billing.categories.values())) if group_by == "bucket" else list(billing.categories)
         return sorted(

@@ -998,3 +998,106 @@ def test_workflow_billing_unexpected_error(mock_service_cls: Mock) -> None:
 
     assert result.exit_code == 1
     assert "Unexpected error" in result.stdout
+
+
+def _mixed_billing_report_with_rate() -> BillingReport:
+    """Report with a chargeable and a non-chargeable bucket, rate set (#120)."""
+    return BillingReport(
+        profile="ek-to-k",
+        period_from=date(2026, 8, 1),
+        period_to=date(2026, 8, 31),
+        rate=100.0,
+        chargeable_buckets=["billable"],
+        groups=[
+            BillingGroup(
+                name="billable",
+                bucket="billable",
+                lines=[
+                    BillingLine(
+                        issue="EK-10",
+                        booking_issue="K-1",
+                        category="analysis",
+                        bucket="billable",
+                        summary="Analysis work",
+                        seconds=7200,
+                        hours=2.0,
+                        amount=200.0,
+                    )
+                ],
+                total_seconds=7200,
+                total_hours=2.0,
+                total_amount=200.0,
+            ),
+            BillingGroup(
+                name="non-billable",
+                bucket="non-billable",
+                lines=[
+                    BillingLine(
+                        issue="EK-11",
+                        booking_issue="K-2",
+                        category="warranty",
+                        bucket="non-billable",
+                        summary="Warranty fix",
+                        seconds=3600,
+                        hours=1.0,
+                        amount=None,
+                    )
+                ],
+                total_seconds=3600,
+                total_hours=1.0,
+                total_amount=None,
+            ),
+        ],
+        totals=BillingTotals(seconds=10800, hours=3.0, amount=200.0),
+    )
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_billing_total_not_duplicated(mock_service_cls: Mock) -> None:
+    """#120 minor: the hour total is printed once, not in two formats."""
+    mock_service = MagicMock()
+    mock_service.get_billing_report.return_value = _billing_report()
+    mock_service_cls.from_profile.return_value = mock_service
+
+    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k"])
+
+    assert result.exit_code == 0
+    assert "Total: 2h" in result.stdout
+    assert "(2.00h)" not in result.stdout
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_billing_money_total_labeled_chargeable(mock_service_cls: Mock) -> None:
+    """#120: the money total covers only chargeable buckets and says so."""
+    mock_service = MagicMock()
+    mock_service.get_billing_report.return_value = _mixed_billing_report_with_rate()
+    mock_service_cls.from_profile.return_value = mock_service
+
+    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k"])
+
+    assert result.exit_code == 0
+    # Hours total spans both buckets, money total only the chargeable one
+    assert "Total: 3h" in result.stdout
+    assert "Chargeable: 200.00 EUR" in result.stdout
+    # The non-chargeable group shows hours only — no 100.00 EUR group figure
+    assert "non-billable — 1h" in result.stdout
+    assert "non-billable — 1h (" not in result.stdout
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_billing_bucket_filter_non_chargeable_has_no_amount(mock_service_cls: Mock) -> None:
+    """Filtering to a non-chargeable bucket yields a hours-only total even with a rate."""
+    import json
+
+    mock_service = MagicMock()
+    mock_service.get_billing_report.return_value = _mixed_billing_report_with_rate()
+    mock_service_cls.from_profile.return_value = mock_service
+
+    result = runner.invoke(
+        app, ["-q", "--format", "json", "workflow", "billing", "--profile", "ek-to-k", "--bucket", "non-billable"]
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["totals"]["seconds"] == 3600
+    assert payload["totals"]["amount"] is None
