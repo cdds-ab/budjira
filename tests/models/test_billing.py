@@ -58,7 +58,7 @@ class TestWorkflowProfileBilling:
             name="x",
             planning_connection="a",
             booking_connection="b",
-            billing={"categories": {"analysis": "billable"}, "rate": 0},
+            billing=BillingConfig.model_validate({"categories": {"analysis": "billable"}, "rate": 0}),
         )
 
         assert profile.billing is not None
@@ -67,9 +67,12 @@ class TestWorkflowProfileBilling:
 
     def test_billing_toml_roundtrip(self) -> None:
         """A profile with billing survives a TOML save/load roundtrip."""
-        import tomli_w
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib  # Python 3.10
 
-        from budjira.config.settings import tomllib
+        import tomli_w
         from budjira.models.workflow import WorkflowProfileList
 
         profiles = WorkflowProfileList(
