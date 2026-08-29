@@ -11,7 +11,7 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.27.1
+- **Current Version**: v1.27.2
 - **Branch**: master
 - **Status**: Local-first release workflow live (cz bump owns versioning)
 - **Last Update**: 2026-08-29
@@ -20,6 +20,7 @@
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.27.2** | 2026-08-29 | fix | #118: Tempo v4 hat keinen Projektfilter auf GET /worklogs (400) — `project_key` aus `TempoClient.get_worklogs` entfernt, Booking-Projekt-Scope im Billing-Report client-seitig per Issue-Key-Präfix |
 | **v1.27.1** | 2026-08-29 | fix | `budjira search "JQL"` funktioniert wieder (search war als Gruppe registriert → nur undokumentiertes `search search` ging); neuer Paritäts-Test: CLI-Kommandobaum vs. AI-Prompt-Template (jede Command-Zeile muss dokumentiert sein) |
 | **v1.27.0** | 2026-08-29 | feat | `workflow billing`: billable/non-billable Report über Workflow-Profile (#117) — `[profiles.billing]`-Block (label→bucket, rate/currency, exclude_from_total), `--month`/`--from`/`--to`, `--group category`, `--bucket`-Filter, `--validate` (Label-Hygiene, Exit 1), deterministisches JSON-Schema |
 | **v1.26.0** | 2026-08-29 | feat | `worklog update` für Tempo + native Jira-Worklogs mit Ownership-Check (#116); `attach`-Command + `comment add --attach/--embed` (ADF mediaSingle inline images, Jira Cloud v3) (#115) |
