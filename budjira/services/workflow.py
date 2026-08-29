@@ -375,7 +375,8 @@ class WorkflowService:
         """Build a billing report over a period by joining Tempo worklogs back to planning issues.
 
         Inverted join (a handful of API calls regardless of issue count):
-        1. Fetch all Tempo worklogs in the period for each mapped booking project
+        1. Fetch all Tempo worklogs in the period (Tempo v4 has no project filter —
+           the booking project scope is applied client-side by issue key prefix)
         2. Batch-fetch the booking issues (summaries carry the planning key)
         3. Extract the planning key from each booking summary (summary strategy, read backwards)
         4. Batch-fetch the planning issues for labels and summaries
@@ -411,30 +412,36 @@ class WorkflowService:
         rate = billing.rate if billing.rate else None
         warnings: list[str] = []
 
-        # 1) Booked seconds per booking issue, paged per booking project
+        # 1) Booked seconds per booking issue, paged over the period.
+        # Tempo v4 has no project filter on GET /worklogs (the 'project'
+        # parameter is rejected with 400), so the booking project scope is
+        # applied client-side by issue key prefix.
+        booking_projects = {mapping.booking_project for mapping in self.profile.project_mappings}
         seconds_by_issue_id: dict[int, int] = {}
         issue_keys: dict[int, str] = {}
-        for mapping in self.profile.project_mappings:
-            offset = 0
-            while True:
-                page = self.tempo_client.get_worklogs(
-                    from_date=from_date,
-                    to_date=to_date,
-                    project_key=mapping.booking_project,
-                    limit=_BILLING_PAGE_LIMIT,
-                    offset=offset,
+        offset = 0
+        while True:
+            page = self.tempo_client.get_worklogs(
+                from_date=from_date,
+                to_date=to_date,
+                limit=_BILLING_PAGE_LIMIT,
+                offset=offset,
+            )
+            for worklog in page:
+                if worklog.issue.id is None:
+                    continue
+                issue_key = worklog.issue.key or self._billing_issue_key(worklog.issue.id, issue_keys, warnings)
+                if issue_key is None:
+                    continue
+                if issue_key.partition("-")[0] not in booking_projects:
+                    continue
+                issue_keys[worklog.issue.id] = issue_key
+                seconds_by_issue_id[worklog.issue.id] = (
+                    seconds_by_issue_id.get(worklog.issue.id, 0) + worklog.timeSpentSeconds
                 )
-                for worklog in page:
-                    if worklog.issue.id is None:
-                        continue
-                    seconds_by_issue_id[worklog.issue.id] = (
-                        seconds_by_issue_id.get(worklog.issue.id, 0) + worklog.timeSpentSeconds
-                    )
-                    if worklog.issue.key:
-                        issue_keys[worklog.issue.id] = worklog.issue.key
-                if len(page) < _BILLING_PAGE_LIMIT:
-                    break
-                offset += _BILLING_PAGE_LIMIT
+            if len(page) < _BILLING_PAGE_LIMIT:
+                break
+            offset += _BILLING_PAGE_LIMIT
 
         if not seconds_by_issue_id:
             return BillingReport(
@@ -448,15 +455,7 @@ class WorkflowService:
                 warnings=warnings,
             )
 
-        # 2) Backfill booking issue keys Tempo omitted (rare; per-issue lookup)
-        for issue_id in seconds_by_issue_id:
-            if issue_id not in issue_keys:
-                try:
-                    issue_keys[issue_id] = self.booking_jira.client.issue(str(issue_id)).key
-                except JiraAPIError as e:
-                    warnings.append(f"Booking issue ID {issue_id} could not be resolved ({e}); skipped")
-
-        # 3) Batch-fetch booking issue summaries and extract planning keys
+        # 2) Batch-fetch booking issue summaries and extract planning keys
         booking_keys = sorted(issue_keys.values())
         booking_summaries: dict[str, str] = {}
         if booking_keys:
@@ -467,7 +466,7 @@ class WorkflowService:
         planning_projects = sorted({m.planning_project for m in self.profile.project_mappings})
         planning_key_pattern = re.compile(r"\b(?:" + "|".join(re.escape(p) for p in planning_projects) + r")-\d+\b")
 
-        # 4) Batch-fetch planning issues for labels and summaries
+        # 3) Batch-fetch planning issues for labels and summaries
         planning_keys_found = {
             match.group(0) for summary in booking_summaries.values() if (match := planning_key_pattern.search(summary))
         }
@@ -477,7 +476,7 @@ class WorkflowService:
             for issue in self.planning_jira.search_issues(jql, max_results=max(len(planning_keys_found), 1)):
                 planning_issues[issue.key] = issue
 
-        # 5) Build lines
+        # 4) Build lines
         lines: list[BillingLine] = []
         multi_label_violations: list[str] = []
         for issue_id, seconds in seconds_by_issue_id.items():
@@ -536,7 +535,7 @@ class WorkflowService:
                 f"Run 'budjira workflow billing --profile {self.profile.name} --validate' to find all violations."
             )
 
-        # 6) Group, order, total
+        # 5) Group, order, total
         groups = self._group_billing_lines(lines, billing, group_by, rate)
         included = [line for line in lines if line.bucket not in billing.exclude_from_total]
         totals = BillingTotals(
@@ -557,6 +556,23 @@ class WorkflowService:
             totals=totals,
             warnings=warnings,
         )
+
+    def _billing_issue_key(self, issue_id: int, cache: dict[int, str], warnings: list[str]) -> str | None:
+        """Resolve a booking issue key Tempo omitted, with per-call caching.
+
+        Failures are cached as an empty string so a broken issue is reported
+        once, not once per page it appears on.
+        """
+        if issue_id in cache:
+            return cache[issue_id] or None
+        try:
+            key = str(self.booking_jira.client.issue(str(issue_id)).key)
+        except JiraAPIError as e:
+            warnings.append(f"Booking issue ID {issue_id} could not be resolved ({e}); skipped")
+            cache[issue_id] = ""
+            return None
+        cache[issue_id] = key
+        return key
 
     @staticmethod
     def _billing_line(

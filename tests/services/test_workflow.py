@@ -821,14 +821,32 @@ class TestBillingReport:
         assert report.totals.seconds == 10800
         assert report.excluded_from_total == ["project"]
         assert report.warnings == []
-        # Tempo was queried for the booking project with the period
+        # Tempo was queried for the period (project scope is filtered client-side)
         tempo.get_worklogs.assert_called_once_with(
             from_date=date(2026, 8, 1),
             to_date=date(2026, 8, 31),
-            project_key="K",
             limit=1000,
             offset=0,
         )
+
+    def test_foreign_project_worklogs_are_excluded(self) -> None:
+        """Worklogs on issues outside the profile's booking projects never enter the report (#118)."""
+        service, _, booking, _planning = _make_billing_service(
+            worklogs=[
+                _wl(100, 7200, "K-1"),
+                _wl(200, 999999, "OTHER-9"),  # shared Tempo instance, unrelated project
+            ],
+            booking_issues=[_issue("K-1", "EK-10 Analysis work")],
+            planning_issues=[_issue("EK-10", "Analysis work", ["analysis"])],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert report.totals.seconds == 7200
+        all_issues = [line.issue for group in report.groups for line in group.lines]
+        assert "OTHER-9" not in all_issues
+        # The foreign issue is filtered before any Jira lookup happens for it
+        assert booking.search_issues.call_args.args[0] == "key in (K-1)"
 
     def test_unlabelled_issue_lands_in_uncategorised(self) -> None:
         """An issue without a category label is visible in the uncategorised bucket."""

@@ -166,7 +166,6 @@ def test_get_worklogs_with_filters(mock_request, tempo_client):
         from_date=date(2025, 10, 1),
         to_date=date(2025, 10, 31),
         issue_id=12345,
-        project_key="PROJ",
         account_id="557058:abc",
         limit=100,
         offset=50,
@@ -175,10 +174,23 @@ def test_get_worklogs_with_filters(mock_request, tempo_client):
     call_kwargs = mock_request.call_args[1]
     params = call_kwargs["params"]
     assert params["issueId"] == 12345
-    assert params["project"] == "PROJ"
     assert params["accountId"] == "557058:abc"
     assert params["limit"] == 100
     assert params["offset"] == 50
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_get_worklogs_never_sends_project_param(mock_request, tempo_client):
+    """Tempo v4 rejects a 'project' query parameter with 400 — it must never be sent (#118)."""
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"results": [], "metadata": {}}
+    mock_response.raise_for_status.return_value = None
+    mock_request.return_value = mock_response
+
+    tempo_client.get_worklogs(from_date=date(2025, 10, 1), to_date=date(2025, 10, 31))
+
+    params = mock_request.call_args[1]["params"]
+    assert "project" not in params
 
 
 @patch("budjira.tempo.client.requests.Session.request")

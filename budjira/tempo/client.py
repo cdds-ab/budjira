@@ -187,18 +187,21 @@ class TempoClient:
         from_date: date | None = None,
         to_date: date | None = None,
         issue_id: int | None = None,
-        project_key: str | None = None,
         account_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[TempoWorklog]:
         """Get worklog entries.
 
+        Note: the Tempo v4 ``GET /worklogs`` endpoint has no project filter
+        (a ``project`` parameter is rejected with 400). Callers needing a
+        project scope must filter the returned worklogs client-side by their
+        issue keys.
+
         Args:
             from_date: Start date filter (inclusive)
             to_date: End date filter (inclusive)
             issue_id: Filter by numeric issue ID (e.g., 12345, NOT "PROJ-123")
-            project_key: Filter by project key
             account_id: Filter by author account ID
             limit: Maximum number of results (default: 50, max: 1000)
             offset: Pagination offset
@@ -220,8 +223,6 @@ class TempoClient:
             params["to"] = to_date.isoformat()
         if issue_id:
             params["issueId"] = issue_id
-        if project_key:
-            params["project"] = project_key
         if account_id:
             params["accountId"] = account_id
 
