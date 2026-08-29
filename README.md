@@ -772,6 +772,11 @@ chargeable_buckets = ["billable"] # only these get amounts and feed the money to
 # ticket *is* the category). Wins over labels; named issues are in scope
 # regardless of project mapping.
 # issue_categories = { "ACME-101" = "billable", "ACME-102" = "non-billable" }
+
+# Single-person profile: report only your own worklogs unless --all is given.
+# On a shared Tempo instance an unfiltered report silently includes other
+# people's hours.
+# mine_by_default = true
 # rate = 95                       # optional; absent or 0 => hours-only report
 # currency = "EUR"
 ```
@@ -789,6 +794,11 @@ budjira workflow billing --profile acme-shadow --month 2026-08
 budjira workflow billing --profile acme-shadow --from 2026-08-01 --to 2026-09-30
 budjira workflow billing --profile acme-shadow --group category
 budjira workflow billing --profile acme-shadow --bucket billable
+
+# Only your own worklogs (shared booking instance); --all overrides a
+# profile's mine_by_default. The header always names the number of distinct
+# contributors, so a second booker is visible rather than silently included.
+budjira workflow billing --profile acme-shadow --mine
 
 # Label hygiene check (exit code 1 on violations — CI/agent friendly)
 budjira workflow billing --profile acme-shadow --validate

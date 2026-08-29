@@ -1408,6 +1408,8 @@ budjira workflow billing --profile ek-to-k --month 2026-08
 budjira workflow billing --profile ek-to-k --from 2026-08-01 --to 2026-09-30
 budjira workflow billing --profile ek-to-k --group category
 budjira workflow billing --profile ek-to-k --bucket billable
+budjira workflow billing --profile ek-to-k --mine   # only your worklogs (shared instance)
+budjira workflow billing --profile ek-to-k --all    # override a profile's mine_by_default
 budjira workflow billing --profile ek-to-k --validate
 budjira --format json workflow billing --profile ek-to-k --month 2026-08
 ```
@@ -1426,6 +1428,7 @@ chargeable_buckets = ["billable"] # default: only these buckets get amounts and 
 # Collective-ticket booking: the ticket itself is the category. Wins over labels;
 # named issues are in scope regardless of project mapping.
 # issue_categories = { "ACME-101" = "billable", "ACME-102" = "non-billable" }
+# mine_by_default = true            # single-person profile: only your worklogs unless --all
 # rate = 95                       # optional; absent or 0 => hours-only report
 # currency = "EUR"
 ```
@@ -1441,6 +1444,10 @@ chargeable_buckets = ["billable"] # default: only these buckets get amounts and 
   (label -> bucket); everything unmatched lands in `uncategorised`
 - Issues without a category label land in an explicit `uncategorised` bucket — never silently dropped
 - `--group category` groups by label instead of bucket; `--bucket NAME` filters to one bucket
+- `--mine` restricts to your worklogs (server-side account filter); `--all` overrides a profile's
+  `mine_by_default`. The header always names the number of distinct contributors — on a shared
+  Tempo instance the API returns what the token may read, not what you booked, so a second
+  booker must be visible rather than silently inflating the totals
 - `--validate` checks label hygiene across the profile's planning projects (no category label /
   more than one) without producing a report; exits 1 on violations (CI/agent friendly)
 - `--format json` emits the deterministic report schema (groups, lines, totals, warnings)

@@ -371,7 +371,9 @@ class WorkflowService:
             )
         return self.profile.billing
 
-    def get_billing_report(self, from_date: date, to_date: date, group_by: str = "bucket") -> BillingReport:
+    def get_billing_report(
+        self, from_date: date, to_date: date, group_by: str = "bucket", mine: bool = False
+    ) -> BillingReport:
         """Build a billing report over a period by joining Tempo worklogs back to planning issues.
 
         Inverted join (a handful of API calls regardless of issue count):
@@ -388,6 +390,10 @@ class WorkflowService:
             from_date: First day of the period (inclusive)
             to_date: Last day of the period (inclusive)
             group_by: Group lines by "bucket" (default) or "category"
+            mine: Only the current user's worklogs (server-side account filter).
+                On a shared Tempo instance an unfiltered report silently includes
+                other people's hours — the report always counts distinct bookers
+                so a second contributor is visible.
 
         Returns:
             BillingReport with groups, totals (excluding configured buckets) and warnings
@@ -414,6 +420,12 @@ class WorkflowService:
         rate = billing.rate if billing.rate else None
         warnings: list[str] = []
 
+        # Server-side author filter for --mine (Tempo returns what the token may
+        # read, not what the token owner booked).
+        account_id = None
+        if mine:
+            account_id = self.booking_jira.client.myself()["accountId"]
+
         # 1) Booked seconds per booking issue, paged over the period.
         # Tempo v4 has no project filter on GET /worklogs (the 'project'
         # parameter is rejected with 400), so the booking project scope is
@@ -423,11 +435,13 @@ class WorkflowService:
         booking_projects = {mapping.booking_project for mapping in self.profile.project_mappings}
         seconds_by_issue_id: dict[int, int] = {}
         issue_keys: dict[int, str] = {}
+        contributors: set[str] = set()
         offset = 0
         while True:
             page = self.tempo_client.get_worklogs(
                 from_date=from_date,
                 to_date=to_date,
+                account_id=account_id,
                 limit=_BILLING_PAGE_LIMIT,
                 offset=offset,
             )
@@ -440,6 +454,7 @@ class WorkflowService:
                 if issue_key.partition("-")[0] not in booking_projects and issue_key not in billing.issue_categories:
                     continue
                 issue_keys[worklog.issue.id] = issue_key
+                contributors.add(worklog.author.accountId)
                 seconds_by_issue_id[worklog.issue.id] = (
                     seconds_by_issue_id.get(worklog.issue.id, 0) + worklog.timeSpentSeconds
                 )
@@ -457,6 +472,8 @@ class WorkflowService:
                 grouped_by=group_by,
                 excluded_from_total=list(billing.exclude_from_total),
                 chargeable_buckets=list(billing.chargeable_buckets),
+                mine_only=mine,
+                contributors=0,
                 warnings=warnings,
             )
 
@@ -582,6 +599,8 @@ class WorkflowService:
             groups=groups,
             excluded_from_total=list(billing.exclude_from_total),
             chargeable_buckets=list(billing.chargeable_buckets),
+            mine_only=mine,
+            contributors=len(contributors),
             totals=totals,
             warnings=warnings,
         )

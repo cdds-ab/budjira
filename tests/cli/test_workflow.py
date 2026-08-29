@@ -666,6 +666,7 @@ def _billing_report() -> BillingReport:
 def test_workflow_billing_table(mock_service_cls: Mock) -> None:
     """Table output shows groups, line details and the total without the excluded bucket."""
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.return_value = _billing_report()
     mock_service_cls.from_profile.return_value = mock_service
 
@@ -677,7 +678,9 @@ def test_workflow_billing_table(mock_service_cls: Mock) -> None:
     assert "EK-10" in result.stdout
     assert "project" in result.stdout  # excluded bucket is still shown
     assert "excluding: project" in result.stdout
-    mock_service.get_billing_report.assert_called_once_with(date(2026, 8, 1), date(2026, 8, 31), group_by="bucket")
+    mock_service.get_billing_report.assert_called_once_with(
+        date(2026, 8, 1), date(2026, 8, 31), group_by="bucket", mine=False
+    )
 
 
 @patch("budjira.cli.workflow.WorkflowService")
@@ -686,6 +689,7 @@ def test_workflow_billing_json(mock_service_cls: Mock) -> None:
     import json
 
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.return_value = _billing_report()
     mock_service_cls.from_profile.return_value = mock_service
 
@@ -708,6 +712,7 @@ def test_workflow_billing_json(mock_service_cls: Mock) -> None:
 def test_workflow_billing_default_month_is_current(mock_service_cls: Mock) -> None:
     """Without --month/--from/--to the current month is reported."""
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.return_value = _billing_report()
     mock_service_cls.from_profile.return_value = mock_service
 
@@ -720,6 +725,7 @@ def test_workflow_billing_default_month_is_current(mock_service_cls: Mock) -> No
         date(today.year, today.month, 1),
         date(today.year, today.month, last_day),
         group_by="bucket",
+        mine=False,
     )
 
 
@@ -763,6 +769,7 @@ def test_workflow_billing_invalid_month() -> None:
 def test_workflow_billing_from_to(mock_service_cls: Mock) -> None:
     """--from/--to override --month."""
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.return_value = _billing_report()
     mock_service_cls.from_profile.return_value = mock_service
 
@@ -771,20 +778,25 @@ def test_workflow_billing_from_to(mock_service_cls: Mock) -> None:
     )
 
     assert result.exit_code == 0
-    mock_service.get_billing_report.assert_called_once_with(date(2026, 8, 1), date(2026, 9, 30), group_by="bucket")
+    mock_service.get_billing_report.assert_called_once_with(
+        date(2026, 8, 1), date(2026, 9, 30), group_by="bucket", mine=False
+    )
 
 
 @patch("budjira.cli.workflow.WorkflowService")
 def test_workflow_billing_group_category(mock_service_cls: Mock) -> None:
     """--group category is passed through to the service."""
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.return_value = _billing_report()
     mock_service_cls.from_profile.return_value = mock_service
 
     result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k", "--group", "category"])
 
     assert result.exit_code == 0
-    mock_service.get_billing_report.assert_called_once_with(date(2026, 8, 1), date(2026, 8, 31), group_by="category")
+    mock_service.get_billing_report.assert_called_once_with(
+        date(2026, 8, 1), date(2026, 8, 31), group_by="category", mine=False
+    )
 
 
 @patch("budjira.cli.workflow.WorkflowService")
@@ -793,6 +805,7 @@ def test_workflow_billing_bucket_filter_json(mock_service_cls: Mock) -> None:
     import json
 
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.return_value = _billing_report()
     mock_service_cls.from_profile.return_value = mock_service
 
@@ -811,6 +824,7 @@ def test_workflow_billing_bucket_filter_json(mock_service_cls: Mock) -> None:
 def test_workflow_billing_validate_clean(mock_service_cls: Mock) -> None:
     """--validate exits 0 when all issues carry exactly one category label."""
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.validate_billing_labels.return_value = BillingValidation(
         profile="ek-to-k", issues_checked=5, violations=[]
     )
@@ -827,6 +841,7 @@ def test_workflow_billing_validate_clean(mock_service_cls: Mock) -> None:
 def test_workflow_billing_validate_violations_exit_1(mock_service_cls: Mock) -> None:
     """--validate exits 1 and lists violations (CI/agent friendly)."""
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.validate_billing_labels.return_value = BillingValidation(
         profile="ek-to-k",
         issues_checked=5,
@@ -847,6 +862,7 @@ def test_workflow_billing_validate_json(mock_service_cls: Mock) -> None:
     import json
 
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.validate_billing_labels.return_value = BillingValidation(
         profile="ek-to-k",
         issues_checked=5,
@@ -867,6 +883,7 @@ def test_workflow_billing_validate_json(mock_service_cls: Mock) -> None:
 def test_workflow_billing_no_billing_block(mock_service_cls: Mock) -> None:
     """A profile without a billing block fails with a configuration hint."""
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.side_effect = WorkflowConfigError(
         "Workflow profile 'ek-to-k' has no billing configuration."
     )
@@ -882,6 +899,7 @@ def test_workflow_billing_no_billing_block(mock_service_cls: Mock) -> None:
 def test_workflow_billing_multiple_labels_error(mock_service_cls: Mock) -> None:
     """A BillingValidationError from the service surfaces with the offending issues."""
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.side_effect = BillingValidationError(
         "Issues with multiple category labels: EK-10 (analysis, support)."
     )
@@ -914,6 +932,7 @@ def test_workflow_billing_with_rate_renders_amounts(mock_service_cls: Mock) -> N
     report.groups[0].total_amount = 190.0
     report.totals.amount = 190.0
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.return_value = report
     mock_service_cls.from_profile.return_value = mock_service
 
@@ -928,6 +947,7 @@ def test_workflow_billing_with_rate_renders_amounts(mock_service_cls: Mock) -> N
 def test_workflow_billing_empty_period(mock_service_cls: Mock) -> None:
     """An empty period renders a clear message instead of empty tables."""
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.return_value = BillingReport(
         profile="ek-to-k", period_from=date(2026, 8, 1), period_to=date(2026, 8, 31)
     )
@@ -945,6 +965,7 @@ def test_workflow_billing_renders_warnings(mock_service_cls: Mock) -> None:
     report = _billing_report()
     report.warnings = ["K-9: no planning key in its summary; counted as uncategorised"]
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.return_value = report
     mock_service_cls.from_profile.return_value = mock_service
 
@@ -962,6 +983,7 @@ def test_workflow_billing_group_category_rendering(mock_service_cls: Mock) -> No
     report.grouped_by = "category"
     report.groups[0].name = "analysis"
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.return_value = report
     mock_service_cls.from_profile.return_value = mock_service
 
@@ -976,6 +998,7 @@ def test_workflow_billing_group_category_rendering(mock_service_cls: Mock) -> No
 def test_workflow_billing_validate_truncated_warning(mock_service_cls: Mock) -> None:
     """A truncated label check prints a warning."""
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.validate_billing_labels.return_value = BillingValidation(
         profile="ek-to-k", issues_checked=1000, violations=[], truncated=True
     )
@@ -991,6 +1014,7 @@ def test_workflow_billing_validate_truncated_warning(mock_service_cls: Mock) -> 
 def test_workflow_billing_unexpected_error(mock_service_cls: Mock) -> None:
     """Unexpected failures surface with a generic error message."""
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.side_effect = RuntimeError("boom")
     mock_service_cls.from_profile.return_value = mock_service
 
@@ -1056,6 +1080,7 @@ def _mixed_billing_report_with_rate() -> BillingReport:
 def test_workflow_billing_total_not_duplicated(mock_service_cls: Mock) -> None:
     """#120 minor: the hour total is printed once, not in two formats."""
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.return_value = _billing_report()
     mock_service_cls.from_profile.return_value = mock_service
 
@@ -1070,6 +1095,7 @@ def test_workflow_billing_total_not_duplicated(mock_service_cls: Mock) -> None:
 def test_workflow_billing_money_total_labeled_chargeable(mock_service_cls: Mock) -> None:
     """#120: the money total covers only chargeable buckets and says so."""
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.return_value = _mixed_billing_report_with_rate()
     mock_service_cls.from_profile.return_value = mock_service
 
@@ -1090,6 +1116,7 @@ def test_workflow_billing_bucket_filter_non_chargeable_has_no_amount(mock_servic
     import json
 
     mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
     mock_service.get_billing_report.return_value = _mixed_billing_report_with_rate()
     mock_service_cls.from_profile.return_value = mock_service
 
@@ -1101,3 +1128,118 @@ def test_workflow_billing_bucket_filter_non_chargeable_has_no_amount(mock_servic
     payload = json.loads(result.stdout)
     assert payload["totals"]["seconds"] == 3600
     assert payload["totals"]["amount"] is None
+
+
+# Billing contributor scope tests (#122)
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_billing_mine_flag(mock_service_cls: Mock) -> None:
+    """--mine restricts the report to the current user's worklogs."""
+    mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
+    mock_service.get_billing_report.return_value = _billing_report()
+    mock_service_cls.from_profile.return_value = mock_service
+
+    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k", "--mine"])
+
+    assert result.exit_code == 0
+    mock_service.get_billing_report.assert_called_once_with(
+        date(2026, 8, 1), date(2026, 8, 31), group_by="bucket", mine=True
+    )
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_billing_mine_and_all_conflict(mock_service_cls: Mock) -> None:
+    """--mine and --all are mutually exclusive."""
+    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k", "--mine", "--all"])
+
+    assert result.exit_code == 1
+    assert "cannot be used together" in result.stdout
+    mock_service_cls.from_profile.assert_not_called()
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_billing_mine_by_default_from_profile(mock_service_cls: Mock) -> None:
+    """mine_by_default in the profile restricts without the flag."""
+    mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = True
+    mock_service.get_billing_report.return_value = _billing_report()
+    mock_service_cls.from_profile.return_value = mock_service
+
+    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k"])
+
+    assert result.exit_code == 0
+    mock_service.get_billing_report.assert_called_once_with(
+        date(2026, 8, 1), date(2026, 8, 31), group_by="bucket", mine=True
+    )
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_billing_all_overrides_mine_by_default(mock_service_cls: Mock) -> None:
+    """--all overrides a profile's mine_by_default for one report."""
+    mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = True
+    mock_service.get_billing_report.return_value = _billing_report()
+    mock_service_cls.from_profile.return_value = mock_service
+
+    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k", "--all"])
+
+    assert result.exit_code == 0
+    mock_service.get_billing_report.assert_called_once_with(
+        date(2026, 8, 1), date(2026, 8, 31), group_by="bucket", mine=False
+    )
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_billing_shows_contributor_count(mock_service_cls: Mock) -> None:
+    """The header names the number of distinct bookers, so a second one is visible."""
+    report = _billing_report()
+    report.contributors = 2
+    mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
+    mock_service.get_billing_report.return_value = report
+    mock_service_cls.from_profile.return_value = mock_service
+
+    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k"])
+
+    assert result.exit_code == 0
+    assert "2 contributor(s)" in result.stdout
+    assert "consider --mine" in result.stdout  # shared-project hint
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_billing_mine_scope_note(mock_service_cls: Mock) -> None:
+    """A --mine report says so in the header."""
+    report = _billing_report()
+    report.mine_only = True
+    report.contributors = 1
+    mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
+    mock_service.get_billing_report.return_value = report
+    mock_service_cls.from_profile.return_value = mock_service
+
+    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k", "--mine"])
+
+    assert result.exit_code == 0
+    assert "your worklogs only" in result.stdout
+
+
+@patch("budjira.cli.workflow.WorkflowService")
+def test_workflow_billing_json_has_contributors(mock_service_cls: Mock) -> None:
+    """JSON output carries mine_only and contributors for agents/scripts."""
+    import json
+
+    report = _billing_report()
+    report.contributors = 3
+    mock_service = MagicMock()
+    mock_service.profile.billing.mine_by_default = False
+    mock_service.get_billing_report.return_value = report
+    mock_service_cls.from_profile.return_value = mock_service
+
+    result = runner.invoke(app, ["-q", "--format", "json", "workflow", "billing", "--profile", "ek-to-k"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["contributors"] == 3
+    assert payload["mine_only"] is False

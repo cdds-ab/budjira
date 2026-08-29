@@ -712,6 +712,14 @@ def workflow_billing(
         str | None,
         typer.Option("--bucket", help="Only include lines of this bucket (custom reports)"),
     ] = None,
+    mine: Annotated[
+        bool,
+        typer.Option("--mine", help="Only your own worklogs (overrides the profile default)"),
+    ] = False,
+    all_contributors: Annotated[
+        bool,
+        typer.Option("--all", help="All contributors' worklogs (overrides mine_by_default)"),
+    ] = False,
     validate: Annotated[
         bool,
         typer.Option("--validate", help="Check category-label hygiene without producing a report"),
@@ -722,17 +730,24 @@ def workflow_billing(
     Groups the time booked via the booking instance (Tempo) by billing bucket,
     driven by the profile's [profiles.billing] block (label -> bucket mapping,
     optional rate/currency). Issues without a category label are listed under
-    'uncategorised' so nothing is silently dropped from the total.
+    'uncategorised' so nothing is silently dropped from the total. The header
+    always names the number of distinct contributors, so a second booker on a
+    shared project is visible rather than silently inflating the totals.
 
     Examples:
         budjira workflow billing --profile acme-shadow --month 2026-08
         budjira workflow billing --profile acme-shadow --from 2026-08-01 --to 2026-09-30
         budjira workflow billing --profile acme-shadow --month 2026-08 --group category
+        budjira workflow billing --profile acme-shadow --month 2026-08 --mine
         budjira workflow billing --profile acme-shadow --bucket billable
         budjira workflow billing --profile acme-shadow --validate
         budjira --format json workflow billing --profile acme-shadow --month 2026-08
     """
     try:
+        if mine and all_contributors:
+            console.print("[red]Error:[/red] --mine and --all cannot be used together.")
+            raise typer.Exit(1)
+
         period_from, period_to = _resolve_billing_period(month, from_date, to_date)
 
         service = WorkflowService.from_profile(profile_name)
@@ -748,7 +763,12 @@ def workflow_billing(
                 raise typer.Exit(1)
             return
 
-        report = service.get_billing_report(period_from, period_to, group_by=group_by)
+        # --mine/--all win; otherwise the profile's mine_by_default decides
+        mine_only = mine or (service.profile.billing is not None and service.profile.billing.mine_by_default)
+        if all_contributors:
+            mine_only = False
+
+        report = service.get_billing_report(period_from, period_to, group_by=group_by, mine=mine_only)
         if bucket is not None:
             report = _filter_report_by_bucket(report, bucket)
 
@@ -812,6 +832,13 @@ def _render_billing_report(report: BillingReport) -> None:
     """Render a billing report as Rich tables (one per group)."""
     console.print(f"\n[cyan bold]Billing Report: {report.profile}[/cyan bold]")
     console.print(f"  Period: {report.period_from} → {report.period_to}")
+    if report.mine_only:
+        console.print("  Scope:  your worklogs only (--mine)")
+    if report.contributors:
+        contributor_note = f"  Bookers: {report.contributors} contributor(s)"
+        if not report.mine_only and report.contributors > 1:
+            contributor_note += " [yellow](shared project — consider --mine)[/yellow]"
+        console.print(contributor_note)
     if report.rate:
         console.print(f"  Rate:   {report.rate:.2f} {report.currency}/h")
 

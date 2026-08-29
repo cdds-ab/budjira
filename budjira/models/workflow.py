@@ -76,6 +76,12 @@ class BillingConfig(BaseModel):
         default="EUR",
         description="Currency for amounts (display only, no conversion)",
     )
+    mine_by_default: bool = Field(
+        default=False,
+        description="Report only the current user's worklogs unless --all is given; "
+        "for single-person profiles, so a second booker on a shared project "
+        "cannot silently inflate the report",
+    )
 
 
 class WorkflowProfile(BaseModel):

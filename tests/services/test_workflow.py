@@ -746,12 +746,13 @@ def _make_billing_profile(
     return profile
 
 
-def _wl(issue_id: int, seconds: int, issue_key: str | None = None) -> MagicMock:
+def _wl(issue_id: int, seconds: int, issue_key: str | None = None, author: str = "user-1") -> MagicMock:
     """Mock a Tempo worklog (only the fields the billing join reads)."""
     worklog = MagicMock()
     worklog.issue.id = issue_id
     worklog.issue.key = issue_key
     worklog.timeSpentSeconds = seconds
+    worklog.author.accountId = author
     return worklog
 
 
@@ -825,6 +826,7 @@ class TestBillingReport:
         tempo.get_worklogs.assert_called_once_with(
             from_date=date(2026, 8, 1),
             to_date=date(2026, 8, 31),
+            account_id=None,
             limit=1000,
             offset=0,
         )
@@ -1182,3 +1184,54 @@ class TestBillingIssueCategories:
         report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
 
         assert [group.name for group in report.groups] == [UNCATEGORISED_BUCKET]
+
+
+class TestBillingContributorScope:
+    """Test the --mine contributor scope and the contributor count (#122)."""
+
+    def test_mine_filters_server_side_by_account(self) -> None:
+        """mine=True resolves the current user and passes account_id to Tempo."""
+        service, tempo, booking, _ = _make_billing_service(
+            worklogs=[_wl(100, 3600, "K-1")],
+            booking_issues=[_issue("K-1", "EK-10 Analysis")],
+            planning_issues=[_issue("EK-10", "Analysis", ["analysis"])],
+        )
+        booking.client.myself.return_value = {"accountId": "user-1", "displayName": "Me"}
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31), mine=True)
+
+        tempo.get_worklogs.assert_called_once_with(
+            from_date=date(2026, 8, 1),
+            to_date=date(2026, 8, 31),
+            account_id="user-1",
+            limit=1000,
+            offset=0,
+        )
+        assert report.mine_only is True
+        assert report.contributors == 1
+
+    def test_contributors_counted_across_bookers(self) -> None:
+        """Distinct bookers in scope are counted — a second one is visible in the report."""
+        service, _, _, _ = _make_billing_service(
+            worklogs=[
+                _wl(100, 3600, "K-1", author="user-1"),
+                _wl(100, 3600, "K-1", author="user-1"),
+                _wl(101, 3600, "K-2", author="user-2"),
+            ],
+            booking_issues=[_issue("K-1", "EK-10 Analysis"), _issue("K-2", "EK-11 Warranty")],
+            planning_issues=[_issue("EK-10", "Analysis", ["analysis"]), _issue("EK-11", "Warranty", ["warranty"])],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert report.mine_only is False
+        assert report.contributors == 2
+
+    def test_empty_period_reports_zero_contributors(self) -> None:
+        """An empty period has no contributors and is not mine-scoped by default."""
+        service, _, _, _ = _make_billing_service(worklogs=[])
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert report.contributors == 0
+        assert report.mine_only is False

@@ -122,6 +122,14 @@ class BillingReport(BaseModel):
         default_factory=list,
         description="Buckets the money column and money total cover (others render hours-only)",
     )
+    mine_only: bool = Field(
+        default=False,
+        description="True when the report was restricted to the current user's worklogs",
+    )
+    contributors: int = Field(
+        default=0,
+        description="Distinct bookers aggregated in this report — makes a second booker visible",
+    )
     totals: BillingTotals = Field(
         default_factory=BillingTotals,
         description="Grand totals over non-excluded buckets",
