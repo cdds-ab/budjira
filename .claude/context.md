@@ -11,7 +11,7 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.28.0
+- **Current Version**: v1.29.0
 - **Branch**: master
 - **Status**: Local-first release workflow live (cz bump owns versioning)
 - **Last Update**: 2026-08-29
@@ -20,6 +20,7 @@
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.29.0** | 2026-08-29 | feat | #122: `workflow billing --mine/--all` + `mine_by_default` + Contributor-Zähler (`Bookers: N`) in Header und JSON — Fremdbuchungen auf geteilter Tempo-Instanz werden sichtbar statt still summiert |
 | **v1.28.0** | 2026-08-29 | feat | #121: `issue_categories` im Billing-Block — Kollektiv-Tickets (das Ticket IST die Kategorie) mappen Booking-Key→Bucket, gewinnen vor Labels, sind unabhängig vom Projekt-Mapping im Scope |
 | **v1.27.4** | 2026-08-29 | fix | #120: Geldsumme nur über `chargeable_buckets` (Default `["billable"]`), Label `Chargeable:`, doppelte Stundenangabe im Total entfernt |
 | **v1.27.3** | 2026-08-29 | fix | JSON-Output mit UTF-8 statt `\uXXXX`-Escapes (`ensure_ascii=False` zentral im OutputFormatter) |
