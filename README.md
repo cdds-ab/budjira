@@ -789,6 +789,11 @@ budjira --format json workflow billing --profile acme-shadow --month 2026-08
 Issues without a category label appear in an explicit `uncategorised` bucket, so
 booked time is never silently dropped from the total.
 
+**Scope:** the report covers exactly the profile's mapped booking projects. Bookings
+on other projects of the same Tempo instance — e.g. legacy collection tickets without
+a planning twin — are out of scope by design, so totals can legitimately differ from
+tools that read a wider scope.
+
 ### JSON Output Format
 
 budjira supports JSON output for automation and integration with other tools (e.g., reporting systems, data analysis).

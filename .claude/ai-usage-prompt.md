@@ -1268,6 +1268,9 @@ exclude_from_total = ["project"]  # shown in the report, but outside the grand t
   more than one) without producing a report; exits 1 on violations (CI/agent friendly)
 - `--format json` emits the deterministic report schema (groups, lines, totals, warnings)
 - Requires `shadow_strategy = "summary"` (the planning key is read from the booking summary)
+- Scope: only the profile's mapped booking projects are read. Bookings elsewhere on the same
+  Tempo instance (e.g. legacy collection tickets without a planning twin) are out of scope by
+  design — totals may legitimately differ from tools with a wider scope
 
 ### Configuration
 
