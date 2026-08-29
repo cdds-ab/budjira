@@ -11,7 +11,7 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.27.0
+- **Current Version**: v1.27.1
 - **Branch**: master
 - **Status**: Local-first release workflow live (cz bump owns versioning)
 - **Last Update**: 2026-08-29
@@ -20,6 +20,7 @@
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.27.1** | 2026-08-29 | fix | `budjira search "JQL"` funktioniert wieder (search war als Gruppe registriert → nur undokumentiertes `search search` ging); neuer Paritäts-Test: CLI-Kommandobaum vs. AI-Prompt-Template (jede Command-Zeile muss dokumentiert sein) |
 | **v1.27.0** | 2026-08-29 | feat | `workflow billing`: billable/non-billable Report über Workflow-Profile (#117) — `[profiles.billing]`-Block (label→bucket, rate/currency, exclude_from_total), `--month`/`--from`/`--to`, `--group category`, `--bucket`-Filter, `--validate` (Label-Hygiene, Exit 1), deterministisches JSON-Schema |
 | **v1.26.0** | 2026-08-29 | feat | `worklog update` für Tempo + native Jira-Worklogs mit Ownership-Check (#116); `attach`-Command + `comment add --attach/--embed` (ADF mediaSingle inline images, Jira Cloud v3) (#115) |
 | **v1.25.0** | 2026-08-25 | feat | Native Jira worklog fallback on connections without Tempo (#113): tempo log/worklogs/update-worklog/delete-worklog work everywhere; user-scoped listing via worklogAuthor JQL; --issue for native update/delete |
@@ -291,7 +292,7 @@ budjira/services/
 
 | Metrik | Wert |
 |--------|------|
-| **Total Tests** | 1166 |
+| **Total Tests** | 1168 |
 | **Skipped Tests** | 3 |
 | **Coverage** | 88.4% |
 | **Test Duration** | ~20s |
