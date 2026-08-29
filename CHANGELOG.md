@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.27.2 (2026-08-29)
+
+### Fix
+
+- **tempo**: drop the nonexistent project filter from get_worklogs
+
 ## v1.27.1 (2026-08-29)
 
 ### Fix
