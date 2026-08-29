@@ -767,6 +767,11 @@ categories = { analysis = "billable", warranty = "non-billable", onboarding = "p
 require_exactly_one = true        # fail loudly on issues with several category labels
 exclude_from_total = ["project"]  # shown in the report, but outside the grand total
 chargeable_buckets = ["billable"] # only these get amounts and feed the money total
+
+# bucket from the booking issue itself, for collective-ticket booking (the
+# ticket *is* the category). Wins over labels; named issues are in scope
+# regardless of project mapping.
+# issue_categories = { "ACME-101" = "billable", "ACME-102" = "non-billable" }
 # rate = 95                       # optional; absent or 0 => hours-only report
 # currency = "EUR"
 ```

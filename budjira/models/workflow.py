@@ -48,6 +48,12 @@ class BillingConfig(BaseModel):
         default_factory=dict,
         description="Issue label -> billing bucket (e.g., {'analysis': 'billable', 'warranty': 'non-billable'})",
     )
+    issue_categories: dict[str, str] = Field(
+        default_factory=dict,
+        description="Booking issue key -> billing bucket, for collective-ticket booking where the ticket "
+        "itself is the category (e.g., {'ACME-101': 'billable'}). Wins over the label path, and named "
+        "issues are in scope regardless of project mapping.",
+    )
     require_exactly_one: bool = Field(
         default=True,
         description="Fail loudly when an issue carries more than one category label (Jira cannot enforce this)",

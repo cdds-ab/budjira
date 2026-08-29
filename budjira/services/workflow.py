@@ -376,11 +376,13 @@ class WorkflowService:
 
         Inverted join (a handful of API calls regardless of issue count):
         1. Fetch all Tempo worklogs in the period (Tempo v4 has no project filter —
-           the booking project scope is applied client-side by issue key prefix)
+           the booking project scope is applied client-side by issue key prefix;
+           issues named in `issue_categories` are in scope regardless of mapping)
         2. Batch-fetch the booking issues (summaries carry the planning key)
         3. Extract the planning key from each booking summary (summary strategy, read backwards)
         4. Batch-fetch the planning issues for labels and summaries
-        5. Categorize by label, group by bucket (or category), total
+        5. Categorize: `issue_categories` (the ticket is the category, wins over labels),
+           else planning labels via `categories`, else 'uncategorised'; group and total
 
         Args:
             from_date: First day of the period (inclusive)
@@ -415,7 +417,9 @@ class WorkflowService:
         # 1) Booked seconds per booking issue, paged over the period.
         # Tempo v4 has no project filter on GET /worklogs (the 'project'
         # parameter is rejected with 400), so the booking project scope is
-        # applied client-side by issue key prefix.
+        # applied client-side: issue key prefix in the mapped booking projects,
+        # or an issue explicitly named in issue_categories (#121 — collective
+        # tickets often live outside the mapped project).
         booking_projects = {mapping.booking_project for mapping in self.profile.project_mappings}
         seconds_by_issue_id: dict[int, int] = {}
         issue_keys: dict[int, str] = {}
@@ -433,7 +437,7 @@ class WorkflowService:
                 issue_key = worklog.issue.key or self._billing_issue_key(worklog.issue.id, issue_keys, warnings)
                 if issue_key is None:
                     continue
-                if issue_key.partition("-")[0] not in booking_projects:
+                if issue_key.partition("-")[0] not in booking_projects and issue_key not in billing.issue_categories:
                     continue
                 issue_keys[worklog.issue.id] = issue_key
                 seconds_by_issue_id[worklog.issue.id] = (
@@ -452,6 +456,7 @@ class WorkflowService:
                 currency=billing.currency,
                 grouped_by=group_by,
                 excluded_from_total=list(billing.exclude_from_total),
+                chargeable_buckets=list(billing.chargeable_buckets),
                 warnings=warnings,
             )
 
@@ -488,6 +493,24 @@ class WorkflowService:
             match = planning_key_pattern.search(booking_summary)
             planning_key = match.group(0) if match else None
             planning_issue = planning_issues.get(planning_key) if planning_key else None
+
+            # Issue path first (#121): a named collective ticket is its own
+            # category and wins over any label reading.
+            if booking_key in billing.issue_categories:
+                bucket = billing.issue_categories[booking_key]
+                lines.append(
+                    self._billing_line(
+                        issue=planning_key or booking_key,
+                        booking_issue=booking_key,
+                        category=booking_key,
+                        bucket=bucket,
+                        summary=planning_issue.summary if planning_issue else booking_summary,
+                        seconds=seconds,
+                        rate=rate,
+                        chargeable=bucket in billing.chargeable_buckets,
+                    )
+                )
+                continue
 
             if planning_key is None or planning_issue is None:
                 reason = "no planning key in its summary" if planning_key is None else "planning issue not found"

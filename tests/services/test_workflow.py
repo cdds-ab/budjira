@@ -1118,3 +1118,67 @@ class TestValidateBillingLabels:
 
         with pytest.raises(WorkflowConfigError, match="no billing configuration"):
             service.validate_billing_labels()
+
+
+class TestBillingIssueCategories:
+    """Test the issue_categories path: collective tickets as their own category (#121)."""
+
+    def _service_with_issue_categories(self, **kwargs) -> tuple[WorkflowService, MagicMock, MagicMock, MagicMock]:
+        billing = _BILLING.model_copy(update={"issue_categories": {"ACME-101": "billable", "ACME-102": "non-billable"}})
+        return _make_billing_service(profile=_make_billing_profile(billing=billing), **kwargs)
+
+    def test_collective_ticket_outside_mapped_project_is_in_scope(self) -> None:
+        """A named issue is in scope regardless of project mapping — that is the point."""
+        service, _, _booking, _planning = self._service_with_issue_categories(
+            worklogs=[_wl(100, 7200, "K-1"), _wl(200, 10800, "ACME-101")],
+            booking_issues=[_issue("K-1", "EK-10 Analysis"), _issue("ACME-101", "ACME DEV collective ticket")],
+            planning_issues=[_issue("EK-10", "Analysis", ["analysis"])],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert report.totals.seconds == 18000
+        lines = {line.booking_issue: line for group in report.groups for line in group.lines}
+        assert lines["ACME-101"].bucket == "billable"
+        assert lines["ACME-101"].category == "ACME-101"  # the ticket itself is the category
+        assert lines["ACME-101"].summary == "ACME DEV collective ticket"
+
+    def test_issue_mapping_wins_over_labels(self) -> None:
+        """Where both paths would apply, the more specific issue statement wins."""
+        billing = _BILLING.model_copy(update={"issue_categories": {"K-1": "billable"}})
+        service, _, _, _ = _make_billing_service(
+            profile=_make_billing_profile(billing=billing),
+            worklogs=[_wl(100, 3600, "K-1")],
+            booking_issues=[_issue("K-1", "EK-10 Analysis")],
+            planning_issues=[_issue("EK-10", "Analysis", ["warranty"])],  # label would say non-billable
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        line = report.groups[0].lines[0]
+        assert line.bucket == "billable"  # issue mapping beats the warranty label
+        assert line.category == "K-1"
+
+    def test_issue_path_is_not_subject_to_require_exactly_one(self) -> None:
+        """The issue path is unambiguous by construction — no multi-label failure."""
+        service, _, _, _ = self._service_with_issue_categories(
+            worklogs=[_wl(100, 3600, "ACME-102")],
+            booking_issues=[_issue("ACME-102", "EK-10 Both", ["analysis", "support"])],
+            planning_issues=[_issue("EK-10", "Both", ["analysis", "support"])],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))  # must not raise
+
+        assert report.groups[0].lines[0].bucket == "non-billable"
+
+    def test_unmatched_still_lands_in_uncategorised(self) -> None:
+        """Neither issue-mapped nor labelled: the uncategorised net still catches it."""
+        service, _, _, _ = self._service_with_issue_categories(
+            worklogs=[_wl(100, 3600, "K-9")],
+            booking_issues=[_issue("K-9", "EK-99 Unknown work")],
+            planning_issues=[_issue("EK-99", "Unknown work", [])],
+        )
+
+        report = service.get_billing_report(date(2026, 8, 1), date(2026, 8, 31))
+
+        assert [group.name for group in report.groups] == [UNCATEGORISED_BUCKET]

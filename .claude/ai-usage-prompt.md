@@ -1256,6 +1256,9 @@ categories = { analysis = "billable", warranty = "non-billable", onboarding = "p
 require_exactly_one = true        # default: fail loudly on issues with several category labels
 exclude_from_total = ["project"]  # shown in the report, but outside the grand total
 chargeable_buckets = ["billable"] # default: only these buckets get amounts and feed the money total
+# Collective-ticket booking: the ticket itself is the category. Wins over labels;
+# named issues are in scope regardless of project mapping.
+# issue_categories = { "ACME-101" = "billable", "ACME-102" = "non-billable" }
 # rate = 95                       # optional; absent or 0 => hours-only report
 # currency = "EUR"
 ```
@@ -1266,6 +1269,9 @@ chargeable_buckets = ["billable"] # default: only these buckets get amounts and 
 - Amounts and the money total cover only `chargeable_buckets` (default `["billable"]`);
   other buckets render hours-only — no currency figure ever spans buckets with different
   billing semantics, so the money total cannot be mistaken for an invoice it is not
+- Two bucket sources, one precedence rule: `issue_categories` (booking issue key -> bucket,
+  for collective tickets; in scope regardless of project mapping) wins over `categories`
+  (label -> bucket); everything unmatched lands in `uncategorised`
 - Issues without a category label land in an explicit `uncategorised` bucket — never silently dropped
 - `--group category` groups by label instead of bucket; `--bucket NAME` filters to one bucket
 - `--validate` checks label hygiene across the profile's planning projects (no category label /
