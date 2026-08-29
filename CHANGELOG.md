@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.30.0 (2026-08-29)
+
+### Feat
+
+- **workflow**: add default_bucket for billing reports
+
 ## v1.29.0 (2026-08-29)
 
 ### Feat
