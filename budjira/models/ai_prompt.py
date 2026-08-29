@@ -523,6 +523,32 @@ budjira create issue "New feature" \\
             enabled=True,
         ),
         AiPromptSection(
+            title="Project Metadata",
+            content="""## Project Metadata
+
+**Available since v1.19.0** - Discover and cache a project's issue types, priorities, and components.
+
+```bash
+# Fetch and cache metadata for the connection's project
+budjira project sync
+
+# Force refresh even if the cache is still valid
+budjira project sync --force
+
+# Show cached metadata (issue types, priorities, components)
+budjira project show
+
+# Clear the cache
+budjira project clear
+```
+
+**Used by:** issue creation (validating `--type`/`--priority`, sub-task detection) and the
+connection-specific AI prompt. The cache lives in `~/.config/budjira/cache/` and expires
+automatically; `sync --force` refreshes it on demand.""",
+            order=6.5,
+            enabled=True,
+        ),
+        AiPromptSection(
             title="Definition of Ready (DoR) Templates",
             content="""## Definition of Ready (DoR) Templates
 

@@ -177,7 +177,7 @@ class TestGetDefaultAiPromptTemplate:
         template = get_default_ai_prompt_template()
 
         assert template.version == "1.0"
-        assert len(template.sections) == 26  # All sections including v1.17.0 Sprint Querying
+        assert len(template.sections) == 27  # All sections including v1.27.x Project Metadata
 
     def test_default_template_all_enabled(self) -> None:
         """Test that all default sections are enabled."""

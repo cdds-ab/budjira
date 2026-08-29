@@ -256,6 +256,16 @@ budjira issue update PROJ-123 --description-dialect markdown --description "## N
 The option wins over the connection setting, which wins over the default. Existing
 configurations keep working unchanged: a connection without the key is `markdown`.
 
+**Project metadata:** issue types, priorities and components are discovered from Jira and
+cached locally — they drive validation of `--type`/`--priority` and sub-task detection:
+
+```bash
+budjira project sync          # fetch + cache (per connection project)
+budjira project show          # inspect the cache
+budjira project clear         # drop the cache
+budjira project sync --force  # refresh despite a valid cache
+```
+
 ### 6. Definition of Ready (DoR) Templates
 
 budjira supports customizable templates for different issue types to ensure consistent quality.
@@ -710,6 +720,31 @@ backends.
   and native Jira worklogs everywhere else
 - Use `budjira worklog` commands for standard Jira time tracking only
 - Tempo integration is optional and requires a separate API token
+
+### Cross-Instance Workflows
+
+Workflow profiles connect a **planning** Jira (where issues live) with a **booking** Jira
+(where time is logged via Tempo), linked through shadow tickets:
+
+```bash
+# Create a profile interactively (planning/booking connection, project mappings,
+# shadow strategy, overbooking policy)
+budjira workflow setup
+
+# Estimate vs. booked for a planning issue
+budjira workflow status EK-123 --profile ek-to-k
+
+# Book time on the shadow ticket (resolves shadow, checks overbooking)
+budjira workflow book EK-123 2h --profile ek-to-k --comment "Development"
+
+# Sprint booking overview across both instances
+budjira workflow sprint --profile ek-to-k
+
+# Manage profiles
+budjira workflow list
+budjira workflow show ek-to-k
+budjira workflow remove ek-to-k
+```
 
 ### Workflow Billing Reports
 
