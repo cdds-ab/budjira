@@ -47,7 +47,7 @@ class OutputFormatter:
         Returns:
             JSON string
         """
-        return json.dumps(data, indent=indent, default=OutputFormatter._json_serializer)
+        return json.dumps(data, indent=indent, default=OutputFormatter._json_serializer, ensure_ascii=False)
 
     @staticmethod
     def output_json(data: Any, *, indent: int | None = 2) -> None:

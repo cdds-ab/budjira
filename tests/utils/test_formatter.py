@@ -47,6 +47,15 @@ class TestOutputFormatterJsonSerializer:
         assert result["count"] == 42
         assert result["created_at"] == "2025-10-26T12:00:00"
 
+    def test_non_ascii_stays_literal(self):
+        """Non-ASCII text (umlauts etc.) is emitted as UTF-8, not \\uXXXX escapes."""
+        result = OutputFormatter.to_json({"summary": "Qualitätssicherung für Codeänderungen"})
+
+        assert "Qualitätssicherung für Codeänderungen" in result
+        assert "\\u00" not in result
+        # Still valid JSON with the same content after parsing
+        assert json.loads(result)["summary"] == "Qualitätssicherung für Codeänderungen"
+
     def test_serialize_datetime(self):
         """Test datetime serialization to ISO format."""
         data = {"timestamp": datetime(2025, 10, 26, 14, 30, 0)}
