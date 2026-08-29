@@ -11,7 +11,7 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.26.0
+- **Current Version**: v1.27.0
 - **Branch**: master
 - **Status**: Local-first release workflow live (cz bump owns versioning)
 - **Last Update**: 2026-08-29
@@ -20,6 +20,7 @@
 
 | Version | Datum | Typ | Beschreibung |
 |---------|-------|-----|--------------|
+| **v1.27.0** | 2026-08-29 | feat | `workflow billing`: billable/non-billable Report über Workflow-Profile (#117) — `[profiles.billing]`-Block (label→bucket, rate/currency, exclude_from_total), `--month`/`--from`/`--to`, `--group category`, `--bucket`-Filter, `--validate` (Label-Hygiene, Exit 1), deterministisches JSON-Schema |
 | **v1.26.0** | 2026-08-29 | feat | `worklog update` für Tempo + native Jira-Worklogs mit Ownership-Check (#116); `attach`-Command + `comment add --attach/--embed` (ADF mediaSingle inline images, Jira Cloud v3) (#115) |
 | **v1.25.0** | 2026-08-25 | feat | Native Jira worklog fallback on connections without Tempo (#113): tempo log/worklogs/update-worklog/delete-worklog work everywhere; user-scoped listing via worklogAuthor JQL; --issue for native update/delete |
 | **v1.24.0** | 2026-08-24 | feat | Full comment CRUD: `comment list/show/update/delete` (#81); update opens the editor prefilled with the current body; Jira's 400 permission quirk on delete/edit mapped to a clear error pointing at update |
@@ -290,10 +291,10 @@ budjira/services/
 
 | Metrik | Wert |
 |--------|------|
-| **Total Tests** | 1110 |
+| **Total Tests** | 1166 |
 | **Skipped Tests** | 3 |
-| **Coverage** | 87.7% |
-| **Test Duration** | ~12s |
+| **Coverage** | 88.4% |
+| **Test Duration** | ~20s |
 
 ### Coverage by Module (Top)
 ```
@@ -391,13 +392,14 @@ budjira/
 │   ├── metadata.py         # Metadata operations (+ project metadata v1.19.0)
 │   ├── transitions.py      # Transition operations
 │   ├── sprints.py          # Sprint/board operations
-│   ├── workflow.py         # Cross-instance workflow operations
+│   ├── workflow.py         # Cross-instance workflow operations (+ billing v1.27.0)
 │   └── worklogs.py         # Worklog operations
 ├── tempo/                   # Tempo Timesheets integration
 │   ├── client.py           # TempoClient - REST API
 │   └── models.py           # Pydantic models
 ├── models/                  # Pydantic data models
-│   ├── ai_prompt.py        # AI prompt models
+│   ├── ai_prompt.py        # AI prompt models (+ billing section v1.27.0)
+│   ├── billing.py          # ✨ NEW v1.27.0 - Billing report models
 │   ├── config.py           # GlobalConfig
 │   ├── connection.py       # Connection, ConnectionList (+ board_id, custom_fields, ai_prompt)
 │   ├── custom_field.py     # CustomFieldConfig model
@@ -464,6 +466,7 @@ budjira/
 | Native Worklog Fallback | v1.25.0 | `budjira tempo log/worklogs/update-worklog/delete-worklog` ohne Tempo (nativ) |
 | Worklog Update | v1.26.0 | `budjira worklog update ISSUE WORKLOG_ID` (Tempo + nativ, Ownership-Check) |
 | Attachments + Inline Images | v1.26.0 | `budjira attach`, `budjira comment add --attach/--embed` |
+| Workflow Billing | v1.27.0 | `budjira workflow billing --profile X --month YYYY-MM` (+ `--validate`, `--format json`) |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---

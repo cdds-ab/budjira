@@ -182,6 +182,11 @@ budjira workflow remove ek-to-k
 
 # JSON output for reporting
 budjira --format json workflow status EK-123 --profile ek-to-k
+
+# Monthly billing report: billable vs. non-billable (needs [profiles.billing] block)
+budjira workflow billing --profile ek-to-k --month 2026-08
+budjira workflow billing --profile ek-to-k --validate   # label hygiene, exit 1 on violations
+budjira --format json workflow billing --profile ek-to-k   # current month, machine-readable
 ```
 
 **When to use:**
@@ -190,11 +195,15 @@ budjira --format json workflow status EK-123 --profile ek-to-k
 - Need to check estimate vs spent time across instances
 - Want overbooking protection (warn/confirm/block policies)
 - Automated cross-instance time logging via Tempo
+- Monthly billable/non-billable split for retainer customers
 
 **Key concepts:**
 - **Shadow ticket**: Booking instance ticket that mirrors a planning ticket (found via JQL summary search)
 - **Overbooking policy**: Controls what happens when booking would exceed estimate (warn=default, confirm, block)
 - **Project mapping**: Maps planning project keys to booking project keys (e.g., EK -> K)
+- **Billing buckets**: `[profiles.billing]` maps issue labels to free-form buckets; `uncategorised`
+  catches unlabelled issues, `exclude_from_total` (default: `project`) keeps fixed-fee work out of
+  the grand total, `rate`/`currency` add amounts (absent = hours-only)
 
 **Note:** Booking connection must have Tempo enabled. If shadow ticket not found, a helpful message is shown (sync may be pending).
 

@@ -33,6 +33,7 @@
 - 📎 **Attachments**: Upload files to issues and embed images inline in comments
 - ⏱️ **Time Tracking**: Comprehensive worklog management (add, list, update, delete) and time estimates
 - 🎼 **Tempo Integration**: Full support for Tempo Timesheets API for enterprise time tracking
+- 💶 **Billing Reports**: Billable vs. non-billable reporting for workflow profiles, table or JSON
 - 📊 **JSON Output**: Machine-readable JSON format for automation and integration with other tools
 
 ## 📦 Installation
@@ -709,6 +710,49 @@ backends.
   and native Jira worklogs everywhere else
 - Use `budjira worklog` commands for standard Jira time tracking only
 - Tempo integration is optional and requires a separate API token
+
+### Workflow Billing Reports
+
+For cross-instance workflow profiles (planning + booking), `budjira workflow billing`
+answers the monthly question: how much of the booked time is billable, how much is
+covered by a retainer or warranty? The mapping from issue labels to billing buckets
+is configuration, not code — an optional `billing` block in the workflow profile:
+
+```toml
+[[profiles]]
+name = "acme-shadow"
+planning_connection = "acme-planning"
+booking_connection  = "acme-booking"
+project_mappings = [{ planning_project = "PLAN", booking_project = "BOOK" }]
+
+[profiles.billing]
+# label -> bucket; buckets are free-form, the report groups by them
+categories = { analysis = "billable", warranty = "non-billable", onboarding = "project" }
+
+require_exactly_one = true        # fail loudly on issues with several category labels
+exclude_from_total = ["project"]  # shown in the report, but outside the grand total
+# rate = 95                       # optional; absent or 0 => hours-only report
+# currency = "EUR"
+```
+
+```bash
+# Monthly report (defaults to the current month)
+budjira workflow billing --profile acme-shadow --month 2026-08
+
+# Custom period, grouping and filtering
+budjira workflow billing --profile acme-shadow --from 2026-08-01 --to 2026-09-30
+budjira workflow billing --profile acme-shadow --group category
+budjira workflow billing --profile acme-shadow --bucket billable
+
+# Label hygiene check (exit code 1 on violations — CI/agent friendly)
+budjira workflow billing --profile acme-shadow --validate
+
+# Machine-readable output (same data, deterministic schema)
+budjira --format json workflow billing --profile acme-shadow --month 2026-08
+```
+
+Issues without a category label appear in an explicit `uncategorised` bucket, so
+booked time is never silently dropped from the total.
 
 ### JSON Output Format
 

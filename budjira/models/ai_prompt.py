@@ -1368,6 +1368,41 @@ Automated flow:
 
 **If no estimate is set on the planning issue, overbooking checks are skipped.**
 
+### Billing Reports (billable vs. non-billable)
+
+```bash
+budjira workflow billing --profile ek-to-k --month 2026-08
+budjira workflow billing --profile ek-to-k --from 2026-08-01 --to 2026-09-30
+budjira workflow billing --profile ek-to-k --group category
+budjira workflow billing --profile ek-to-k --bucket billable
+budjira workflow billing --profile ek-to-k --validate
+budjira --format json workflow billing --profile ek-to-k --month 2026-08
+```
+
+Answers "how much of the booked time in a period is billable?" by grouping the
+time booked on shadow tickets (Tempo) by billing bucket. Driven by an optional
+`[profiles.billing]` block in the profile:
+
+```toml
+[profiles.billing]
+# label -> bucket; buckets are free-form, the report groups by them
+categories = { analysis = "billable", warranty = "non-billable", onboarding = "project" }
+require_exactly_one = true        # default: fail loudly on issues with several category labels
+exclude_from_total = ["project"]  # shown in the report, but outside the grand total
+# rate = 95                       # optional; absent or 0 => hours-only report
+# currency = "EUR"
+```
+
+**Behavior:**
+- Period: `--month YYYY-MM` (default: current month) or `--from`/`--to` (YYYY-MM-DD)
+- Rows: planning issue, booking issue, category, hours, summary (+ amount when a rate is set)
+- Issues without a category label land in an explicit `uncategorised` bucket — never silently dropped
+- `--group category` groups by label instead of bucket; `--bucket NAME` filters to one bucket
+- `--validate` checks label hygiene across the profile's planning projects (no category label /
+  more than one) without producing a report; exits 1 on violations (CI/agent friendly)
+- `--format json` emits the deterministic report schema (groups, lines, totals, warnings)
+- Requires `shadow_strategy = "summary"` (the planning key is read from the booking summary)
+
 ### Configuration
 
 Profiles are stored in `~/.config/budjira/workflows.toml`:
@@ -1393,6 +1428,7 @@ All workflow commands support `--format json`:
 budjira --format json workflow list
 budjira --format json workflow show ek-to-k
 budjira --format json workflow status EK-123 --profile ek-to-k
+budjira --format json workflow billing --profile ek-to-k --month 2026-08
 ```""",
             order=12.5,
             enabled=True,
