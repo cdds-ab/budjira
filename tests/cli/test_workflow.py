@@ -791,7 +791,9 @@ def test_workflow_billing_group_category(mock_service_cls: Mock) -> None:
     mock_service.get_billing_report.return_value = _billing_report()
     mock_service_cls.from_profile.return_value = mock_service
 
-    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k", "--group", "category"])
+    result = runner.invoke(
+        app, ["-q", "workflow", "billing", "--profile", "ek-to-k", "--month", "2026-08", "--group", "category"]
+    )
 
     assert result.exit_code == 0
     mock_service.get_billing_report.assert_called_once_with(
@@ -1141,7 +1143,7 @@ def test_workflow_billing_mine_flag(mock_service_cls: Mock) -> None:
     mock_service.get_billing_report.return_value = _billing_report()
     mock_service_cls.from_profile.return_value = mock_service
 
-    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k", "--mine"])
+    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k", "--month", "2026-08", "--mine"])
 
     assert result.exit_code == 0
     mock_service.get_billing_report.assert_called_once_with(
@@ -1167,7 +1169,7 @@ def test_workflow_billing_mine_by_default_from_profile(mock_service_cls: Mock) -
     mock_service.get_billing_report.return_value = _billing_report()
     mock_service_cls.from_profile.return_value = mock_service
 
-    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k"])
+    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k", "--month", "2026-08"])
 
     assert result.exit_code == 0
     mock_service.get_billing_report.assert_called_once_with(
@@ -1183,7 +1185,7 @@ def test_workflow_billing_all_overrides_mine_by_default(mock_service_cls: Mock) 
     mock_service.get_billing_report.return_value = _billing_report()
     mock_service_cls.from_profile.return_value = mock_service
 
-    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k", "--all"])
+    result = runner.invoke(app, ["-q", "workflow", "billing", "--profile", "ek-to-k", "--month", "2026-08", "--all"])
 
     assert result.exit_code == 0
     mock_service.get_billing_report.assert_called_once_with(
