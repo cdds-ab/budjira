@@ -128,9 +128,40 @@ budjira connect
 # You'll be prompted for:
 # - Jira URL (e.g., https://your-company.atlassian.net)
 # - Email
-# - API Token (create one at https://id.atlassian.com/manage-profile/security/api-tokens)
+# - API token source: a secret reference (recommended) or a stored token (deprecated)
 # - Default project key
 ```
+
+**API tokens as secret references.** Instead of a copy on disk, point the
+connection at where the token already lives:
+
+```bash
+# Recommended: token in pass (the standard Unix password manager)
+budjira connect add --name work --url https://work.atlassian.net \
+  --email user@work.com --project PROJ --api-token-ref pass:work/atlassian-token
+
+# Or from the environment (CI, containers, direnv)
+budjira connect add --name work --url https://work.atlassian.net \
+  --email user@work.com --project PROJ --api-token-ref env:WORK_JIRA_TOKEN
+```
+
+Supported reference schemes: `env:NAME` (environment variable),
+`pass:entry` (`pass show`, first line), `file:/path` (first line).
+Token resolution order per connection: `api_token_ref` →
+`BUDJIRA_<NAME>_API_TOKEN` → `BUDJIRA_API_TOKEN` → stored token (deprecated,
+warns once per command). Several connections may share one reference, so
+rotating an account-wide Atlassian token is a single `pass insert`.
+
+Already have stored tokens? Migrate them:
+
+```bash
+budjira connect migrate work --to pass:work/atlassian-token   # verifies before deleting
+budjira connect migrate --all --to pass:budjira               # one entry per connection
+```
+
+Tempo tokens work the same way: `budjira connect tempo-setup --tempo-token-ref pass:work/tempo-token`.
+Create tokens at https://id.atlassian.com/manage-profile/security/api-tokens (Jira)
+or Tempo → Settings → API Integration → Tokens (Tempo).
 
 ### 2. Manage Connections
 
@@ -961,7 +992,10 @@ budjira maintains high code quality standards:
 **⚠️ IMPORTANT: This repository is PUBLIC.**
 
 ### For Users
-- Credentials are stored securely using system keyring where available
+- API tokens are best kept out of budjira entirely: secret references
+  (`pass:`, `env:`, `file:`) resolve tokens from your password manager or
+  environment at runtime - see Quick Start
+- Tokens stored on disk (deprecated) live in per-connection files with mode 0600
 - API tokens are never logged or displayed in output
 - Security scanning via Bandit in CI/CD pipeline
 - Regular dependency updates via Dependabot
