@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.31.0 (2026-09-02)
+
+### Feat
+
+- **config**: secret references for tokens, deprecate on-disk store (#124)
+
 ## v1.30.0 (2026-08-29)
 
 ### Feat
