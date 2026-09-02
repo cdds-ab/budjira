@@ -612,16 +612,11 @@ class TestJiraClientMetadata:
 class TestJiraClientFromConnection:
     """Test from_connection factory method."""
 
-    @patch("budjira.core.jira_client.CredentialStore")
+    @patch("budjira.core.jira_client.resolve_api_token")
     @patch("budjira.core.jira_client.JIRA")
-    def test_from_connection_success(
-        self, mock_jira_class: Mock, mock_cred_store_class: Mock, connection: Connection
-    ) -> None:
+    def test_from_connection_success(self, mock_jira_class: Mock, mock_resolve: Mock, connection: Connection) -> None:
         """Test creating client from connection."""
-        mock_cred_store = MagicMock()
-        mock_cred_store.has_credentials.return_value = True
-        mock_cred_store.retrieve.return_value = "test-token"
-        mock_cred_store_class.return_value = mock_cred_store
+        mock_resolve.return_value = "test-token"
 
         mock_jira_instance = MagicMock()
         mock_jira_class.return_value = mock_jira_instance
@@ -630,17 +625,14 @@ class TestJiraClientFromConnection:
 
         assert isinstance(client, JiraClient)
         assert client.connection == connection
-        mock_cred_store.has_credentials.assert_called_once_with(connection)
-        mock_cred_store.retrieve.assert_called_once_with(connection)
+        mock_resolve.assert_called_once_with(connection)
 
-    @patch("budjira.core.jira_client.CredentialStore")
-    def test_from_connection_no_credentials(self, mock_cred_store_class: Mock, connection: Connection) -> None:
-        """Test from_connection without credentials."""
-        mock_cred_store = MagicMock()
-        mock_cred_store.has_credentials.return_value = False
-        mock_cred_store_class.return_value = mock_cred_store
+    @patch("budjira.core.jira_client.resolve_api_token")
+    def test_from_connection_no_credentials(self, mock_resolve: Mock, connection: Connection) -> None:
+        """Test from_connection without any token source."""
+        mock_resolve.return_value = None
 
-        with pytest.raises(AuthenticationError, match="No credentials found"):
+        with pytest.raises(AuthenticationError, match="No API token found"):
             JiraClient.from_connection(connection)
 
 

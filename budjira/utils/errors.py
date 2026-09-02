@@ -89,3 +89,12 @@ class WorkflowConfigError(ConfigurationError):
     """Raised when workflow profile configuration is invalid."""
 
     pass
+
+
+class SecretRefError(ConfigurationError):
+    """Raised when a secret reference cannot be resolved.
+
+    Messages name the reference, never the resolved value.
+    """
+
+    pass

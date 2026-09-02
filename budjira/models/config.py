@@ -80,5 +80,9 @@ class GlobalConfig(BaseModel):
         default="warn",
         description="DoR validation level: strict (block), warn (allow), off (disabled)",
     )
+    suppress_stored_token_warning: bool = Field(
+        default=False,
+        description="Suppress the deprecation warning shown when a stored token is used",
+    )
 
     model_config = {"use_enum_values": True, "validate_assignment": True}

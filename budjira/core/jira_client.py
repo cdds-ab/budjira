@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from jira import JIRA
 from jira.exceptions import JIRAError
 
-from budjira.config.credentials import CredentialStore
+from budjira.config.secrets import resolve_api_token
 from budjira.services import (
     AttachmentService,
     CommentService,
@@ -118,16 +118,13 @@ class JiraClient:
             AuthenticationError: If credentials not found
             JiraAPIError: If connection fails
         """
-        credential_store = CredentialStore()
-
-        if not credential_store.has_credentials(connection):
-            raise AuthenticationError(
-                f"No credentials found for connection '{connection.name}'. Run 'budjira connect' to set up credentials."
-            )
-
-        api_token = credential_store.retrieve(connection)
+        api_token = resolve_api_token(connection)
         if not api_token:
-            raise AuthenticationError(f"Failed to retrieve credentials for connection '{connection.name}'.")
+            raise AuthenticationError(
+                f"No API token found for connection '{connection.name}'. "
+                "Set api_token_ref (env:/pass:/file:), export BUDJIRA_API_TOKEN, "
+                "or run 'budjira connect add' to set up credentials."
+            )
         return cls(connection, api_token)
 
     @property

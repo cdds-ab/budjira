@@ -207,6 +207,12 @@ class Settings:
         if conn.ai_prompt is not None:
             result["ai_prompt"] = conn.ai_prompt
 
+        # Add secret references if set
+        if conn.api_token_ref is not None:
+            result["api_token_ref"] = conn.api_token_ref
+        if conn.tempo_token_ref is not None:
+            result["tempo_token_ref"] = conn.tempo_token_ref
+
         # Add custom_fields if any
         if conn.custom_fields:
             result["custom_fields"] = {

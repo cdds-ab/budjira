@@ -121,6 +121,33 @@ class TestSettings:
 
         assert loaded.connections[0].description_dialect == "wiki"
 
+    def test_secret_refs_survive_round_trip(self, temp_settings: Settings) -> None:
+        """Secret references are serialized to connections.toml and back."""
+        temp_settings.add_connection(
+            Connection(
+                name="Ref House",
+                url="https://test.atlassian.net",
+                email="test@example.com",
+                project_key="TEST",
+                api_token_ref="pass:acme/jira-token",
+                tempo_token_ref="env:ACME_TEMPO_TOKEN",
+            )
+        )
+
+        loaded = temp_settings.load_connections()
+
+        assert loaded.connections[0].api_token_ref == "pass:acme/jira-token"
+        assert loaded.connections[0].tempo_token_ref == "env:ACME_TEMPO_TOKEN"
+
+    def test_connection_without_refs_stays_none(self, temp_settings: Settings, test_connection: Connection) -> None:
+        """An existing config without references loads with both refs None."""
+        temp_settings.add_connection(test_connection)
+
+        loaded = temp_settings.load_connections()
+
+        assert loaded.connections[0].api_token_ref is None
+        assert loaded.connections[0].tempo_token_ref is None
+
     def test_config_without_description_dialect_defaults_to_markdown(self, temp_settings: Settings) -> None:
         """An existing config file loads unmigrated and keeps today's behaviour."""
         temp_settings.connections_file.write_text(

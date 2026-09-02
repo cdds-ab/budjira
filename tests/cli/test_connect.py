@@ -69,7 +69,7 @@ class TestConnectAdd:
                     "--description-dialect",
                     "wiki",
                 ],
-                input="token\n",
+                input="store\ntoken\n",
             )
 
             assert result.exit_code == 0
@@ -119,7 +119,7 @@ class TestConnectAdd:
                     "--project",
                     "TEST",
                 ],
-                input="y\ntoken\n",
+                input="y\nstore\ntoken\n",
             )
 
             assert result.exit_code == 0
@@ -178,7 +178,7 @@ class TestConnectAdd:
                     "--project",
                     "NEW",
                 ],
-                input="y\ntoken\n",
+                input="y\nstore\ntoken\n",
             )
 
             assert result.exit_code == 0
@@ -757,3 +757,974 @@ class TestConnectTempoSetup:
             # Assert command failed
             assert result.exit_code == 1
             assert "No active connection" in result.stdout
+
+
+class TestConnectAddSecretRefs:
+    """Test connect add with secret references (#124)."""
+
+    def test_add_with_api_token_ref_flag(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """--api-token-ref stores the reference, never a credential file."""
+        monkeypatch.setenv("ADD_PROBE_TOKEN", "secret-value")
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+            patch("budjira.cli.connect._auto_sync_metadata"),
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+
+            result = runner.invoke(
+                app,
+                [
+                    "connect",
+                    "add",
+                    "--name",
+                    "RefHouse",
+                    "--url",
+                    "https://test.atlassian.net",
+                    "--email",
+                    "test@example.com",
+                    "--project",
+                    "TEST",
+                    "--api-token-ref",
+                    "env:ADD_PROBE_TOKEN",
+                ],
+            )
+
+            assert result.exit_code == 0
+            stored = settings.load_connections().find_by_name("RefHouse")
+            assert stored is not None
+            assert stored.api_token_ref == "env:ADD_PROBE_TOKEN"
+            assert not get_credential_store().has_credentials(stored)
+
+    def test_add_ref_probe_failure_declined_aborts(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A broken reference that the user does not confirm aborts before saving."""
+        monkeypatch.delenv("ADD_PROBE_TOKEN", raising=False)
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.cli.connect._auto_sync_metadata"),
+        ):
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+
+            result = runner.invoke(
+                app,
+                [
+                    "connect",
+                    "add",
+                    "--name",
+                    "RefHouse",
+                    "--url",
+                    "https://test.atlassian.net",
+                    "--email",
+                    "test@example.com",
+                    "--project",
+                    "TEST",
+                    "--api-token-ref",
+                    "env:ADD_PROBE_TOKEN",
+                ],
+                input="n\n",
+            )
+
+            assert result.exit_code != 0
+
+            from budjira.config import get_settings
+
+            assert get_settings().connections.find_by_name("RefHouse") is None
+
+    def test_add_store_token_flag_warns_and_stores(self, tmp_path: Path) -> None:
+        """--store-token keeps the deprecated path working, with a warning."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+            patch("budjira.cli.connect._auto_sync_metadata"),
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+
+            result = runner.invoke(
+                app,
+                [
+                    "connect",
+                    "add",
+                    "--name",
+                    "StoreHouse",
+                    "--url",
+                    "https://test.atlassian.net",
+                    "--email",
+                    "test@example.com",
+                    "--project",
+                    "TEST",
+                    "--store-token",
+                ],
+                input="raw-token\n",
+            )
+
+            assert result.exit_code == 0
+            assert "deprecated" in result.stdout.lower()
+            stored = settings.load_connections().find_by_name("StoreHouse")
+            assert stored is not None
+            assert stored.api_token_ref is None
+            assert get_credential_store().retrieve(stored) == "raw-token"
+
+    def test_add_ref_supersedes_stored_token(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Setting a verified reference on an existing connection removes the stored file."""
+        monkeypatch.setenv("ADD_PROBE_TOKEN", "secret-value")
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+            patch("budjira.cli.connect._auto_sync_metadata"),
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+
+            conn = Connection(
+                name="Legacy",
+                url="https://test.atlassian.net",
+                email="test@example.com",
+                project_key="TEST",
+            )
+            settings.add_connection(conn)
+            credential_store = get_credential_store()
+            credential_store.store(conn, "old-token")
+            assert credential_store.has_credentials(conn)
+
+            result = runner.invoke(
+                app,
+                [
+                    "connect",
+                    "add",
+                    "--name",
+                    "Legacy",
+                    "--url",
+                    "https://test.atlassian.net",
+                    "--email",
+                    "test@example.com",
+                    "--project",
+                    "TEST",
+                    "--api-token-ref",
+                    "env:ADD_PROBE_TOKEN",
+                ],
+                input="y\n",
+            )
+
+            assert result.exit_code == 0
+            stored = settings.load_connections().find_by_name("Legacy")
+            assert stored is not None
+            assert stored.api_token_ref == "env:ADD_PROBE_TOKEN"
+            assert not credential_store.has_credentials(stored)
+
+
+class TestConnectShowSecretRefs:
+    """Test connect show token source display (#124)."""
+
+    def test_show_displays_ref_verbatim(self, tmp_path: Path) -> None:
+        """The reference is printed verbatim, never a resolved value."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            settings.add_connection(
+                Connection(
+                    name="RefHouse",
+                    url="https://test.atlassian.net",
+                    email="test@example.com",
+                    project_key="TEST",
+                    api_token_ref="pass:acme/jira-token",
+                )
+            )
+
+            result = runner.invoke(app, ["connect", "show", "RefHouse"])
+
+            assert result.exit_code == 0
+            assert "pass:acme/jira-token" in result.stdout
+
+    def test_show_marks_stored_deprecated(self, tmp_path: Path) -> None:
+        """A stored token is flagged as deprecated."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            conn = Connection(
+                name="Legacy",
+                url="https://test.atlassian.net",
+                email="test@example.com",
+                project_key="TEST",
+            )
+            settings.add_connection(conn)
+            get_credential_store().store(conn, "old-token")
+
+            result = runner.invoke(app, ["connect", "show", "Legacy"])
+
+            assert result.exit_code == 0
+            assert "stored (deprecated)" in result.stdout
+
+
+class TestConnectListTokenColumn:
+    """Test the API token column in connect list (#124)."""
+
+    def test_list_marks_stored_deprecated(self, tmp_path: Path) -> None:
+        """Stored tokens are flagged, references shown verbatim."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            conn = Connection(
+                name="Legacy",
+                url="https://test.atlassian.net",
+                email="test@example.com",
+                project_key="TEST",
+            )
+            settings.add_connection(conn)
+            get_credential_store().store(conn, "old-token")
+            settings.add_connection(
+                Connection(
+                    name="RefHouse",
+                    url="https://ref.atlassian.net",
+                    email="ref@example.com",
+                    project_key="REF",
+                    api_token_ref="pass:acme/jira-token",
+                )
+            )
+
+            result = runner.invoke(app, ["connect", "list"])
+
+            assert result.exit_code == 0
+            assert "stored (deprecated)" in result.stdout
+            assert "pass:acme/jira-token" in result.stdout
+
+
+class TestConnectRemoveTempoOrphan:
+    """Test that remove also deletes the Tempo credential file (#124)."""
+
+    def test_remove_also_removes_tempo_token(self, tmp_path: Path) -> None:
+        """connect remove must not leave an orphaned live Tempo token behind."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            conn = Connection(
+                name="WithTempo",
+                url="https://test.atlassian.net",
+                email="test@example.com",
+                project_key="TEST",
+                tempo_enabled=True,
+            )
+            settings.add_connection(conn)
+            credential_store = get_credential_store()
+            credential_store.store(conn, "jira-token")
+            credential_store.store_credential(conn.get_tempo_credential_key(), "tempo-token")
+
+            result = runner.invoke(app, ["connect", "remove", "WithTempo", "--force"])
+
+            assert result.exit_code == 0
+            assert "Removed Tempo token" in result.stdout
+            assert credential_store.get_credential(conn.get_tempo_credential_key()) is None
+
+
+class TestTempoSetupSecretRef:
+    """Test tempo-setup with --tempo-token-ref (#124)."""
+
+    def test_tempo_setup_with_ref(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A verified reference enables Tempo without storing a token."""
+        monkeypatch.setenv("TEMPO_PROBE_TOKEN", "tempo-secret")
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            settings.add_connection(
+                Connection(
+                    name="RefHouse",
+                    url="https://test.atlassian.net",
+                    email="test@example.com",
+                    project_key="TEST",
+                )
+            )
+
+            result = runner.invoke(
+                app,
+                [
+                    "connect",
+                    "tempo-setup",
+                    "--connection",
+                    "RefHouse",
+                    "--tempo-token-ref",
+                    "env:TEMPO_PROBE_TOKEN",
+                ],
+            )
+
+            assert result.exit_code == 0
+            stored = settings.load_connections().find_by_name("RefHouse")
+            assert stored is not None
+            assert stored.tempo_enabled is True
+            assert stored.tempo_token_ref == "env:TEMPO_PROBE_TOKEN"
+            assert get_credential_store().get_credential(stored.get_tempo_credential_key()) is None
+
+
+class TestConnectMigrate:
+    """Test connect migrate command (#124)."""
+
+    def _setup(self, tmp_path: Path):
+        """Standard tmp-dir settings/credential store context."""
+        return (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings"),
+        )
+
+    def test_migrate_to_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """env target migrates only when the variable already holds the stored token."""
+        monkeypatch.setenv("ACME_JIRA_TOKEN", "jira-token-123")
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            conn = Connection(
+                name="acme",
+                url="https://acme.atlassian.net",
+                email="user@example.com",
+                project_key="ACME",
+            )
+            settings.add_connection(conn)
+            credential_store = get_credential_store()
+            credential_store.store(conn, "jira-token-123")
+
+            result = runner.invoke(app, ["connect", "migrate", "acme", "--to", "env:ACME_JIRA_TOKEN"])
+
+            assert result.exit_code == 0
+            assert "migrated to" in result.stdout
+            stored = settings.load_connections().find_by_name("acme")
+            assert stored is not None
+            assert stored.api_token_ref == "env:ACME_JIRA_TOKEN"
+            assert not credential_store.has_credentials(stored)
+
+    def test_migrate_to_pass_verified(self, tmp_path: Path) -> None:
+        """pass target: insert, verify same value, then switch and delete."""
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            conn = Connection(
+                name="acme",
+                url="https://acme.atlassian.net",
+                email="user@example.com",
+                project_key="ACME",
+            )
+            settings.add_connection(conn)
+            credential_store = get_credential_store()
+            credential_store.store(conn, "jira-token-123")
+
+            run_results = [
+                MagicMock(returncode=1, stderr="Error: acme/jira-token is not in the password store.\n"),
+                MagicMock(returncode=0, stderr=""),  # pass insert
+                MagicMock(returncode=0, stdout="jira-token-123\n"),  # verification pass show
+            ]
+            with (
+                patch("budjira.cli.connect.shutil.which", return_value="/usr/bin/pass"),
+                patch("budjira.config.secret_ref.shutil.which", return_value="/usr/bin/pass"),
+                patch("budjira.cli.connect.subprocess.run", side_effect=run_results) as mock_run,
+            ):
+                result = runner.invoke(app, ["connect", "migrate", "acme", "--to", "pass:acme/jira-token"])
+
+            assert result.exit_code == 0
+            insert_call = mock_run.call_args_list[1]
+            assert insert_call[0][0][:3] == ["pass", "insert", "--multiline"]
+            assert insert_call[1]["input"] == "jira-token-123\n"
+            stored = settings.load_connections().find_by_name("acme")
+            assert stored is not None
+            assert stored.api_token_ref == "pass:acme/jira-token"
+            assert not credential_store.has_credentials(stored)
+
+    def test_migrate_pass_existing_entry_requires_force(self, tmp_path: Path) -> None:
+        """An existing pass entry blocks migration unless --force is given."""
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            conn = Connection(
+                name="acme",
+                url="https://acme.atlassian.net",
+                email="user@example.com",
+                project_key="ACME",
+            )
+            settings.add_connection(conn)
+            credential_store = get_credential_store()
+            credential_store.store(conn, "jira-token-123")
+
+            with (
+                patch("budjira.cli.connect.shutil.which", return_value="/usr/bin/pass"),
+                patch("budjira.cli.connect.subprocess.run", return_value=MagicMock(returncode=0)),
+            ):
+                result = runner.invoke(app, ["connect", "migrate", "acme", "--to", "pass:acme/jira-token"])
+
+            assert result.exit_code == 0
+            assert "already exists" in result.stdout
+            assert "Nothing migrated" in result.stdout
+            stored = settings.load_connections().find_by_name("acme")
+            assert stored is not None
+            assert stored.api_token_ref is None
+            assert credential_store.has_credentials(stored)
+
+    def test_migrate_pass_verification_mismatch_keeps_file(self, tmp_path: Path) -> None:
+        """If the new reference resolves to a different value, keep the stored token."""
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            conn = Connection(
+                name="acme",
+                url="https://acme.atlassian.net",
+                email="user@example.com",
+                project_key="ACME",
+            )
+            settings.add_connection(conn)
+            credential_store = get_credential_store()
+            credential_store.store(conn, "jira-token-123")
+
+            run_results = [
+                MagicMock(returncode=1, stderr="Error: acme/jira-token is not in the password store.\n"),
+                MagicMock(returncode=0, stderr=""),  # insert ok
+                MagicMock(returncode=0, stdout="different-token\n"),  # verification mismatch
+            ]
+            with (
+                patch("budjira.cli.connect.shutil.which", return_value="/usr/bin/pass"),
+                patch("budjira.config.secret_ref.shutil.which", return_value="/usr/bin/pass"),
+                patch("budjira.cli.connect.subprocess.run", side_effect=run_results),
+            ):
+                result = runner.invoke(app, ["connect", "migrate", "acme", "--to", "pass:acme/jira-token"])
+
+            assert result.exit_code == 0
+            assert "different value" in result.stdout
+            stored = settings.load_connections().find_by_name("acme")
+            assert stored is not None
+            assert stored.api_token_ref is None
+            assert credential_store.has_credentials(stored)
+
+    def test_migrate_all_with_pass_prefix(self, tmp_path: Path) -> None:
+        """--all uses --to as a prefix, one entry per connection."""
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            credential_store = get_credential_store()
+            for name in ("Site A", "site-b"):
+                conn = Connection(
+                    name=name,
+                    url="https://x.atlassian.net",
+                    email="u@example.com",
+                    project_key="XX",
+                )
+                settings.add_connection(conn)
+                credential_store.store(conn, f"token-{name}")
+
+            inserted: dict[str, str] = {}
+
+            def fake_run(args, **kwargs):
+                if args[:2] == ["pass", "insert"]:
+                    entry = args[4]  # pass insert --multiline --force <entry>
+                    inserted[entry] = kwargs["input"]
+                    return MagicMock(returncode=0, stderr="")
+                if args[:2] == ["pass", "show"]:
+                    entry = args[2]
+                    if entry in inserted:
+                        return MagicMock(returncode=0, stdout=inserted[entry])
+                    return MagicMock(returncode=1, stderr=f"Error: {entry} is not in the password store.\n")
+                return MagicMock(returncode=1, stderr="")
+
+            with (
+                patch("budjira.cli.connect.shutil.which", return_value="/usr/bin/pass"),
+                patch("budjira.config.secret_ref.shutil.which", return_value="/usr/bin/pass"),
+                patch("budjira.cli.connect.subprocess.run", side_effect=fake_run),
+            ):
+                result = runner.invoke(app, ["connect", "migrate", "--all", "--to", "pass:budjira"])
+
+            assert result.exit_code == 0
+            loaded = settings.load_connections()
+            site_a = loaded.find_by_name("Site A")
+            site_b = loaded.find_by_name("site-b")
+            assert site_a is not None
+            assert site_b is not None
+            assert site_a.api_token_ref == "pass:budjira/site-a"
+            assert site_b.api_token_ref == "pass:budjira/site-b"
+
+    def test_migrate_tempo_token(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """--tempo-to migrates the Tempo credential once the variable matches."""
+        monkeypatch.setenv("ACME_TEMPO_TOKEN", "tempo-token-9")
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            conn = Connection(
+                name="acme",
+                url="https://acme.atlassian.net",
+                email="user@example.com",
+                project_key="ACME",
+                tempo_enabled=True,
+            )
+            settings.add_connection(conn)
+            credential_store = get_credential_store()
+            credential_store.store_credential(conn.get_tempo_credential_key(), "tempo-token-9")
+
+            result = runner.invoke(app, ["connect", "migrate", "acme", "--tempo-to", "env:ACME_TEMPO_TOKEN"])
+
+            assert result.exit_code == 0
+            assert "migrated to" in result.stdout
+            stored = settings.load_connections().find_by_name("acme")
+            assert stored is not None
+            assert stored.tempo_token_ref == "env:ACME_TEMPO_TOKEN"
+            assert credential_store.get_credential(stored.get_tempo_credential_key()) is None
+
+    def test_migrate_nothing_stored(self, tmp_path: Path) -> None:
+        """A connection without stored tokens reports nothing to migrate."""
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+
+            from budjira.config import get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            settings.add_connection(
+                Connection(
+                    name="acme",
+                    url="https://acme.atlassian.net",
+                    email="user@example.com",
+                    project_key="ACME",
+                )
+            )
+
+            result = runner.invoke(app, ["connect", "migrate", "acme", "--to", "env:ACME_TOKEN"])
+
+            assert result.exit_code == 0
+            assert "nothing to migrate" in result.stdout
+            assert "Nothing migrated" in result.stdout
+
+    def test_migrate_requires_target(self, tmp_path: Path) -> None:
+        """Neither --to nor --tempo-to is an error."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+        ):
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+
+            result = runner.invoke(app, ["connect", "migrate", "acme"])
+
+            assert result.exit_code == 1
+            assert "Nothing to do" in result.stdout
+
+    def test_migrate_rejects_file_scheme(self, tmp_path: Path) -> None:
+        """file: targets are not a migration destination."""
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_credential_store, get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            conn = Connection(
+                name="acme",
+                url="https://acme.atlassian.net",
+                email="user@example.com",
+                project_key="ACME",
+            )
+            settings.add_connection(conn)
+            get_credential_store().store(conn, "jira-token-123")
+
+            result = runner.invoke(app, ["connect", "migrate", "acme", "--to", "file:/tmp/token"])
+
+            assert result.exit_code == 1
+            assert "not 'file:'" in result.stdout
+
+
+class TestConnectMigrateSafety:
+    """Sparring-driven safety properties of connect migrate (#124)."""
+
+    def _setup(self, tmp_path: Path):
+        """Standard tmp-dir settings/credential store context."""
+        return (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings"),
+        )
+
+    def _make_settings(self, tmp_path: Path, mock_cred_get_settings, *, tempo: bool = False):
+        """Wire tmp settings, one 'acme' connection with stored token(s)."""
+        import budjira.config.credentials
+        import budjira.config.settings
+
+        budjira.config.settings._settings = None
+        budjira.config.credentials._credential_store = None
+
+        from budjira.config import get_credential_store, get_settings
+
+        settings = get_settings()
+        mock_cred_get_settings.return_value = settings
+        conn = Connection(
+            name="acme",
+            url="https://acme.atlassian.net",
+            email="user@example.com",
+            project_key="ACME",
+            tempo_enabled=tempo,
+        )
+        settings.add_connection(conn)
+        credential_store = get_credential_store()
+        credential_store.store(conn, "jira-token-123")
+        if tempo:
+            credential_store.store_credential(conn.get_tempo_credential_key(), "tempo-token-9")
+        return settings, credential_store
+
+    def test_migrate_env_unset_keeps_file(self, tmp_path: Path) -> None:
+        """Unset env var: export line printed, but file and config stay untouched."""
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            settings, credential_store = self._make_settings(tmp_path, mock_cred_get_settings)
+
+            result = runner.invoke(app, ["connect", "migrate", "acme", "--to", "env:ACME_JIRA_TOKEN"])
+
+            assert result.exit_code == 0
+            assert "is not set" in result.stdout
+            assert "export ACME_JIRA_TOKEN='jira-token-123'" in result.stdout
+            assert "Nothing migrated" in result.stdout
+            stored = settings.load_connections().find_by_name("acme")
+            assert stored is not None
+            assert stored.api_token_ref is None
+            assert credential_store.has_credentials(stored)
+
+    def test_migrate_env_mismatch_keeps_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A variable holding a DIFFERENT value must not silently take over."""
+        monkeypatch.setenv("ACME_JIRA_TOKEN", "someone-elses-token")
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            settings, credential_store = self._make_settings(tmp_path, mock_cred_get_settings)
+
+            result = runner.invoke(app, ["connect", "migrate", "acme", "--to", "env:ACME_JIRA_TOKEN"])
+
+            assert result.exit_code == 0
+            assert "different value" in result.stdout
+            assert "Nothing migrated" in result.stdout
+            stored = settings.load_connections().find_by_name("acme")
+            assert stored is not None
+            assert stored.api_token_ref is None
+            assert credential_store.has_credentials(stored)
+
+    def test_migrate_pass_gpg_failure_blocks_insert(self, tmp_path: Path) -> None:
+        """A decryption failure is not 'entry absent' - insert must not run."""
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            settings, credential_store = self._make_settings(tmp_path, mock_cred_get_settings)
+
+            gpg_failure = MagicMock(returncode=2, stderr="gpg: decryption failed: No secret key\n")
+            with (
+                patch("budjira.cli.connect.shutil.which", return_value="/usr/bin/pass"),
+                patch("budjira.cli.connect.subprocess.run", return_value=gpg_failure) as mock_run,
+            ):
+                result = runner.invoke(app, ["connect", "migrate", "acme", "--to", "pass:acme/jira-token"])
+
+            assert result.exit_code == 0
+            assert "cannot inspect pass entry" in result.stdout
+            assert "Nothing migrated" in result.stdout
+            # exactly one call: the existence check; no insert, no verification
+            assert mock_run.call_count == 1
+            stored = settings.load_connections().find_by_name("acme")
+            assert stored is not None
+            assert stored.api_token_ref is None
+            assert credential_store.has_credentials(stored)
+
+    def test_migrate_pass_binary_missing(self, tmp_path: Path) -> None:
+        """No pass binary: clean error, no traceback."""
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            self._make_settings(tmp_path, mock_cred_get_settings)
+
+            with patch("budjira.cli.connect.shutil.which", return_value=None):
+                result = runner.invoke(app, ["connect", "migrate", "acme", "--to", "pass:acme/jira-token"])
+
+            assert result.exit_code == 1
+            assert "'pass' executable not found" in result.stdout
+            assert "Traceback" not in result.stdout
+
+    def test_migrate_same_target_rejected(self, tmp_path: Path) -> None:
+        """--to == --tempo-to would map both tokens onto one secret."""
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            self._make_settings(tmp_path, mock_cred_get_settings, tempo=True)
+
+            result = runner.invoke(
+                app,
+                ["connect", "migrate", "acme", "--to", "pass:acme/token", "--tempo-to", "pass:acme/token"],
+            )
+
+            assert result.exit_code == 1
+            assert "must differ" in result.stdout
+
+    def test_migrate_all_tempo_gets_own_entry(self, tmp_path: Path) -> None:
+        """--all with one prefix must not map API and Tempo tokens together."""
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            settings, _ = self._make_settings(tmp_path, mock_cred_get_settings, tempo=True)
+
+            inserted: dict[str, str] = {}
+
+            def fake_run(args, **kwargs):
+                if args[:2] == ["pass", "insert"]:
+                    inserted[args[4]] = kwargs["input"]
+                    return MagicMock(returncode=0, stderr="")
+                if args[:2] == ["pass", "show"]:
+                    entry = args[2]
+                    if entry in inserted:
+                        return MagicMock(returncode=0, stdout=inserted[entry])
+                    return MagicMock(returncode=1, stderr=f"Error: {entry} is not in the password store.\n")
+                return MagicMock(returncode=1, stderr="")
+
+            with (
+                patch("budjira.cli.connect.shutil.which", return_value="/usr/bin/pass"),
+                patch("budjira.config.secret_ref.shutil.which", return_value="/usr/bin/pass"),
+                patch("budjira.cli.connect.subprocess.run", side_effect=fake_run),
+            ):
+                result = runner.invoke(
+                    app,
+                    ["connect", "migrate", "--all", "--to", "pass:budjira", "--tempo-to", "pass:budjira"],
+                )
+
+            assert result.exit_code == 0
+            stored = settings.load_connections().find_by_name("acme")
+            assert stored is not None
+            assert stored.api_token_ref == "pass:budjira/acme"
+            assert stored.tempo_token_ref == "pass:budjira/acme/tempo"
+            assert inserted["budjira/acme"] == "jira-token-123\n"
+            assert inserted["budjira/acme/tempo"] == "tempo-token-9\n"
+
+    def test_migrate_skips_connection_with_existing_ref(self, tmp_path: Path) -> None:
+        """A reference already set (e.g. shared) must never be re-pointed."""
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            settings, credential_store = self._make_settings(tmp_path, mock_cred_get_settings)
+            conn = settings.connections.find_by_name("acme")
+            assert conn is not None
+            conn.api_token_ref = "pass:shared/atlassian-token"
+            settings.update_connection(conn)
+
+            with patch("budjira.cli.connect.shutil.which", return_value="/usr/bin/pass"):
+                result = runner.invoke(app, ["connect", "migrate", "acme", "--to", "pass:budjira/acme"])
+
+            assert result.exit_code == 0
+            assert "already uses reference" in result.stdout
+            assert "Nothing migrated" in result.stdout
+            stored = settings.load_connections().find_by_name("acme")
+            assert stored is not None
+            assert stored.api_token_ref == "pass:shared/atlassian-token"
+            assert credential_store.has_credentials(stored)
+
+
+class TestConnectAddFlagConflict:
+    """--api-token-ref and --store-token are mutually exclusive (#124)."""
+
+    def test_ref_and_store_token_rejected(self, tmp_path: Path) -> None:
+        """Both flags together are a usage error, not a silent choice."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+        ):
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+
+            result = runner.invoke(
+                app,
+                [
+                    "connect",
+                    "add",
+                    "--name",
+                    "x",
+                    "--url",
+                    "https://x.atlassian.net",
+                    "--email",
+                    "u@example.com",
+                    "--project",
+                    "XX",
+                    "--api-token-ref",
+                    "env:X_TOKEN",
+                    "--store-token",
+                ],
+            )
+
+            assert result.exit_code == 1
+            assert "cannot be used together" in result.stdout
+
+
+class TestConnectTestSecretRef:
+    """A broken reference must surface as a clean error at consumption points (#124)."""
+
+    def test_test_connection_broken_ref(self, tmp_path: Path) -> None:
+        """connect test with an unresolvable ref: exit 1, names the ref, no traceback."""
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+            settings.add_connection(
+                Connection(
+                    name="BrokenRef",
+                    url="https://test.atlassian.net",
+                    email="test@example.com",
+                    project_key="TEST",
+                    api_token_ref="env:DEFINITELY_UNSET_BUDJIRA_TEST_VAR",
+                )
+            )
+
+            result = runner.invoke(app, ["connect", "test", "BrokenRef"])
+
+            assert result.exit_code == 1
+            assert "env:DEFINITELY_UNSET_BUDJIRA_TEST_VAR" in result.stdout
+            assert "Traceback" not in result.stdout

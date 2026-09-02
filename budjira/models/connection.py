@@ -79,6 +79,18 @@ class Connection(BaseModel):
         default=None,
         description="Project-specific AI prompt to append to generated usage prompts",
     )
+    api_token_ref: str | None = Field(
+        default=None,
+        description=(
+            "Secret reference for the Jira API token (env:NAME, pass:entry, file:/path) instead of a stored token"
+        ),
+    )
+    tempo_token_ref: str | None = Field(
+        default=None,
+        description=(
+            "Secret reference for the Tempo API token (env:NAME, pass:entry, file:/path) instead of a stored token"
+        ),
+    )
 
     @field_validator("project_key")
     @classmethod

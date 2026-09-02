@@ -41,8 +41,7 @@ def mock_tempo_connection(mock_connection):
     """Create a mock connection with Tempo enabled."""
     mock_connection.tempo_enabled = True
     with patch("budjira.cli.tempo.get_active_connection", return_value=mock_connection):
-        with patch("budjira.cli.tempo.CredentialStore") as mock_store:
-            mock_store.return_value.get_credential.return_value = "tempo_token_123"
+        with patch("budjira.cli.tempo.resolve_tempo_token", return_value="tempo_token_123"):
             yield mock_connection
 
 
@@ -227,9 +226,7 @@ def test_tempo_log_no_token(mock_connection):
     mock_connection.tempo_enabled = True
 
     with patch("budjira.cli.tempo.get_active_connection", return_value=mock_connection):
-        with patch("budjira.cli.tempo.CredentialStore") as mock_store:
-            mock_store.return_value.get_credential.return_value = None
-
+        with patch("budjira.cli.tempo.resolve_tempo_token", return_value=None):
             result = runner.invoke(app, ["tempo", "log", "PROJ-123", "2h"])
 
             assert result.exit_code == 1

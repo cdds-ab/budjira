@@ -647,7 +647,7 @@ class TestFromProfile:
     """Test WorkflowService.from_profile factory."""
 
     @patch("budjira.services.workflow.TempoClient")
-    @patch("budjira.services.workflow.CredentialStore")
+    @patch("budjira.services.workflow.resolve_tempo_token")
     @patch("budjira.services.workflow.JiraClient")
     @patch("budjira.services.workflow.get_active_connection")
     @patch("budjira.services.workflow.get_settings")
@@ -656,7 +656,7 @@ class TestFromProfile:
         mock_get_settings: Mock,
         mock_get_conn: Mock,
         mock_jira_cls: Mock,
-        mock_cred_store_cls: Mock,
+        mock_resolve_tempo: Mock,
         mock_tempo_cls: Mock,
     ) -> None:
         # Setup profile
@@ -671,15 +671,12 @@ class TestFromProfile:
         booking_conn = MagicMock()
         booking_conn.name = "k-booking"
         booking_conn.tempo_enabled = True
-        booking_conn.get_tempo_credential_key.return_value = "tempo_key"
 
         mock_get_conn.side_effect = [planning_conn, booking_conn]
         mock_jira_cls.from_connection.side_effect = [MagicMock(), MagicMock()]
 
         # Setup Tempo
-        mock_cred_store = MagicMock()
-        mock_cred_store.get_credential.return_value = "tempo-token"
-        mock_cred_store_cls.return_value = mock_cred_store
+        mock_resolve_tempo.return_value = "tempo-token"
 
         service = WorkflowService.from_profile("test-profile")
         assert service.profile == profile
