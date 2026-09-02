@@ -102,6 +102,13 @@ class TestResolveFile:
 class TestResolvePass:
     """Test pass: scheme resolution."""
 
+    @pytest.fixture(autouse=True)
+    def _pass_binary_present(self):
+        """Keep the binary check host-independent: these tests mock
+        subprocess.run, so 'pass' must also look installed on CI runners."""
+        with patch("budjira.config.secret_ref.shutil.which", return_value="/usr/bin/pass"):
+            yield
+
     def test_resolves_first_line(self) -> None:
         """pass output is trimmed to the first line (URL/username lines dropped)."""
         result = MagicMock(returncode=0, stdout="secret-value\nuser@example.com\nhttps://acme.atlassian.net\n")
