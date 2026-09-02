@@ -119,6 +119,18 @@ class TestCredentialStore:
         credential_store.store(test_connection, "test-token")
         assert credential_store.has_credentials(test_connection)
 
+    def test_delete_credential_by_key(self, credential_store: CredentialStore) -> None:
+        """Test deleting a key-based credential (e.g. Tempo token)."""
+        credential_store.store_credential("budjira_tempo_test", "tempo-token")
+        assert credential_store.get_credential("budjira_tempo_test") == "tempo-token"
+
+        deleted = credential_store.delete_credential("budjira_tempo_test")
+        assert deleted is True
+        assert credential_store.get_credential("budjira_tempo_test") is None
+
+        deleted = credential_store.delete_credential("budjira_tempo_test")
+        assert deleted is False
+
     def test_credential_file_unique_per_connection(self, credential_store: CredentialStore) -> None:
         """Test that each connection gets unique credential file."""
         conn1 = Connection(

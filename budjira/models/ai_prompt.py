@@ -142,15 +142,38 @@ budjira connect add
 Interactive prompts for (when the options are omitted):
 - Jira URL (e.g., https://your-company.atlassian.net)
 - Email address
-- API Token (create at: https://id.atlassian.com/manage-profile/security/api-tokens)
+- API token source: a secret reference (recommended) or a stored token (deprecated)
 - Default project key
 
-Non-interactive (scripting):
+Non-interactive (scripting), token via secret reference:
 
 ```bash
 budjira connect add --name work --url https://company.atlassian.net \
-  --email user@example.com --project PROJ
+  --email user@example.com --project PROJ --api-token-ref pass:work/atlassian-token
 ```
+
+#### API Tokens: Secret References (recommended)
+
+Tokens should live in a password manager or the environment, not on disk.
+A connection can reference the token instead of storing a copy:
+
+- `api_token_ref` / `tempo_token_ref` on the connection, schemes:
+  `pass:<entry>` (pass show, first line), `env:<NAME>`, `file:</path>`
+- Resolution order: reference → `BUDJIRA_<NAME>_API_TOKEN` → `BUDJIRA_API_TOKEN`
+  → stored token (deprecated, warns once per command)
+- Several connections may share one reference (rotate once, everywhere)
+- `budjira connect tempo-setup --tempo-token-ref pass:work/tempo-token` for Tempo
+
+Migrate stored tokens to references:
+
+```bash
+budjira connect migrate NAME --to pass:work/atlassian-token   # verifies, then deletes the file
+budjira connect migrate --all --to pass:budjira               # prefix, one entry per connection
+```
+
+Storing a token on disk still works (`--store-token`) but is deprecated and
+warns; suppress via `suppress_stored_token_warning = true` in `config.toml`.
+`connect show`/`connect list` display references verbatim, never the value.
 
 #### List All Connections
 ```bash
@@ -186,7 +209,7 @@ Display which connection is currently active (considering all resolution methods
 ```bash
 budjira connect remove [NAME]
 ```
-Delete connection and its credentials.
+Delete connection and its credentials (including the Tempo token file).
 
 ### Connection Resolution Priority
 

@@ -151,6 +151,21 @@ class CredentialStore:
         except (json.JSONDecodeError, KeyError):
             return None
 
+    def delete_credential(self, key: str) -> bool:
+        """Delete a credential by key (for non-connection credentials like Tempo).
+
+        Args:
+            key: Credential key to delete
+
+        Returns:
+            True if credential was deleted, False if not found
+        """
+        credential_file = self.credentials_dir / f"{key}.json"
+        if credential_file.exists():
+            credential_file.unlink()
+            return True
+        return False
+
 
 # Global credential store instance
 _credential_store: CredentialStore | None = None

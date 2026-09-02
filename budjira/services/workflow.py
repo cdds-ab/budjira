@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import typer
 from rich.console import Console
 
-from budjira.config.credentials import CredentialStore
+from budjira.config.secrets import resolve_tempo_token
 from budjira.config.settings import get_settings
 from budjira.core.jira_client import JiraClient
 from budjira.models.billing import (
@@ -124,12 +124,12 @@ class WorkflowService:
         booking_jira = JiraClient.from_connection(booking_conn)
 
         # Create Tempo client for booking connection
-        cred_store = CredentialStore()
-        tempo_token = cred_store.get_credential(booking_conn.get_tempo_credential_key())
+        tempo_token = resolve_tempo_token(booking_conn)
         if not tempo_token:
             raise AuthenticationError(
                 f"Tempo token not found for connection '{booking_conn.name}'. "
-                f"Run 'budjira connect tempo-setup' to configure your Tempo API token."
+                "Set tempo_token_ref (env:/pass:/file:), export BUDJIRA_TEMPO_TOKEN, "
+                "or run 'budjira connect tempo-setup' to configure your Tempo API token."
             )
         tempo_client = TempoClient(tempo_token=tempo_token)
 

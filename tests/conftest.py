@@ -1,7 +1,22 @@
 """Pytest configuration and fixtures."""
 
+import os
+
 import pytest
 from budjira.models.connection import Connection
+
+
+@pytest.fixture(autouse=True)
+def _clear_budjira_token_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Token env vars are authoritative for secret resolution (#124).
+
+    A developer machine exporting BUDJIRA_API_TOKEN & co. must not change what
+    a test exercises - clear every BUDJIRA_*_TOKEN variable. Tests set their
+    own via monkeypatch after this fixture has run.
+    """
+    for var in list(os.environ):
+        if var.startswith("BUDJIRA_") and var.endswith("_TOKEN"):
+            monkeypatch.delenv(var, raising=False)
 
 
 @pytest.fixture
