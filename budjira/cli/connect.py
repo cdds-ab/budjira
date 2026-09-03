@@ -811,8 +811,16 @@ def _migrate_one_token(
                 style="red",
             )
             return False
+        needs_insert = True
         if check.returncode == 0:
-            if not force:
+            lines = check.stdout.splitlines()
+            existing = lines[0].strip() if lines else ""
+            if existing and existing == stored_token:
+                # The entry already holds exactly this token: nothing to
+                # overwrite, no --force needed - insert is a no-op.
+                needs_insert = False
+                console.print(f"[dim]{connection.name}: pass entry '{target}' already holds this token[/dim]")
+            elif not force:
                 console.print(
                     f"[red]✗[/red] {connection.name}: pass entry '{target}' already exists (use --force to overwrite)",
                     style="red",
@@ -826,27 +834,28 @@ def _migrate_one_token(
             )
             return False
 
-        try:
-            insert = subprocess.run(  # nosec B603 B607 - fixed 'pass insert' args, entry from config
-                ["pass", "insert", "--multiline", "--force", target],
-                input=stored_token + "\n",
-                capture_output=True,
-                text=True,
-                timeout=PASS_TIMEOUT_SECONDS,
-            )
-        except subprocess.TimeoutExpired:
-            console.print(
-                f"[red]✗[/red] {connection.name}: 'pass insert' timed out after {PASS_TIMEOUT_SECONDS}s",
-                style="red",
-            )
-            return False
-        if insert.returncode != 0:
-            detail = insert.stderr.strip().splitlines()[0] if insert.stderr.strip() else "unknown error"
-            console.print(
-                f"[red]✗[/red] {connection.name}: pass insert failed - {detail[:200]}",
-                style="red",
-            )
-            return False
+        if needs_insert:
+            try:
+                insert = subprocess.run(  # nosec B603 B607 - fixed 'pass insert' args, entry from config
+                    ["pass", "insert", "--multiline", "--force", target],
+                    input=stored_token + "\n",
+                    capture_output=True,
+                    text=True,
+                    timeout=PASS_TIMEOUT_SECONDS,
+                )
+            except subprocess.TimeoutExpired:
+                console.print(
+                    f"[red]✗[/red] {connection.name}: 'pass insert' timed out after {PASS_TIMEOUT_SECONDS}s",
+                    style="red",
+                )
+                return False
+            if insert.returncode != 0:
+                detail = insert.stderr.strip().splitlines()[0] if insert.stderr.strip() else "unknown error"
+                console.print(
+                    f"[red]✗[/red] {connection.name}: pass insert failed - {detail[:200]}",
+                    style="red",
+                )
+                return False
 
         # Verify before deleting: the reference must resolve to the same value
         try:

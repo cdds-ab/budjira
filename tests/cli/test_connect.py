@@ -1728,3 +1728,89 @@ class TestConnectTestSecretRef:
             assert result.exit_code == 1
             assert "env:DEFINITELY_UNSET_BUDJIRA_TEST_VAR" in result.stdout
             assert "Traceback" not in result.stdout
+
+
+class TestConnectMigrateExistingEntry:
+    """Existing pass entries: same value needs no --force (#128)."""
+
+    def _setup(self, tmp_path: Path):
+        """Standard tmp-dir settings/credential store context."""
+        return (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings"),
+        )
+
+    def _make_settings(self, tmp_path: Path, mock_cred_get_settings):
+        """Wire tmp settings, one 'acme' connection with a stored token."""
+        import budjira.config.credentials
+        import budjira.config.settings
+
+        budjira.config.settings._settings = None
+        budjira.config.credentials._credential_store = None
+
+        from budjira.config import get_credential_store, get_settings
+
+        settings = get_settings()
+        mock_cred_get_settings.return_value = settings
+        conn = Connection(
+            name="acme",
+            url="https://acme.atlassian.net",
+            email="user@example.com",
+            project_key="ACME",
+        )
+        settings.add_connection(conn)
+        credential_store = get_credential_store()
+        credential_store.store(conn, "jira-token-123")
+        return settings, credential_store
+
+    def test_existing_entry_same_value_needs_no_force(self, tmp_path: Path) -> None:
+        """Same value: no insert, no --force - migrate straight through."""
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            settings, credential_store = self._make_settings(tmp_path, mock_cred_get_settings)
+
+            same_value = MagicMock(returncode=0, stdout="jira-token-123\n")
+            with (
+                patch("budjira.cli.connect.shutil.which", return_value="/usr/bin/pass"),
+                patch("budjira.config.secret_ref.shutil.which", return_value="/usr/bin/pass"),
+                patch("budjira.cli.connect.subprocess.run", return_value=same_value) as mock_run,
+            ):
+                result = runner.invoke(app, ["connect", "migrate", "acme", "--to", "pass:acme/jira-token"])
+
+            assert result.exit_code == 0
+            assert "already holds this token" in result.stdout
+            assert "migrated to" in result.stdout
+            # only existence check + verification - never an insert
+            for call in mock_run.call_args_list:
+                assert call[0][0][:2] == ["pass", "show"]
+            stored = settings.load_connections().find_by_name("acme")
+            assert stored is not None
+            assert stored.api_token_ref == "pass:acme/jira-token"
+            assert not credential_store.has_credentials(stored)
+
+    def test_existing_entry_different_value_force_overwrites(self, tmp_path: Path) -> None:
+        """Different value + --force: overwrite, verify, migrate."""
+        xdg_config, xdg_data, cred_settings = self._setup(tmp_path)
+        with xdg_config, xdg_data, cred_settings as mock_cred_get_settings:
+            settings, credential_store = self._make_settings(tmp_path, mock_cred_get_settings)
+
+            run_results = [
+                MagicMock(returncode=0, stdout="old-token\n"),  # existence: different value
+                MagicMock(returncode=0, stderr=""),  # insert
+                MagicMock(returncode=0, stdout="jira-token-123\n"),  # verification
+            ]
+            with (
+                patch("budjira.cli.connect.shutil.which", return_value="/usr/bin/pass"),
+                patch("budjira.config.secret_ref.shutil.which", return_value="/usr/bin/pass"),
+                patch("budjira.cli.connect.subprocess.run", side_effect=run_results) as mock_run,
+            ):
+                result = runner.invoke(app, ["connect", "migrate", "acme", "--to", "pass:acme/jira-token", "--force"])
+
+            assert result.exit_code == 0
+            assert "migrated to" in result.stdout
+            assert mock_run.call_args_list[1][0][0][:2] == ["pass", "insert"]
+            stored = settings.load_connections().find_by_name("acme")
+            assert stored is not None
+            assert stored.api_token_ref == "pass:acme/jira-token"
+            assert not credential_store.has_credentials(stored)
