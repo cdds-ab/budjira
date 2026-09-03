@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.32.0 (2026-09-03)
+
+### Feat
+
+- **ai**: keep local prompt templates from going stale (#126)
+
 ## v1.31.0 (2026-09-02)
 
 ### Feat
