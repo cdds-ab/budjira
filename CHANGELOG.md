@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.32.1 (2026-09-03)
+
+### Fix
+
+- **connect**: migrate without --force when the pass entry holds the same value (#128)
+
 ## v1.32.0 (2026-09-03)
 
 ### Feat
