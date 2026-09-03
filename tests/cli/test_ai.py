@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from budjira.cli.main import app
+from budjira.models.ai_prompt import compute_template_hash, get_default_ai_prompt_template
 from budjira.models.connection import Connection, ConnectionList
 from budjira.models.project_metadata import (
     FieldMetadata,
@@ -388,3 +389,43 @@ class TestUsagePromptDefaults:
 
         assert result.exit_code == 0
         assert result.stdout.count("--description-dialect") >= 2
+
+
+class TestResetPromptTemplate:
+    """Test ai reset-prompt-template command (#126)."""
+
+    @patch("budjira.cli.ai.get_settings")
+    def test_reset_restores_default_with_backup(self, mock_get_settings: MagicMock, tmp_path: Path) -> None:
+        """--force restores the default template and keeps a timestamped backup."""
+        template_file = tmp_path / "ai-prompt-template.toml"
+        template_file.write_text('version = "1.0"\n# stale custom content\n')
+
+        mock_settings = MagicMock()
+        mock_settings.ai_prompt_template_file = template_file
+        mock_get_settings.return_value = mock_settings
+
+        result = runner.invoke(app, ["ai", "reset-prompt-template", "--force"])
+
+        assert result.exit_code == 0
+        backups = list(tmp_path.glob("ai-prompt-template.toml.bak-*"))
+        assert len(backups) == 1
+        assert "stale custom content" in backups[0].read_text()
+        saved = mock_settings.save_ai_prompt_template.call_args[0][0]
+        assert saved.default_hash == compute_template_hash(get_default_ai_prompt_template())
+
+    @patch("budjira.cli.ai.get_settings")
+    def test_reset_declined_keeps_file(self, mock_get_settings: MagicMock, tmp_path: Path) -> None:
+        """Declining the confirmation touches nothing."""
+        template_file = tmp_path / "ai-prompt-template.toml"
+        template_file.write_text('version = "1.0"\n# stale custom content\n')
+
+        mock_settings = MagicMock()
+        mock_settings.ai_prompt_template_file = template_file
+        mock_get_settings.return_value = mock_settings
+
+        result = runner.invoke(app, ["ai", "reset-prompt-template"], input="n\n")
+
+        assert result.exit_code != 0
+        assert template_file.read_text() == 'version = "1.0"\n# stale custom content\n'
+        assert not list(tmp_path.glob("ai-prompt-template.toml.bak-*"))
+        mock_settings.save_ai_prompt_template.assert_not_called()

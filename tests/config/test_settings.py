@@ -4,10 +4,16 @@
 # Pydantic models accept strings for HttpUrl and Path fields during validation
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from budjira.config.settings import Settings
+from budjira.models.ai_prompt import (
+    AiPromptSection,
+    AiPromptTemplate,
+    compute_template_hash,
+    get_default_ai_prompt_template,
+)
 from budjira.models.config import GlobalConfig, LogLevel
 from budjira.models.connection import Connection
 from budjira.models.custom_field import CustomFieldConfig, CustomFieldType
@@ -469,3 +475,87 @@ Always include the affected system field when creating issues.
 
         # Check ai_prompt
         assert loaded_conn.ai_prompt == ai_prompt
+
+
+class TestAiPromptTemplateFreshness:
+    """Test the stale-template detection in load_ai_prompt_template (#126)."""
+
+    def test_fresh_file_is_stamped_with_hash(self, temp_settings: Settings) -> None:
+        """A newly generated template file carries the hash of the default."""
+        template = temp_settings.load_ai_prompt_template()
+
+        assert template.default_hash == compute_template_hash(get_default_ai_prompt_template())
+        # And the marker persisted
+        reloaded = temp_settings.load_ai_prompt_template()
+        assert reloaded.default_hash == template.default_hash
+
+    def test_up_to_date_legacy_file_is_stamped_silently(self, temp_settings: Settings) -> None:
+        """Content equal to the default without a marker: stamp it, no warning."""
+        self._write_template_file(temp_settings, get_default_ai_prompt_template(), strip_hash=True)
+
+        console = MagicMock()
+        with patch("budjira.config.settings._err_console", console):
+            template = temp_settings.load_ai_prompt_template()
+
+        console.print.assert_not_called()
+        assert template.default_hash == compute_template_hash(get_default_ai_prompt_template())
+
+    def test_stale_unmodified_file_is_refreshed(self, temp_settings: Settings) -> None:
+        """An unmodified copy of an older default is refreshed in place."""
+        older_default = get_default_ai_prompt_template()
+        older_default.sections[0].content = "OUTDATED CONTENT"
+        older_default.default_hash = compute_template_hash(older_default)
+        self._write_template_file(temp_settings, older_default)
+
+        console = MagicMock()
+        with patch("budjira.config.settings._err_console", console):
+            template = temp_settings.load_ai_prompt_template()
+
+        assert compute_template_hash(template) == compute_template_hash(get_default_ai_prompt_template())
+        assert console.print.call_count == 1
+        assert "refreshed" in console.print.call_args[0][0]
+        # File on disk is the refreshed default with the current marker
+        reloaded = temp_settings.load_ai_prompt_template()
+        assert reloaded.default_hash == compute_template_hash(get_default_ai_prompt_template())
+
+    def test_customized_file_is_never_touched(self, temp_settings: Settings) -> None:
+        """Content differing from its recorded hash means user edits - keep them."""
+        customized = get_default_ai_prompt_template()
+        customized.sections.append(
+            AiPromptSection(title="House Rules", content="Always book in 15-minute steps.", order=99)
+        )
+        # Recorded hash says: this file was generated from the CURRENT default,
+        # so the extra section is a deliberate customization.
+        customized.default_hash = compute_template_hash(get_default_ai_prompt_template())
+        self._write_template_file(temp_settings, customized)
+
+        console = MagicMock()
+        with patch("budjira.config.settings._err_console", console):
+            template = temp_settings.load_ai_prompt_template()
+
+        console.print.assert_not_called()
+        assert template.get_section("House Rules") is not None
+
+    def test_legacy_stale_file_warns_and_stays(self, temp_settings: Settings) -> None:
+        """No marker + different content: warn once about reset, never overwrite."""
+        legacy = get_default_ai_prompt_template()
+        legacy.sections[0].content = "OUTDATED CONTENT"
+        self._write_template_file(temp_settings, legacy, strip_hash=True)
+
+        console = MagicMock()
+        with patch("budjira.config.settings._err_console", console):
+            template = temp_settings.load_ai_prompt_template()
+
+        assert console.print.call_count == 1
+        assert "reset-prompt-template" in console.print.call_args[0][0]
+        assert template.sections[0].content == "OUTDATED CONTENT"
+
+    def _write_template_file(self, settings: Settings, template: AiPromptTemplate, *, strip_hash: bool = False) -> None:
+        """Write a template file; strip_hash simulates a pre-#126 legacy file."""
+        import tomli_w
+
+        data = template.model_dump(exclude_none=True)
+        if strip_hash:
+            data.pop("default_hash", None)
+        with settings.ai_prompt_template_file.open("wb") as f:
+            tomli_w.dump(data, f)

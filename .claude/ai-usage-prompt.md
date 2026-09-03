@@ -243,6 +243,14 @@ budjira ai usage-prompt --connection my-project --plain > .claude/ai-usage-promp
 budjira ai usage-prompt --connection my-project
 ```
 
+The rendered guide comes from `~/.config/budjira/ai-prompt-template.toml` when that file
+exists. Unmodified stale copies refresh themselves on load; a customized file is never
+overwritten. To restore the built-in default (keeping a timestamped backup):
+
+```bash
+budjira ai reset-prompt-template
+```
+
 The project-specific prompt is appended after the standard budjira documentation.
 
 ## Searching Issues

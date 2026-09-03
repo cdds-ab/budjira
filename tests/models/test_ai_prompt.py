@@ -1,7 +1,12 @@
 """Tests for AI prompt template models."""
 
 import click
-from budjira.models.ai_prompt import AiPromptSection, AiPromptTemplate, get_default_ai_prompt_template
+from budjira.models.ai_prompt import (
+    AiPromptSection,
+    AiPromptTemplate,
+    compute_template_hash,
+    get_default_ai_prompt_template,
+)
 
 
 class TestAiPromptSection:
@@ -318,3 +323,38 @@ class TestAiPromptCliParity:
                         f"'budjira {name} {sub_name}' duplicates the group name — "
                         f"register single-command modules with app.command() instead of add_typer()"
                     )
+
+
+class TestComputeTemplateHash:
+    """Test compute_template_hash (#126)."""
+
+    def test_hash_is_stable(self) -> None:
+        """Same template content hashes identically across instances."""
+        assert compute_template_hash(get_default_ai_prompt_template()) == compute_template_hash(
+            get_default_ai_prompt_template()
+        )
+
+    def test_hash_ignores_metadata(self) -> None:
+        """version and default_hash are markers, not content."""
+        t1 = get_default_ai_prompt_template()
+        t2 = get_default_ai_prompt_template()
+        t2.version = "9.9"
+        t2.default_hash = "whatever"
+
+        assert compute_template_hash(t1) == compute_template_hash(t2)
+
+    def test_hash_tracks_content(self) -> None:
+        """A changed section changes the hash."""
+        t1 = get_default_ai_prompt_template()
+        t2 = get_default_ai_prompt_template()
+        t2.sections[0].content += "\nextra line"
+
+        assert compute_template_hash(t1) != compute_template_hash(t2)
+
+    def test_hash_tracks_order_and_enabled(self) -> None:
+        """Order and enabled flags are part of the rendered result."""
+        t1 = get_default_ai_prompt_template()
+        t2 = get_default_ai_prompt_template()
+        t2.sections[0].enabled = False
+
+        assert compute_template_hash(t1) != compute_template_hash(t2)
