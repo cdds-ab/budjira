@@ -550,6 +550,13 @@ budjira ai usage-prompt | xclip -selection clipboard
 
 # Save to file
 budjira ai usage-prompt > budjira-guide.md
+
+# Reproducible copy (built-in template, ignoring local edits)
+budjira ai usage-prompt --defaults --plain > budjira-guide.md
+
+# Restore the built-in template (stale unmodified copies refresh automatically;
+# customized files are never overwritten - this resets, keeping a backup)
+budjira ai reset-prompt-template
 ```
 
 The generated prompt includes:

@@ -7,7 +7,24 @@ by the DoR template system.
 
 from __future__ import annotations
 
+import hashlib
+
 from pydantic import BaseModel, Field
+
+
+def compute_template_hash(template: AiPromptTemplate) -> str:
+    """Content hash over the meaningful parts of a template.
+
+    Covers section titles, order, enabled flags and content - NOT metadata
+    like ``version`` or ``default_hash`` itself. Used to distinguish three
+    states of a local template file: identical to the built-in default, an
+    unmodified stale copy of an older default, or user-customized (#126).
+
+    Returns:
+        SHA-256 hex digest
+    """
+    canonical = "\x00".join(f"{s.title}\x01{s.order!r}\x01{s.enabled!r}\x01{s.content}" for s in template.sections)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 class AiPromptSection(BaseModel):
@@ -38,6 +55,13 @@ class AiPromptTemplate(BaseModel):
     sections: list[AiPromptSection] = Field(
         default_factory=list,
         description="List of prompt sections",
+    )
+    default_hash: str | None = Field(
+        default=None,
+        description=(
+            "SHA-256 of the built-in default template at the time this file was generated. "
+            "Written by the app; distinguishes an unmodified stale copy from a customized file (#126)"
+        ),
     )
 
     def render(self) -> str:
@@ -360,6 +384,14 @@ budjira ai usage-prompt --connection my-project --plain > .claude/ai-usage-promp
 
 # View formatted in terminal
 budjira ai usage-prompt --connection my-project
+```
+
+The rendered guide comes from `~/.config/budjira/ai-prompt-template.toml` when that file
+exists. Unmodified stale copies refresh themselves on load; a customized file is never
+overwritten. To restore the built-in default (keeping a timestamped backup):
+
+```bash
+budjira ai reset-prompt-template
 ```
 
 The project-specific prompt is appended after the standard budjira documentation.""",

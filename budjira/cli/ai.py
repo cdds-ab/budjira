@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import shutil
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.prompt import Confirm
 
 from budjira.config.metadata_cache import MetadataCache
 from budjira.config.settings import get_settings
-from budjira.models.ai_prompt import get_default_ai_prompt_template
+from budjira.models.ai_prompt import compute_template_hash, get_default_ai_prompt_template
 
 if TYPE_CHECKING:
     from budjira.models.connection import Connection
@@ -164,3 +167,45 @@ def usage_prompt(
         # Render as Markdown for beautiful terminal output
         md = Markdown(prompt)
         console.print(md)
+
+
+@app.command("reset-prompt-template")
+def reset_prompt_template(
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+) -> None:
+    """Restore the built-in AI usage prompt template.
+
+    Overwrites ~/.config/budjira/ai-prompt-template.toml with the built-in
+    default of the installed version, keeping a timestamped backup next to it.
+    Use this when the file is stale (it is auto-generated on first use and
+    older versions never refreshed it) or to undo local customizations.
+
+    Files without local modifications are refreshed automatically on load -
+    this command is for files the update check cannot safely touch (#126).
+
+    Examples:
+        # With confirmation
+        budjira ai reset-prompt-template
+
+        # Non-interactive
+        budjira ai reset-prompt-template --force
+    """
+    settings = get_settings()
+    template_file = settings.ai_prompt_template_file
+
+    default = get_default_ai_prompt_template()
+    default.default_hash = compute_template_hash(default)
+
+    if template_file.exists():
+        backup = template_file.with_name(f"{template_file.name}.bak-{datetime.now():%Y%m%d-%H%M%S}")
+        if not force and not Confirm.ask(
+            f"Overwrite {template_file} with the built-in default?\nBackup goes to {backup.name}",
+            default=True,
+        ):
+            console.print("Cancelled.")
+            raise typer.Abort()
+        shutil.copy2(template_file, backup)
+        console.print(f"[green]✓[/green] Backup written: {backup}")
+
+    settings.save_ai_prompt_template(default)
+    console.print(f"[green]✓[/green] Restored built-in AI prompt template: {template_file}")

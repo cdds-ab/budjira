@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import tomli_w
+from rich.console import Console
 from xdg_base_dirs import xdg_config_home, xdg_data_home
 
 # tomllib is only available in Python 3.11+
@@ -14,12 +15,14 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
-from budjira.models.ai_prompt import AiPromptTemplate, get_default_ai_prompt_template
+from budjira.models.ai_prompt import AiPromptTemplate, compute_template_hash, get_default_ai_prompt_template
 from budjira.models.config import GlobalConfig
 from budjira.models.connection import Connection, ConnectionList
 from budjira.models.custom_field import CustomFieldConfig
 from budjira.models.dor import DorTemplateConfig, get_default_templates
 from budjira.models.workflow import WorkflowProfileList
+
+_err_console = Console(stderr=True)
 
 
 class Settings:
@@ -347,19 +350,63 @@ class Settings:
     def load_ai_prompt_template(self) -> AiPromptTemplate:
         """Load AI prompt template from ai-prompt-template.toml.
 
+        Keeps the local file from silently going stale (#126): a file whose
+        recorded ``default_hash`` matches its content is an unmodified copy and
+        is refreshed when the built-in default changed; a file whose content
+        differs from its recorded hash is user-customized and never touched;
+        a legacy file without a hash marker only earns a one-time warning.
+
         Returns:
             AI prompt template (default if file doesn't exist)
         """
         if not self.ai_prompt_template_file.exists():
             # Create default template
             template = get_default_ai_prompt_template()
+            template.default_hash = compute_template_hash(template)
             self.save_ai_prompt_template(template)
             return template
 
         with self.ai_prompt_template_file.open("rb") as f:
             data = tomllib.load(f)
 
-        return AiPromptTemplate(**data)
+        template = AiPromptTemplate(**data)
+
+        default = get_default_ai_prompt_template()
+        current_default_hash = compute_template_hash(default)
+        file_hash = compute_template_hash(template)
+
+        if file_hash == current_default_hash:
+            # Up to date; stamp the marker on legacy files so future releases
+            # can tell unmodified from customized.
+            if template.default_hash is None:
+                template.default_hash = current_default_hash
+                self.save_ai_prompt_template(template)
+            return template
+
+        if template.default_hash is None:
+            # Legacy file from before hash markers: cannot tell stale from
+            # customized, so never touch it - point at the reset command.
+            _err_console.print(
+                "[yellow]⚠[/yellow] Your local AI prompt template predates the version marker and "
+                "may be stale. Compare with [cyan]--defaults[/cyan], restore with "
+                "[cyan]budjira ai reset-prompt-template[/cyan] (keeps a backup).",
+                highlight=False,
+            )
+            return template
+
+        if file_hash == template.default_hash:
+            # Unmodified copy of an older default: safe to refresh in place.
+            default.default_hash = current_default_hash
+            self.save_ai_prompt_template(default)
+            _err_console.print(
+                "[dim]AI prompt template refreshed to the built-in default of this version "
+                "(the local copy had no modifications).[/dim]",
+                highlight=False,
+            )
+            return default
+
+        # Customized file: leave it alone.
+        return template
 
     def save_ai_prompt_template(self, template: AiPromptTemplate) -> None:
         """Save AI prompt template to ai-prompt-template.toml.
