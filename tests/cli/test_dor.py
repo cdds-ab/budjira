@@ -174,9 +174,10 @@ def test_dor_show_invalid_template(mock_get_settings: Mock) -> None:
 @patch("budjira.cli.dor.open_editor")
 def test_dor_edit_valid_template(mock_open_editor: Mock, mock_get_settings: Mock) -> None:
     """Test dor edit with a valid template."""
-    # Setup
+    # Setup - deep-copy the shared default: dor edit mutates template_text in
+    # place, which would otherwise pollute DEFAULT_STORY_TEMPLATE for later tests
     mock_settings = MagicMock()
-    templates = DorTemplateConfig(templates={"Story": DEFAULT_STORY_TEMPLATE})
+    templates = DorTemplateConfig(templates={"Story": DEFAULT_STORY_TEMPLATE.model_copy(deep=True)})
     mock_settings.dor_templates = templates
     mock_settings.global_config.editor = "vim"
     mock_get_settings.return_value = mock_settings

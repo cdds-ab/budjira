@@ -25,6 +25,12 @@ def validate_description(description: str | None, template: DorTemplate) -> Vali
     # Extract sections from description
     found_sections = extract_sections(description)
 
+    # The placeholder comparison is only meaningful when the whole description
+    # is the untouched template skeleton: real content may legitimately match
+    # the example values given in a placeholder (#130).
+    template_skeleton = template.template_text.strip()
+    is_untouched_template = bool(template_skeleton) and description.strip() == template_skeleton
+
     # Check required sections
     for section in template.sections:
         if not section.required:
@@ -36,9 +42,9 @@ def validate_description(description: str | None, template: DorTemplate) -> Vali
             result.valid = False
             continue
 
-        # Check if section is empty
+        # Check if section is empty or the untouched template was submitted
         section_content = found_sections[section.name].strip()
-        if not section_content or section_content == section.placeholder.strip():
+        if not section_content or (is_untouched_template and section_content == section.placeholder.strip()):
             result.warnings.append(f"Section '{section.name}' appears to be empty or contains only placeholder text")
 
     return result

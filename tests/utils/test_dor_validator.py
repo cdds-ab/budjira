@@ -146,6 +146,55 @@ As a user...
         assert result.valid is True
         assert len(result.missing_sections) == 0
 
+    def test_content_matching_placeholder_example_not_flagged(self) -> None:
+        """Test that real content equal to the placeholder example is not flagged (#130)."""
+        template = DorTemplate(
+            issue_type="Task",
+            sections=[
+                DorSection(
+                    name="Effort",
+                    required=True,
+                    placeholder="Schätzung: 4h\nObergrenze: 8h\nEinordnung: Aufwand",
+                ),
+            ],
+            template_text="## Effort\n\n",
+            enabled=True,
+        )
+
+        description = """## Effort
+Schätzung: 4h
+Obergrenze: 8h
+Einordnung: Aufwand
+"""
+
+        result = validate_description(description, template)
+
+        assert result.valid is True
+        assert len(result.warnings) == 0
+
+    def test_untouched_template_skeleton_still_flagged(self) -> None:
+        """Test that submitting the untouched template text still warns (#130)."""
+        # Fresh template: the module-level DEFAULT_* templates are mutated by
+        # other tests (dor edit writes template_text in place).
+        template = DorTemplate(
+            issue_type="Story",
+            sections=[
+                DorSection(name="Context", required=True, placeholder="Why do we need this?"),
+                DorSection(
+                    name="User Story",
+                    required=True,
+                    placeholder="As a [role]\nI want to [action]\nSo that [benefit]",
+                ),
+            ],
+            template_text="## Context\n\n## User Story\nAs a [role]\nI want to [action]\nSo that [benefit]\n",
+            enabled=True,
+        )
+
+        result = validate_description(template.template_text, template)
+
+        assert result.valid is True
+        assert any("User Story" in warning for warning in result.warnings)
+
 
 class TestFormatValidationResult:
     """Test validation result formatting."""
