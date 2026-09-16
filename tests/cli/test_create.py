@@ -738,6 +738,7 @@ So that I can access my account
         # Setup mocks
         mock_settings = MagicMock()
         mock_settings.global_config.enforce_dor = True
+        mock_settings.global_config.dor_validation_level = "warn"
         mock_settings.dor_templates = DorTemplateConfig(
             templates={"Story": DEFAULT_STORY_TEMPLATE},
             default_validation_level=ValidationLevel.WARN,
@@ -777,6 +778,64 @@ So that I can access my account
         assert result.exit_code == 0
         assert "Issue created successfully" in result.stdout
         mock_client.create_issue.assert_called_once()
+
+    @patch("budjira.cli.create.Confirm")
+    @patch("budjira.cli.create.validate_description")
+    @patch("budjira.cli.create.get_settings")
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_warn_mode_non_interactive_never_prompts(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_get_settings: Mock,
+        mock_validate: Mock,
+        mock_confirm: Mock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        """Test that warn mode under --no-interactive continues without prompting (#130)."""
+        from budjira.models.dor import (
+            DEFAULT_STORY_TEMPLATE,
+            DorTemplateConfig,
+            ValidationResult,
+        )
+
+        # Setup mocks
+        mock_settings = MagicMock()
+        mock_settings.global_config.enforce_dor = True
+        mock_settings.global_config.dor_validation_level = "warn"
+        mock_settings.dor_templates = DorTemplateConfig(templates={"Story": DEFAULT_STORY_TEMPLATE})
+        mock_get_settings.return_value = mock_settings
+
+        mock_get_active_connection.return_value = mock_connection
+
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        mock_validate.return_value = ValidationResult(
+            valid=True,
+            warnings=["Section 'Context' appears to be empty or contains only placeholder text"],
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "New story",
+                "--type",
+                "Story",
+                "--description",
+                "Some description",
+                "--no-interactive",
+            ],
+        )
+
+        # Warnings must not block or prompt: the issue is created
+        assert result.exit_code == 0
+        assert "Issue created successfully" in result.stdout
+        mock_client.create_issue.assert_called_once()
+        mock_confirm.ask.assert_not_called()
 
     @patch("budjira.cli.create.get_settings")
     @patch("budjira.cli.create.JiraClient")
@@ -931,6 +990,51 @@ So that I can access my account
         # Verify timetracking field was NOT passed
         call_kwargs = mock_client.create_issue.call_args.kwargs
         assert "timetracking" not in call_kwargs
+
+
+class TestValidateDorPrompt:
+    """Unit tests for _validate_dor prompt behavior (#130)."""
+
+    def _warn_settings(self) -> MagicMock:
+        """Settings with DoR enforcement at warn level."""
+        from budjira.models.dor import DEFAULT_STORY_TEMPLATE, DorTemplateConfig
+
+        settings = MagicMock()
+        settings.global_config.enforce_dor = True
+        settings.global_config.dor_validation_level = "warn"
+        settings.dor_templates = DorTemplateConfig(templates={"Story": DEFAULT_STORY_TEMPLATE})
+        return settings
+
+    @patch("budjira.cli.create.Confirm")
+    def test_non_interactive_continues_without_prompt(self, mock_confirm: Mock) -> None:
+        """Non-interactive mode applies the prompt default instead of reading stdin."""
+        from budjira.cli.create import _validate_dor
+
+        _validate_dor("No DoR sections here", "Story", False, self._warn_settings(), interactive=False)
+
+        mock_confirm.ask.assert_not_called()
+
+    @patch("budjira.cli.create.Confirm")
+    def test_interactive_still_prompts_and_aborts_on_no(self, mock_confirm: Mock) -> None:
+        """Interactive warn mode keeps asking and aborts when the user declines."""
+        import typer
+        from budjira.cli.create import _validate_dor
+
+        mock_confirm.ask.return_value = False
+
+        with pytest.raises(typer.Exit):
+            _validate_dor("No DoR sections here", "Story", False, self._warn_settings(), interactive=True)
+
+    @patch("budjira.cli.create.Confirm")
+    def test_interactive_continues_on_yes(self, mock_confirm: Mock) -> None:
+        """Interactive warn mode continues when the user accepts."""
+        from budjira.cli.create import _validate_dor
+
+        mock_confirm.ask.return_value = True
+
+        _validate_dor("No DoR sections here", "Story", False, self._warn_settings(), interactive=True)
+
+        mock_confirm.ask.assert_called_once()
 
 
 class TestCreateWithEpic:

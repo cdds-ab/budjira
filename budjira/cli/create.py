@@ -472,7 +472,9 @@ def _validate_parent(parent: str | None, issue_type: str, metadata: ProjectMetad
         )
 
 
-def _validate_dor(description: str | None, issue_type: str, skip_dor: bool, settings: Settings) -> None:
+def _validate_dor(
+    description: str | None, issue_type: str, skip_dor: bool, settings: Settings, interactive: bool = True
+) -> None:
     """Validate description against DoR template if enabled.
 
     Args:
@@ -480,9 +482,11 @@ def _validate_dor(description: str | None, issue_type: str, skip_dor: bool, sett
         issue_type: Issue type
         skip_dor: Whether to skip DoR validation
         settings: Application settings
+        interactive: Whether interactive prompts are allowed
 
     Raises:
-        typer.Exit: If validation fails in strict mode
+        typer.Exit: If validation fails in strict mode, or the user declines
+            to continue in interactive warn mode
     """
     if not skip_dor and settings.global_config.enforce_dor and description:
         template = settings.dor_templates.get_template(issue_type)
@@ -500,6 +504,11 @@ def _validate_dor(description: str | None, issue_type: str, skip_dor: bool, sett
                     console.print("[dim]Use --skip-dor to bypass validation[/dim]")
                     raise typer.Exit(1)
                 elif validation_level == "warn":
+                    if not interactive:
+                        # Never prompt in non-interactive mode (#130): warnings
+                        # are advisory, so apply the prompt default and continue.
+                        console.print("[dim]Non-interactive mode: continuing despite DoR warnings[/dim]")
+                        return
                     if not Confirm.ask("Continue anyway?", default=True):
                         raise typer.Exit(0)
 
@@ -773,7 +782,7 @@ def issue(
         # Validate
         _validate_required_fields(summary, issue_type)
         _validate_parent(parent, issue_type, project_metadata)
-        _validate_dor(description, issue_type, skip_dor, settings)
+        _validate_dor(description, issue_type, skip_dor, settings, interactive)
 
         # Create issue
         client = JiraClient.from_connection(active_connection)
