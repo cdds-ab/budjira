@@ -784,6 +784,50 @@ budjira workflow show ek-to-k
 budjira workflow remove ek-to-k
 ```
 
+### Collective Booking Targets
+
+Some setups have no shadow ticket per issue: time lands on a few **standing tickets** in
+the booking instance (`DEV`, `OPS`, ...) and the planning key lives in the worklog text.
+The `collective` strategy books that shape with one command and leaves the trace such
+bookings are increasingly checked for: the planning key in the worklog, a short dated
+comment on the planning issue, and plausible days.
+
+```toml
+[[profiles]]
+name = "acme-shadow"
+planning_connection = "acme-planning"
+booking_connection  = "acme-booking"
+project_mappings = [{ planning_project = "PLAN", booking_project = "BOOK" }]
+shadow_strategy = "collective"
+
+booking_targets = { dev = "BOOK-101", ops = "BOOK-102" }  # target name -> standing ticket
+mirror_target = "dev"                                       # the target that carries the planning key
+direct_booking_prefixes = ["MEETING:", "KT:", "SUPPORT:"]   # markers for ticketless bookings there
+daily_cap = "8h"                                            # across all booking targets
+weekdays_only = true
+# mirror_comment_template = "{date}: {text}"               # default; never carries hours
+```
+
+```bash
+# Books BOOK-101 as "PLAN-123: extend ACs (MR !20)" and posts
+# "2026-09-15: extend ACs (MR !20)" as a comment on PLAN-123
+budjira workflow book PLAN-123 1h30m --profile acme-shadow --started 2026-09-15 --comment "extend ACs (MR !20)"
+
+# Direct booking on the mirror target needs a configured marker (no mirror);
+# a comment starting with a planning key is redirected to `workflow book`
+budjira tempo log BOOK-101 1h --connection acme-booking --comment "MEETING: weekly sync"
+
+# Other targets stay free-form; the day guards still apply
+budjira tempo log BOOK-102 30m --connection acme-booking --comment "on-call check"
+```
+
+`workflow book` verifies the planning issue, skips the estimate check (a collective
+ticket's spent time says nothing about one issue), books, then mirrors. A failed mirror
+keeps the worklog and prints the `comment add` command to post it by hand. The mirrored
+comment carries the work date and the text only. Guards (`daily_cap`, `weekdays_only`)
+apply to both paths on every booking target; `--force` bypasses policy and guards on
+`tempo log`. `workflow setup` does not ask for these fields yet: edit `workflows.toml`.
+
 ### Workflow Billing Reports
 
 For cross-instance workflow profiles (planning + booking), `budjira workflow billing`

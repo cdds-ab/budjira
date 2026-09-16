@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -13,6 +14,8 @@ from rich.table import Table
 from budjira.config.secrets import resolve_tempo_token
 from budjira.config.settings import get_settings
 from budjira.core.jira_client import JiraClient
+from budjira.models.workflow import ShadowTicketStrategy, WorkflowProfile
+from budjira.services.workflow import check_booking_guards
 from budjira.tempo.client import TempoClient
 from budjira.utils.connection import get_active_connection
 from budjira.utils.datetime_parser import parse_datetime_string, parse_jira_timestamp
@@ -31,15 +34,28 @@ console = Console()
 app = typer.Typer(help="Tempo Timesheets integration commands")
 
 
-def _check_workflow_policy(issue_key: str, connection_name: str | None) -> None:
-    """Check if issue belongs to a workflow profile's planning side.
+# "PLAN-123: ..." at the start of a worklog comment names a planning issue
+_PLANNING_KEY_PREFIX_RE = re.compile(r"^\s*([A-Z][A-Z0-9_]*-\d+)\s*:")
 
-    If the issue's project key matches a planning project in any workflow profile,
-    block the direct booking and suggest using 'workflow book' instead.
+
+def _check_workflow_policy(
+    issue_key: str, connection_name: str | None, comment: str | None = None
+) -> WorkflowProfile | None:
+    """Check the direct booking against the workflow profiles.
+
+    Two policies (#70, #131):
+    - The issue is on a profile's planning side: block, suggest 'workflow book'.
+    - The issue is a collective booking target: on the mirror target the comment
+      must carry a configured marker (a planning key belongs in 'workflow book');
+      every target returns its profile so the caller applies the day guards.
 
     Args:
         issue_key: Jira issue key (e.g., PLAN-123)
         connection_name: Active connection name (if specified)
+        comment: The worklog comment (checked on a mirror target)
+
+    Returns:
+        The collective profile the issue is a booking target of, else None
 
     Raises:
         typer.Exit: If booking is blocked by workflow policy
@@ -47,12 +63,12 @@ def _check_workflow_policy(issue_key: str, connection_name: str | None) -> None:
     settings = get_settings()
     profiles = settings.workflows.profiles
     if not profiles:
-        return
+        return None
 
     # Extract project key from issue key
     parts = issue_key.split("-", 1)
     if len(parts) != 2:
-        return
+        return None
     project_key = parts[0].upper()
 
     # Resolve active connection name for comparison
@@ -61,26 +77,63 @@ def _check_workflow_policy(issue_key: str, connection_name: str | None) -> None:
             active_conn = get_active_connection()
             connection_name = active_conn.name
         except BudjiraError:
-            return
+            return None
 
     # Check all workflow profiles
     for profile in profiles:
-        if profile.planning_connection != connection_name:
-            continue
-        for mapping in profile.project_mappings:
-            if mapping.planning_project.upper() == project_key:
-                console.print(
-                    f"[red]⛔[/red] [bold]{issue_key}[/bold] belongs to project "
-                    f"[cyan]{project_key}[/cyan] which is the planning side of "
-                    f"workflow profile [cyan]'{profile.name}'[/cyan]. "
-                    f"Direct booking is not allowed.",
-                )
-                console.print(
-                    f"\n[dim]Use instead:[/dim] "
-                    f"[cyan]budjira workflow book {issue_key} <time> "
-                    f"--profile {profile.name}[/cyan]",
-                )
-                raise typer.Exit(1)
+        if profile.planning_connection == connection_name:
+            for mapping in profile.project_mappings:
+                if mapping.planning_project.upper() == project_key:
+                    console.print(
+                        f"[red]⛔[/red] [bold]{issue_key}[/bold] belongs to project "
+                        f"[cyan]{project_key}[/cyan] which is the planning side of "
+                        f"workflow profile [cyan]'{profile.name}'[/cyan]. "
+                        f"Direct booking is not allowed.",
+                    )
+                    console.print(
+                        f"\n[dim]Use instead:[/dim] "
+                        f"[cyan]budjira workflow book {issue_key} <time> "
+                        f"--profile {profile.name}[/cyan]",
+                    )
+                    raise typer.Exit(1)
+        if (
+            profile.shadow_strategy == ShadowTicketStrategy.COLLECTIVE
+            and profile.booking_connection == connection_name
+            and profile.target_for_issue(issue_key) is not None
+        ):
+            mirror_key = profile.mirror_issue_key
+            if mirror_key is not None and mirror_key.upper() == issue_key.upper():
+                _check_mirror_target_comment(profile, issue_key, comment)
+            return profile
+    return None
+
+
+def _check_mirror_target_comment(profile: WorkflowProfile, issue_key: str, comment: str | None) -> None:
+    """A direct booking on the mirror target needs a marker; a planning key goes through 'workflow book'."""
+    text = (comment or "").strip()
+    match = _PLANNING_KEY_PREFIX_RE.match(text)
+    if match:
+        planning_key = match.group(1)
+        console.print(
+            f"[red]⛔[/red] [bold]{issue_key}[/bold] is the mirror target of workflow profile "
+            f"[cyan]'{profile.name}'[/cyan]: a booking that names a planning issue goes through the "
+            f"workflow, so the comment is mirrored to {planning_key}.",
+        )
+        console.print("\n[dim]Use instead:[/dim]")
+        console.print(f"[cyan]budjira workflow book {planning_key} <time> --profile {profile.name}[/cyan]")
+        console.print('[cyan]    --comment "<text without the key>"[/cyan]')
+        raise typer.Exit(1)
+    if any(text.startswith(prefix) for prefix in profile.direct_booking_prefixes):
+        return
+    markers = ", ".join(profile.direct_booking_prefixes) or "(none configured)"
+    console.print(
+        f"[red]⛔[/red] Direct booking on [bold]{issue_key}[/bold] (mirror target of workflow profile "
+        f"[cyan]'{profile.name}'[/cyan]) needs a comment starting with one of: {markers}",
+    )
+    console.print("\n[dim]Or book against the planning issue:[/dim]")
+    console.print(f"[cyan]budjira workflow book <PLANNING-KEY> <time> --profile {profile.name}[/cyan]")
+    console.print('[cyan]    --comment "<text>"[/cyan]')
+    raise typer.Exit(1)
 
 
 def get_tempo_client(connection_name: str | None = None) -> TempoClient:
@@ -180,9 +233,11 @@ def tempo_log_worklog(
         budjira tempo log PLAN-123 2h --force
     """
     try:
-        # Check workflow booking policy (unless --force)
+        # Check workflow booking policy (unless --force); a collective booking
+        # target also returns its profile so the day guards apply below
+        guard_profile: WorkflowProfile | None = None
         if not force:
-            _check_workflow_policy(issue_key, connection_name)
+            guard_profile = _check_workflow_policy(issue_key, connection_name, comment)
 
         # Get active connection
         connection = get_active_connection(connection_name)
@@ -214,6 +269,17 @@ def tempo_log_worklog(
         # Extract date and time
         start_date = started_dt.strftime("%Y-%m-%d")
         start_time = started_dt.strftime("%H:%M:%S")
+
+        # Day guards of the collective profile (daily cap, weekdays only)
+        if guard_profile is not None:
+            check_booking_guards(
+                guard_profile,
+                tempo_client,
+                jira_client,
+                author_account_id,
+                started_dt.date(),
+                time_spent_seconds,
+            )
 
         # Create worklog
         worklog = tempo_client.create_worklog(

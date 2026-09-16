@@ -35,6 +35,7 @@ from budjira.utils.datetime_parser import parse_datetime_string
 from budjira.utils.errors import (
     AuthenticationError,
     BillingValidationError,
+    BookingGuardError,
     ConnectionError,
     JiraAPIError,
     OverbookingError,
@@ -216,6 +217,17 @@ class WorkflowService:
 
         # Look up booking project
         booking_project = self._get_booking_project(planning_project)
+
+        # Collective strategy: no per-issue shadow, the mirror target takes every booking
+        if self.profile.shadow_strategy == ShadowTicketStrategy.COLLECTIVE:
+            mirror_key = self.profile.mirror_issue_key
+            if mirror_key is None:
+                raise WorkflowConfigError(
+                    f"Workflow profile '{self.profile.name}' uses the collective strategy but sets no "
+                    f"mirror_target; 'workflow book' needs one (mirror_target = \"<target>\" in workflows.toml)."
+                )
+            logger.info(f"Collective booking target for {planning_issue_key}: {mirror_key}")
+            return mirror_key
 
         # Use JQL summary search (default strategy)
         jql = f'project = {booking_project} AND summary ~ "{planning_issue_key}"'
@@ -796,30 +808,46 @@ class WorkflowService:
         Raises:
             ShadowTicketNotFoundError: If shadow ticket not found
             OverbookingError: If overbooking policy blocks
+            BookingGuardError: If a profile guard (daily cap, weekdays only) refuses the booking
+            ValidationError: If the collective strategy is used without a comment
         """
-        # Resolve shadow ticket
-        shadow_key = self.resolve_shadow_ticket(planning_issue_key)
-        console.print(f"Resolving shadow ticket for {planning_issue_key}... [cyan]{shadow_key}[/cyan]")
+        collective = self.profile.shadow_strategy == ShadowTicketStrategy.COLLECTIVE
 
-        # Fetch planning issue for estimate
+        # Resolve shadow ticket (collective: the mirror target)
+        shadow_key = self.resolve_shadow_ticket(planning_issue_key)
+        mirror_text: str | None = None
+        if collective:
+            if comment is None or not comment.strip():
+                raise ValidationError(
+                    f"A --comment is required to book {planning_issue_key} on the collective target {shadow_key}: "
+                    f"it is stored as '{planning_issue_key}: <comment>' in Tempo and mirrored to the planning issue."
+                )
+            mirror_text = comment.strip()
+            console.print(f"Booking target for {planning_issue_key}... [cyan]{shadow_key}[/cyan]")
+        else:
+            console.print(f"Resolving shadow ticket for {planning_issue_key}... [cyan]{shadow_key}[/cyan]")
+
+        # Fetch planning issue: verifies it exists; the estimate only matters on a
+        # per-issue shadow (a collective ticket's spent time says nothing about one issue)
         planning_issue = self.planning_jira.get_issue(planning_issue_key)
-        estimate_seconds = planning_issue.time_original_estimate
+        estimate_seconds = None if collective else planning_issue.time_original_estimate
 
         # Fetch current Tempo spent on shadow
         shadow_issue_id = self._get_booking_issue_id(shadow_key)
 
-        try:
-            worklogs = self.tempo_client.get_worklogs(issue_id=shadow_issue_id, limit=1000)
-            spent_seconds = sum(w.timeSpentSeconds for w in worklogs)
-        except JiraAPIError as e:
-            logger.warning(
-                "Could not fetch Tempo worklogs for %s (ID: %d) on %s: %s",
-                shadow_key,
-                shadow_issue_id,
-                self.booking_jira.connection.url,
-                e,
-            )
-            spent_seconds = 0
+        spent_seconds = 0
+        if not collective:
+            try:
+                worklogs = self.tempo_client.get_worklogs(issue_id=shadow_issue_id, limit=1000)
+                spent_seconds = sum(w.timeSpentSeconds for w in worklogs)
+            except JiraAPIError as e:
+                logger.warning(
+                    "Could not fetch Tempo worklogs for %s (ID: %d) on %s: %s",
+                    shadow_key,
+                    shadow_issue_id,
+                    self.booking_jira.connection.url,
+                    e,
+                )
 
         # Parse time
         time_spent_minutes = parse_time_string(time_spent)
@@ -845,6 +873,18 @@ class WorkflowService:
         start_date = started_dt.strftime("%Y-%m-%d")
         start_time = started_dt.strftime("%H:%M:%S")
 
+        if collective:
+            check_booking_guards(
+                self.profile,
+                self.tempo_client,
+                self.booking_jira,
+                author_account_id,
+                started_dt.date(),
+                new_seconds,
+            )
+
+        description = f"{planning_issue_key}: {mirror_text}" if mirror_text is not None else comment
+
         # Create Tempo worklog
         console.print(f"Logging {time_spent} to {shadow_key} via Tempo...")
         worklog = self.tempo_client.create_worklog(
@@ -853,7 +893,7 @@ class WorkflowService:
             start_date=start_date,
             start_time=start_time,
             author_account_id=author_account_id,
-            description=comment,
+            description=description,
         )
 
         # Validate Tempo-returned issue ID matches what we sent
@@ -868,7 +908,87 @@ class WorkflowService:
         console.print(
             f"[green]Logged {time_spent} to {shadow_key} via Tempo (Worklog ID: {worklog.tempoWorklogId})[/green]"
         )
+
+        if mirror_text is not None:
+            self._mirror_comment(planning_issue_key, started_dt.date(), mirror_text)
+
         return worklog
+
+    def _mirror_comment(self, planning_issue_key: str, work_date: date, text: str) -> None:
+        """Post the booking text, dated by work day, as a comment on the planning issue.
+
+        The worklog already exists when this runs, so a failure must never look
+        like a failed booking: it is reported with the exact command to post the
+        comment by hand.
+        """
+        body = self.profile.mirror_comment_template.format(date=work_date.isoformat(), text=text)
+        try:
+            self.planning_jira.add_comment(planning_issue_key, body)
+        except Exception as e:
+            console.print(
+                f"[yellow]Warning:[/yellow] worklog created, but the mirror comment on {planning_issue_key} failed: {e}"
+            )
+            console.print("[dim]Post it by hand:[/dim]")
+            console.print(
+                f'[cyan]budjira comment add {planning_issue_key} "{body}" '
+                f"--connection {self.profile.planning_connection}[/cyan]"
+            )
+            return
+        console.print(f"[green]Mirrored to {planning_issue_key}: {body}[/green]")
+
+
+_WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+
+def check_booking_guards(
+    profile: WorkflowProfile,
+    tempo_client: TempoClient,
+    booking_jira: JiraClient,
+    author_account_id: str,
+    work_date: date,
+    new_seconds: int,
+) -> None:
+    """Apply a profile's day guards to a booking on one of its collective targets.
+
+    Shared by ``workflow book`` and a direct ``tempo log`` on a booking target, so
+    both paths refuse the same bookings.
+
+    Args:
+        profile: Workflow profile carrying ``daily_cap`` / ``weekdays_only``
+        tempo_client: Tempo client of the booking instance
+        booking_jira: Jira client of the booking instance (resolves target issue IDs)
+        author_account_id: Whose worklogs count towards the cap
+        work_date: The day being booked
+        new_seconds: Duration of the new booking
+
+    Raises:
+        BookingGuardError: On a weekend with ``weekdays_only``, or when the author's
+            worklogs across all booking targets plus this booking exceed ``daily_cap``
+    """
+    if profile.weekdays_only and work_date.weekday() >= 5:
+        raise BookingGuardError(
+            f"{work_date.isoformat()} is a {_WEEKDAY_NAMES[work_date.weekday()]}; "
+            f"profile '{profile.name}' books weekdays only. Use --started with the actual work day."
+        )
+
+    cap = profile.daily_cap_seconds
+    if cap is None:
+        return
+
+    target_ids = {int(booking_jira.client.issue(key).id) for key in profile.booking_targets.values()}
+    worklogs = tempo_client.get_worklogs(
+        from_date=work_date,
+        to_date=work_date,
+        account_id=author_account_id,
+        limit=_BILLING_PAGE_LIMIT,
+    )
+    booked = sum(w.timeSpentSeconds for w in worklogs if w.issue.id in target_ids)
+    if booked + new_seconds > cap:
+        raise BookingGuardError(
+            f"This booking ({_format_seconds(new_seconds)}) would exceed the daily cap of "
+            f"{_format_seconds(cap)} on {work_date.isoformat()}: already booked {_format_seconds(booked)} "
+            f"across {', '.join(profile.booking_targets.values())}."
+        )
 
 
 def _format_seconds(seconds: int) -> str:

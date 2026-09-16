@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from budjira.utils.errors import ValidationError as BudjiraValidationError
+from budjira.utils.time_parser import parse_time_string
 
 
 class ShadowTicketStrategy(str, Enum):
@@ -13,6 +16,9 @@ class ShadowTicketStrategy(str, Enum):
     SUMMARY_SEARCH = "summary"
     CUSTOM_FIELD = "custom_field"
     ISSUE_LINK = "issue_link"
+    # No per-issue shadow: time lands on standing collective tickets (booking_targets),
+    # the planning key travels in the worklog text and is mirrored back as a comment.
+    COLLECTIVE = "collective"
 
 
 class OverbookingPolicy(str, Enum):
@@ -121,10 +127,84 @@ class WorkflowProfile(BaseModel):
         default=OverbookingPolicy.WARN,
         description="Policy when booking would exceed estimate",
     )
+    booking_targets: dict[str, str] = Field(
+        default_factory=dict,
+        description="Collective strategy: target name -> standing booking issue key "
+        "(e.g., {'dev': 'BOOK-101', 'ops': 'BOOK-102'}). Time is booked on these tickets instead of "
+        "per-issue shadows; the planning key travels in the worklog text.",
+    )
+    mirror_target: str | None = Field(
+        default=None,
+        description="Collective strategy: the target that carries the planning key. 'workflow book PLAN-123' "
+        "books here as 'PLAN-123: <comment>' and mirrors '<work date>: <comment>' as a comment on the "
+        "planning issue.",
+    )
+    mirror_comment_template: str = Field(
+        default="{date}: {text}",
+        description="Template for the mirrored planning comment; placeholders {date} (work date, YYYY-MM-DD) "
+        "and {text} (the worklog comment). Never carries hours or rates: those stay in the booking.",
+    )
+    direct_booking_prefixes: list[str] = Field(
+        default_factory=list,
+        description="Collective strategy: markers (e.g., 'MEETING:') that allow a direct 'tempo log' on the "
+        "mirror target without a planning key; anything else there is refused with a hint to 'workflow book'.",
+    )
+    daily_cap: str | None = Field(
+        default=None,
+        description="Maximum time per day across all booking targets (e.g., '8h'); a booking that would "
+        "exceed it is refused",
+    )
+    weekdays_only: bool = Field(
+        default=False,
+        description="Refuse bookings dated on a Saturday or Sunday",
+    )
     billing: BillingConfig | None = Field(
         default=None,
         description="Billing report configuration (label -> bucket mapping, rate); None disables 'workflow billing'",
     )
+
+    @model_validator(mode="after")
+    def _validate_collective(self) -> WorkflowProfile:
+        if self.shadow_strategy == ShadowTicketStrategy.COLLECTIVE:
+            if not self.booking_targets:
+                raise ValueError(
+                    "shadow_strategy 'collective' requires booking_targets (target name -> booking issue key)"
+                )
+            if self.mirror_target is not None and self.mirror_target not in self.booking_targets:
+                raise ValueError(
+                    f"mirror_target '{self.mirror_target}' is not one of booking_targets: "
+                    f"{', '.join(self.booking_targets)}"
+                )
+        elif self.booking_targets or self.mirror_target is not None:
+            raise ValueError("booking_targets and mirror_target require shadow_strategy = 'collective'")
+        if self.daily_cap is not None:
+            try:
+                parse_time_string(self.daily_cap)
+            except BudjiraValidationError as e:
+                raise ValueError(f"daily_cap: {e}") from e
+        return self
+
+    @property
+    def mirror_issue_key(self) -> str | None:
+        """Booking issue key of the mirror target, if the profile has one."""
+        if self.mirror_target is None:
+            return None
+        return self.booking_targets.get(self.mirror_target)
+
+    @property
+    def daily_cap_seconds(self) -> int | None:
+        """The daily cap in seconds, or None when no cap is configured."""
+        if self.daily_cap is None:
+            return None
+        return parse_time_string(self.daily_cap) * 60
+
+    def target_for_issue(self, issue_key: str) -> str | None:
+        """Name of the booking target an issue key belongs to (case-insensitive), or None."""
+        wanted = issue_key.upper()
+        for name, key in self.booking_targets.items():
+            if key.upper() == wanted:
+                return name
+        return None
 
 
 class WorkflowProfileList(BaseModel):
