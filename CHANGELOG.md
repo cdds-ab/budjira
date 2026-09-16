@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v1.33.0 (2026-09-16)
+
+### Feat
+
+- **workflow**: collective booking targets with mirrored planning comment
+
+### Fix
+
+- **dor**: only flag placeholder text in untouched templates (#130)
+- **create**: never prompt on DoR warnings in non-interactive mode (#130)
+
 ## v1.32.1 (2026-09-03)
 
 ### Fix
