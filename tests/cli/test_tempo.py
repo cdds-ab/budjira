@@ -1522,3 +1522,146 @@ def test_tempo_update_worklog_native_cancelled(mock_connection):
     assert result.exit_code == 0
     assert "Update cancelled" in result.stdout
     mock_jira.worklogs.update.assert_not_called()
+
+
+class TestCollectiveBookingPolicy:
+    """Direct tempo log against collective booking targets (#131)."""
+
+    def _make_mock_settings(self) -> MagicMock:
+        from budjira.models.workflow import (
+            OverbookingPolicy,
+            ProjectMapping,
+            ShadowTicketStrategy,
+            WorkflowProfile,
+            WorkflowProfileList,
+        )
+
+        profile = WorkflowProfile(
+            name="acme-shadow",
+            planning_connection="planning-conn",
+            booking_connection="booking-conn",
+            project_mappings=[ProjectMapping(planning_project="PLAN", booking_project="BOOK")],
+            shadow_strategy=ShadowTicketStrategy.COLLECTIVE,
+            booking_targets={"dev": "BOOK-101", "ops": "BOOK-102"},
+            mirror_target="dev",
+            direct_booking_prefixes=["MEETING:", "KT:"],
+            daily_cap="8h",
+            weekdays_only=True,
+            overbooking_policy=OverbookingPolicy.WARN,
+        )
+        mock_settings = MagicMock()
+        mock_settings.workflows = WorkflowProfileList(profiles=[profile])
+        return mock_settings
+
+    def _created_worklog(self, key: str) -> TempoWorklog:
+        return TempoWorklog(
+            self="https://api.tempo.io/worklogs/1",
+            tempoWorklogId=1,
+            issue=TempoIssue(self="https://api.tempo.io/issues/1", key=key, id=12345),
+            timeSpentSeconds=3600,
+            startDate=date(2026, 9, 15),
+            createdAt=datetime(2026, 9, 15, 9, 0),
+            updatedAt=datetime(2026, 9, 15, 9, 0),
+            author=TempoAuthor(self="https://api.tempo.io/users/1", accountId="557058:abc123"),
+        )
+
+    def _invoke(self, mock_tempo_connection, mock_tempo_client, args: list[str]):
+        mock_tempo_connection.name = "booking-conn"
+        mock_tempo_client.get_worklogs.return_value = []
+        mock_tempo_client.create_worklog.return_value = self._created_worklog(args[0])
+        with patch("budjira.cli.tempo.get_settings", return_value=self._make_mock_settings()):
+            return runner.invoke(app, ["tempo", "log", *args, "--connection", "booking-conn"])
+
+    def test_mirror_target_without_marker_refused(self, mock_tempo_connection, mock_tempo_client, mock_jira_client):
+        result = self._invoke(
+            mock_tempo_connection,
+            mock_tempo_client,
+            ["BOOK-101", "1h", "--comment", "did stuff", "--started", "2026-09-15"],
+        )
+        assert result.exit_code == 1
+        assert "MEETING:" in result.stdout
+        assert "workflow book" in result.stdout
+        mock_tempo_client.create_worklog.assert_not_called()
+
+    def test_mirror_target_without_comment_refused(self, mock_tempo_connection, mock_tempo_client, mock_jira_client):
+        result = self._invoke(mock_tempo_connection, mock_tempo_client, ["BOOK-101", "1h", "--started", "2026-09-15"])
+        assert result.exit_code == 1
+        mock_tempo_client.create_worklog.assert_not_called()
+
+    def test_mirror_target_with_planning_key_redirected(
+        self, mock_tempo_connection, mock_tempo_client, mock_jira_client
+    ):
+        result = self._invoke(
+            mock_tempo_connection,
+            mock_tempo_client,
+            ["BOOK-101", "1h", "--comment", "PLAN-123: did stuff", "--started", "2026-09-15"],
+        )
+        assert result.exit_code == 1
+        assert "workflow book PLAN-123" in result.stdout
+        mock_tempo_client.create_worklog.assert_not_called()
+
+    def test_mirror_target_with_marker_allowed(self, mock_tempo_connection, mock_tempo_client, mock_jira_client):
+        result = self._invoke(
+            mock_tempo_connection,
+            mock_tempo_client,
+            ["BOOK-101", "1h", "--comment", "MEETING: weekly sync", "--started", "2026-09-15"],
+        )
+        assert result.exit_code == 0, result.stdout
+        mock_tempo_client.create_worklog.assert_called_once()
+
+    def test_other_target_is_free_form(self, mock_tempo_connection, mock_tempo_client, mock_jira_client):
+        result = self._invoke(
+            mock_tempo_connection,
+            mock_tempo_client,
+            ["BOOK-102", "1h", "--comment", "anything", "--started", "2026-09-15"],
+        )
+        assert result.exit_code == 0, result.stdout
+        mock_tempo_client.create_worklog.assert_called_once()
+
+    def test_weekend_refused_on_any_target(self, mock_tempo_connection, mock_tempo_client, mock_jira_client):
+        result = self._invoke(
+            mock_tempo_connection,
+            mock_tempo_client,
+            ["BOOK-102", "1h", "--comment", "anything", "--started", "2026-09-12"],
+        )
+        assert result.exit_code == 1
+        assert "Saturday" in result.stdout
+        mock_tempo_client.create_worklog.assert_not_called()
+
+    def test_daily_cap_refused_on_any_target(self, mock_tempo_connection, mock_tempo_client, mock_jira_client):
+        mock_tempo_connection.name = "booking-conn"
+        existing = MagicMock()
+        existing.issue.id = 12345  # the fixture resolves every key to id 12345
+        existing.timeSpentSeconds = 7 * 3600 + 1800
+        mock_tempo_client.get_worklogs.return_value = [existing]
+        with patch("budjira.cli.tempo.get_settings", return_value=self._make_mock_settings()):
+            result = runner.invoke(
+                app,
+                [
+                    "tempo",
+                    "log",
+                    "BOOK-102",
+                    "1h",
+                    "--comment",
+                    "x",
+                    "--started",
+                    "2026-09-15",
+                    "--connection",
+                    "booking-conn",
+                ],
+            )
+        assert result.exit_code == 1
+        assert "8h" in result.stdout
+        mock_tempo_client.create_worklog.assert_not_called()
+
+    def test_unrelated_issue_untouched(self, mock_tempo_connection, mock_tempo_client, mock_jira_client):
+        result = self._invoke(mock_tempo_connection, mock_tempo_client, ["BOOK-777", "1h", "--started", "2026-09-12"])
+        assert result.exit_code == 0, result.stdout
+        mock_tempo_client.get_worklogs.assert_not_called()
+
+    def test_force_bypasses_policy_and_guards(self, mock_tempo_connection, mock_tempo_client, mock_jira_client):
+        result = self._invoke(
+            mock_tempo_connection, mock_tempo_client, ["BOOK-101", "1h", "--started", "2026-09-12", "--force"]
+        )
+        assert result.exit_code == 0, result.stdout
+        mock_tempo_client.create_worklog.assert_called_once()

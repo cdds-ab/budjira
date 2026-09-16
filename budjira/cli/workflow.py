@@ -24,6 +24,7 @@ from budjira.services.workflow import WorkflowService, _format_seconds
 from budjira.utils.datetime_parser import parse_month_range
 from budjira.utils.errors import (
     BillingValidationError,
+    BookingGuardError,
     BudjiraError,
     OverbookingError,
     ShadowTicketAmbiguousError,
@@ -278,6 +279,12 @@ def workflow_show(
                         }
                         for m in profile.project_mappings
                     ],
+                    "booking_targets": profile.booking_targets,
+                    "mirror_target": profile.mirror_target,
+                    "mirror_comment_template": profile.mirror_comment_template,
+                    "direct_booking_prefixes": profile.direct_booking_prefixes,
+                    "daily_cap": profile.daily_cap,
+                    "weekdays_only": profile.weekdays_only,
                 }
             )
         else:
@@ -288,11 +295,24 @@ def workflow_show(
             if profile.shadow_custom_field:
                 console.print(f"  Shadow custom field: {profile.shadow_custom_field}")
             console.print(f"  Overbooking policy:  {profile.overbooking_policy.value}")
+            if profile.daily_cap:
+                console.print(f"  Daily cap:           {profile.daily_cap}")
+            if profile.weekdays_only:
+                console.print("  Weekdays only:       yes")
 
             if profile.project_mappings:
                 console.print("\n  [bold]Project Mappings:[/bold]")
                 for mapping in profile.project_mappings:
                     console.print(f"    {mapping.planning_project} -> {mapping.booking_project}")
+
+            if profile.booking_targets:
+                console.print("\n  [bold]Booking Targets (collective):[/bold]")
+                for target, key in profile.booking_targets.items():
+                    marker = "  (mirror target)" if target == profile.mirror_target else ""
+                    console.print(f"    {target}: {key}{marker}")
+                if profile.direct_booking_prefixes:
+                    console.print(f"  Direct booking markers: {', '.join(profile.direct_booking_prefixes)}")
+                console.print(f"  Mirror comment:      {profile.mirror_comment_template}")
 
     except BudjiraError as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -671,7 +691,7 @@ def workflow_book(
     except (ShadowTicketNotFoundError, ShadowTicketAmbiguousError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from e
-    except OverbookingError as e:
+    except (OverbookingError, BookingGuardError) as e:
         console.print(f"[red]Blocked:[/red] {e}")
         raise typer.Exit(1) from e
     except WorkflowConfigError as e:

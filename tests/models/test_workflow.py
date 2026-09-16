@@ -235,3 +235,74 @@ class TestBookingStatus:
         assert status.remaining_seconds is None
         assert status.is_overbooked is False
         assert status.overbooking_seconds == 0
+
+
+class TestCollectiveProfile:
+    """Collective strategy: standing booking targets instead of per-issue shadows (#131)."""
+
+    def _profile(self, **overrides: object) -> WorkflowProfile:
+        base: dict[str, object] = {
+            "name": "acme-shadow",
+            "planning_connection": "acme-planning",
+            "booking_connection": "acme-booking",
+            "project_mappings": [ProjectMapping(planning_project="PLAN", booking_project="BOOK")],
+            "shadow_strategy": ShadowTicketStrategy.COLLECTIVE,
+            "booking_targets": {"dev": "BOOK-101", "ops": "BOOK-102"},
+            "mirror_target": "dev",
+            "direct_booking_prefixes": ["MEETING:", "KT:"],
+            "daily_cap": "8h",
+            "weekdays_only": True,
+        }
+        base.update(overrides)
+        return WorkflowProfile(**base)  # type: ignore[arg-type]
+
+    def test_strategy_value(self) -> None:
+        assert ShadowTicketStrategy.COLLECTIVE.value == "collective"
+
+    def test_valid_profile(self) -> None:
+        profile = self._profile()
+        assert profile.mirror_issue_key == "BOOK-101"
+        assert profile.daily_cap_seconds == 8 * 3600
+        assert profile.mirror_comment_template == "{date}: {text}"
+
+    def test_requires_booking_targets(self) -> None:
+        with pytest.raises(ValidationError, match="booking_targets"):
+            self._profile(booking_targets={})
+
+    def test_mirror_target_must_be_a_target(self) -> None:
+        with pytest.raises(ValidationError, match="mirror_target"):
+            self._profile(mirror_target="qa")
+
+    def test_mirror_target_requires_collective_strategy(self) -> None:
+        with pytest.raises(ValidationError, match="collective"):
+            self._profile(shadow_strategy=ShadowTicketStrategy.SUMMARY_SEARCH, booking_targets={})
+
+    def test_invalid_daily_cap_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="daily_cap"):
+            self._profile(daily_cap="soon")
+
+    def test_target_lookup_by_issue_is_case_insensitive(self) -> None:
+        profile = self._profile()
+        assert profile.target_for_issue("BOOK-102") == "ops"
+        assert profile.target_for_issue("book-101") == "dev"
+        assert profile.target_for_issue("BOOK-999") is None
+
+    def test_defaults_on_summary_profile(self) -> None:
+        profile = WorkflowProfile(
+            name="ek-to-k",
+            planning_connection="ek",
+            booking_connection="k",
+            project_mappings=[ProjectMapping(planning_project="EK", booking_project="K")],
+        )
+        assert profile.booking_targets == {}
+        assert profile.mirror_target is None
+        assert profile.mirror_issue_key is None
+        assert profile.daily_cap_seconds is None
+        assert profile.weekdays_only is False
+        assert profile.direct_booking_prefixes == []
+
+    def test_roundtrip_through_profile_list(self) -> None:
+        data = WorkflowProfileList(profiles=[self._profile()]).model_dump()
+        loaded = WorkflowProfileList(**data)
+        assert loaded.profiles[0].booking_targets == {"dev": "BOOK-101", "ops": "BOOK-102"}
+        assert loaded.profiles[0].shadow_strategy == ShadowTicketStrategy.COLLECTIVE

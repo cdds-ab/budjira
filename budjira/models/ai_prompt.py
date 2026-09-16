@@ -1456,6 +1456,53 @@ Automated flow:
 
 **If no estimate is set on the planning issue, overbooking checks are skipped.**
 
+### Collective Booking Targets (`shadow_strategy = "collective"`)
+
+For setups without per-issue shadows: time is booked on a few standing tickets in the
+booking instance and the planning key travels in the worklog text. Built for bookings
+that get checked automatically against the planning instance (does the worklog name an
+issue, does the issue carry a dated comment matching the activity, is the day plausible).
+
+```toml
+[[profiles]]
+name = "acme-shadow"
+planning_connection = "acme-planning"
+booking_connection = "acme-booking"
+project_mappings = [{ planning_project = "PLAN", booking_project = "BOOK" }]
+shadow_strategy = "collective"
+booking_targets = { dev = "BOOK-101", ops = "BOOK-102" }  # target name -> standing ticket
+mirror_target = "dev"                                       # carries the planning key
+direct_booking_prefixes = ["MEETING:", "KT:", "SUPPORT:"]   # markers for ticketless bookings
+daily_cap = "8h"                                            # across all booking targets
+weekdays_only = true
+# mirror_comment_template = "{date}: {text}"               # default; never carries hours
+```
+
+```bash
+# Books BOOK-101 as "PLAN-123: extend ACs (MR !20)" and posts
+# "2026-09-15: extend ACs (MR !20)" as a comment on PLAN-123 (--comment is required)
+budjira workflow book PLAN-123 1h30m --profile acme-shadow --started 2026-09-15 --comment "extend ACs (MR !20)"
+
+# Direct booking on the mirror target only with a configured marker (no mirror)
+budjira tempo log BOOK-101 1h --connection acme-booking --comment "MEETING: weekly sync"
+
+# Other targets stay free-form
+budjira tempo log BOOK-102 30m --connection acme-booking --comment "on-call check"
+```
+
+Rules:
+- `workflow book` verifies the planning issue exists, skips the estimate/overbooking check
+  (a collective ticket's spent time says nothing about one issue), books, then mirrors. A
+  failed mirror keeps the worklog and prints the `comment add` command to post it by hand.
+- The mirrored comment carries the work date (from `--started`, not the booking time) and
+  the text only. Hours and rates stay in the booking.
+- `tempo log` on the mirror target is refused without a marker; a comment starting with a
+  planning key ("PLAN-123: ...") is redirected to `workflow book`. `--force` bypasses.
+- Guards apply to both paths on every booking target: the author's worklogs across all
+  targets plus the new booking must stay within `daily_cap`; Saturday/Sunday are refused
+  with `weekdays_only`.
+- `workflow setup` does not ask for these fields yet: edit `workflows.toml` by hand.
+
 ### Billing Reports (billable vs. non-billable)
 
 ```bash

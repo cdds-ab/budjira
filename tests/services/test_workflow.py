@@ -16,6 +16,7 @@ from budjira.models.workflow import (
 from budjira.services.workflow import WorkflowService, _format_seconds
 from budjira.utils.errors import (
     BillingValidationError,
+    BookingGuardError,
     JiraAPIError,
     OverbookingError,
     ShadowTicketAmbiguousError,
@@ -1314,3 +1315,178 @@ class TestBillingDefaultBucket:
         validation = service.validate_billing_labels()
 
         assert [(v.issue, v.kind) for v in validation.violations] == [("EK-11", "multiple")]
+
+
+def _make_collective_profile(**overrides: object) -> WorkflowProfile:
+    base: dict[str, object] = {
+        "name": "acme-shadow",
+        "planning_connection": "acme-planning",
+        "booking_connection": "acme-booking",
+        "project_mappings": [ProjectMapping(planning_project="PLAN", booking_project="BOOK")],
+        "shadow_strategy": ShadowTicketStrategy.COLLECTIVE,
+        "booking_targets": {"dev": "BOOK-101", "ops": "BOOK-102"},
+        "mirror_target": "dev",
+        "direct_booking_prefixes": ["MEETING:"],
+        "daily_cap": "8h",
+        "weekdays_only": True,
+        "overbooking_policy": OverbookingPolicy.BLOCK,
+    }
+    base.update(overrides)
+    return WorkflowProfile(**base)  # type: ignore[arg-type]
+
+
+def _tempo_worklog(issue_id: int, seconds: int) -> MagicMock:
+    worklog = MagicMock()
+    worklog.issue.id = issue_id
+    worklog.timeSpentSeconds = seconds
+    return worklog
+
+
+def _make_collective_service(
+    profile: WorkflowProfile | None = None,
+) -> tuple[WorkflowService, MagicMock, MagicMock, MagicMock]:
+    """Service with the booking side wired: BOOK-101 -> id 101, BOOK-102 -> id 102."""
+    planning_jira = MagicMock()
+    planning_issue = MagicMock()
+    planning_issue.summary = "Extend the ACs"
+    planning_issue.time_original_estimate = 3600  # would trip a BLOCK policy on the shadow path
+    planning_jira.get_issue.return_value = planning_issue
+
+    booking_jira = MagicMock()
+    booking_jira.connection.url = "https://booking.atlassian.net"
+
+    def _issue(key: str) -> MagicMock:
+        issue = MagicMock()
+        issue.key = key
+        issue.id = {"BOOK-101": "101", "BOOK-102": "102"}[key]
+        return issue
+
+    booking_jira.client.issue.side_effect = _issue
+    booking_jira.client.myself.return_value = {"accountId": "acc-1"}
+
+    tempo_client = MagicMock()
+    tempo_client.get_worklogs.return_value = []
+    created = MagicMock()
+    created.issue.id = 101
+    created.tempoWorklogId = 1
+    tempo_client.create_worklog.return_value = created
+
+    service = WorkflowService(
+        profile=profile or _make_collective_profile(),
+        planning_jira=planning_jira,
+        booking_jira=booking_jira,
+        tempo_client=tempo_client,
+    )
+    return service, planning_jira, booking_jira, tempo_client
+
+
+class TestCollectiveBooking:
+    """Collective strategy: book on a standing target, mirror to the planning issue (#131)."""
+
+    def test_resolve_returns_mirror_issue(self) -> None:
+        service, _, booking_jira, _ = _make_collective_service()
+        assert service.resolve_shadow_ticket("PLAN-123") == "BOOK-101"
+        booking_jira.search_issues.assert_not_called()
+
+    def test_resolve_requires_mirror_target(self) -> None:
+        service, *_ = _make_collective_service(_make_collective_profile(mirror_target=None))
+        with pytest.raises(WorkflowConfigError, match="mirror_target"):
+            service.resolve_shadow_ticket("PLAN-123")
+
+    def test_resolve_checks_project_mapping(self) -> None:
+        service, *_ = _make_collective_service()
+        with pytest.raises(WorkflowConfigError, match="No project mapping"):
+            service.resolve_shadow_ticket("OTHER-1")
+
+    def test_book_prefixes_text_and_mirrors_comment(self) -> None:
+        service, planning_jira, _, tempo_client = _make_collective_service()
+
+        service.book_time("PLAN-123", "1h30m", comment="extend ACs (MR !20)", started="2026-09-15 10:00")
+
+        kwargs = tempo_client.create_worklog.call_args.kwargs
+        assert kwargs["issue_id"] == 101
+        assert kwargs["description"] == "PLAN-123: extend ACs (MR !20)"
+        assert kwargs["start_date"] == "2026-09-15"
+        assert kwargs["time_spent_seconds"] == 5400
+        planning_jira.add_comment.assert_called_once_with("PLAN-123", "2026-09-15: extend ACs (MR !20)")
+
+    def test_book_verifies_planning_issue_before_booking(self) -> None:
+        service, planning_jira, _, tempo_client = _make_collective_service()
+        planning_jira.get_issue.side_effect = JiraAPIError("Issue does not exist")
+
+        with pytest.raises(JiraAPIError):
+            service.book_time("PLAN-999", "1h", comment="x", started="2026-09-15")
+
+        tempo_client.create_worklog.assert_not_called()
+        planning_jira.add_comment.assert_not_called()
+
+    def test_book_requires_comment_on_mirror_target(self) -> None:
+        service, _, _, tempo_client = _make_collective_service()
+        with pytest.raises(ValidationError, match="comment"):
+            service.book_time("PLAN-123", "1h", comment=None, started="2026-09-15")
+        tempo_client.create_worklog.assert_not_called()
+
+    def test_book_skips_overbooking_check(self) -> None:
+        # estimate 1h, booking 2h, policy BLOCK: the shadow path would refuse; collective must not
+        service, _, _, tempo_client = _make_collective_service()
+        service.book_time("PLAN-123", "2h", comment="x", started="2026-09-15")
+        tempo_client.create_worklog.assert_called_once()
+
+    def test_weekend_refused(self) -> None:
+        service, _, _, tempo_client = _make_collective_service()
+        with pytest.raises(BookingGuardError, match="Saturday"):
+            service.book_time("PLAN-123", "1h", comment="x", started="2026-09-12")
+        tempo_client.create_worklog.assert_not_called()
+
+    def test_daily_cap_refused_across_targets(self) -> None:
+        service, _, _, tempo_client = _make_collective_service()
+        tempo_client.get_worklogs.return_value = [
+            _tempo_worklog(101, 4 * 3600),
+            _tempo_worklog(102, 3 * 3600),
+            _tempo_worklog(999, 5 * 3600),  # not a target: ignored
+        ]
+
+        with pytest.raises(BookingGuardError, match="8h"):
+            service.book_time("PLAN-123", "1h30m", comment="x", started="2026-09-15")
+
+        tempo_client.create_worklog.assert_not_called()
+        kwargs = tempo_client.get_worklogs.call_args.kwargs
+        assert kwargs["from_date"] == date(2026, 9, 15)
+        assert kwargs["to_date"] == date(2026, 9, 15)
+        assert kwargs["account_id"] == "acc-1"
+
+    def test_daily_cap_counts_only_targets(self) -> None:
+        service, _, _, tempo_client = _make_collective_service()
+        tempo_client.get_worklogs.return_value = [_tempo_worklog(999, 7 * 3600)]
+        service.book_time("PLAN-123", "1h30m", comment="x", started="2026-09-15")
+        tempo_client.create_worklog.assert_called_once()
+
+    def test_daily_cap_exact_fit_allowed(self) -> None:
+        service, _, _, tempo_client = _make_collective_service()
+        tempo_client.get_worklogs.return_value = [_tempo_worklog(101, 7 * 3600)]
+        service.book_time("PLAN-123", "1h", comment="x", started="2026-09-15")
+        tempo_client.create_worklog.assert_called_once()
+
+    def test_guards_off_when_not_configured(self) -> None:
+        profile = _make_collective_profile(daily_cap=None, weekdays_only=False)
+        service, _, _, tempo_client = _make_collective_service(profile)
+        service.book_time("PLAN-123", "1h", comment="x", started="2026-09-12")
+        tempo_client.create_worklog.assert_called_once()
+        tempo_client.get_worklogs.assert_not_called()
+
+    def test_mirror_failure_keeps_worklog_and_prints_manual_command(self, capsys: pytest.CaptureFixture[str]) -> None:
+        service, planning_jira, _, tempo_client = _make_collective_service()
+        planning_jira.add_comment.side_effect = JiraAPIError("boom")
+
+        worklog = service.book_time("PLAN-123", "1h", comment="extend ACs", started="2026-09-15")
+
+        assert worklog is tempo_client.create_worklog.return_value
+        out = capsys.readouterr().out
+        assert "comment add PLAN-123" in out
+        assert "2026-09-15: extend ACs" in out
+
+    def test_custom_mirror_template(self) -> None:
+        profile = _make_collective_profile(mirror_comment_template="Work {date} - {text}")
+        service, planning_jira, _, _ = _make_collective_service(profile)
+        service.book_time("PLAN-123", "1h", comment="x", started="2026-09-15")
+        planning_jira.add_comment.assert_called_once_with("PLAN-123", "Work 2026-09-15 - x")

@@ -79,6 +79,12 @@ class OverbookingError(WorkflowError):
     pass
 
 
+class BookingGuardError(WorkflowError):
+    """Raised when a booking violates a profile guard (daily cap, weekdays only)."""
+
+    pass
+
+
 class BillingValidationError(WorkflowError):
     """Raised when billing category labels violate the profile's rules."""
 
