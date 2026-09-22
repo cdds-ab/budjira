@@ -10,6 +10,7 @@ import requests
 from budjira.tempo.models import (
     TempoAccount,
     TempoAccountList,
+    TempoTimesheetApproval,
     TempoWorklog,
     TempoWorklogCreate,
     TempoWorklogList,
@@ -370,3 +371,169 @@ class TempoClient:
             endpoint=f"/accounts/{account_key}",
         )
         return TempoAccount(**response)  # type: ignore[arg-type]
+
+    def get_timesheet_approval(
+        self,
+        account_id: str,
+        from_date: date,
+        to_date: date,
+    ) -> TempoTimesheetApproval:
+        """Get the timesheet approval status of a user for a period.
+
+        Args:
+            account_id: Jira account ID of the user
+            from_date: Period start (inclusive)
+            to_date: Period end (inclusive)
+
+        Returns:
+            Timesheet approval with status, required/spent seconds and the
+            actions map of the actions the caller may currently perform
+
+        Raises:
+            JiraAPIError: If retrieval fails
+        """
+        params = {
+            "from": from_date.isoformat(),
+            "to": to_date.isoformat(),
+        }
+
+        logger.info(f"Fetching timesheet approval for user {account_id}: {params['from']} → {params['to']}")
+        response = self._make_request(
+            method="GET",
+            endpoint=f"/timesheet-approvals/user/{account_id}",
+            params=params,
+        )
+        return TempoTimesheetApproval(**response)  # type: ignore[arg-type]
+
+    def _timesheet_approval_action(
+        self,
+        action: str,
+        account_id: str,
+        from_date: date,
+        to_date: date,
+        comment: str | None = None,
+    ) -> TempoTimesheetApproval:
+        """Perform a timesheet approval action (submit/approve/reject/reopen).
+
+        Args:
+            action: Approval action name
+            account_id: Jira account ID of the timesheet owner
+            from_date: Period start (inclusive)
+            to_date: Period end (inclusive)
+            comment: Optional comment attached to the action
+
+        Returns:
+            Resulting timesheet approval state
+
+        Raises:
+            JiraAPIError: If the action fails
+        """
+        params = {
+            "from": from_date.isoformat(),
+            "to": to_date.isoformat(),
+        }
+        json_data = {"comment": comment} if comment is not None else None
+
+        logger.info(f"Timesheet approval action '{action}' for user {account_id}: {params['from']} → {params['to']}")
+        response = self._make_request(
+            method="POST",
+            endpoint=f"/timesheet-approvals/user/{account_id}/{action}",
+            params=params,
+            json_data=json_data,
+        )
+        return TempoTimesheetApproval(**response)  # type: ignore[arg-type]
+
+    def submit_timesheet(
+        self,
+        account_id: str,
+        from_date: date,
+        to_date: date,
+        comment: str | None = None,
+    ) -> TempoTimesheetApproval:
+        """Submit a timesheet period for review (owner action).
+
+        Args:
+            account_id: Jira account ID of the timesheet owner
+            from_date: Period start (inclusive)
+            to_date: Period end (inclusive)
+            comment: Optional submission comment
+
+        Returns:
+            Resulting timesheet approval state
+
+        Raises:
+            JiraAPIError: If submission fails
+        """
+        return self._timesheet_approval_action("submit", account_id, from_date, to_date, comment)
+
+    def approve_timesheet(
+        self,
+        account_id: str,
+        from_date: date,
+        to_date: date,
+        comment: str | None = None,
+    ) -> TempoTimesheetApproval:
+        """Approve a submitted timesheet period (approver action).
+
+        An approved timesheet is locked against further bookings in that
+        period. Requires the approver role for the user's Tempo team.
+
+        Args:
+            account_id: Jira account ID of the timesheet owner
+            from_date: Period start (inclusive)
+            to_date: Period end (inclusive)
+            comment: Optional approval comment
+
+        Returns:
+            Resulting timesheet approval state
+
+        Raises:
+            JiraAPIError: If approval fails
+        """
+        return self._timesheet_approval_action("approve", account_id, from_date, to_date, comment)
+
+    def reject_timesheet(
+        self,
+        account_id: str,
+        from_date: date,
+        to_date: date,
+        comment: str | None = None,
+    ) -> TempoTimesheetApproval:
+        """Reject a submitted timesheet period (approver action).
+
+        Args:
+            account_id: Jira account ID of the timesheet owner
+            from_date: Period start (inclusive)
+            to_date: Period end (inclusive)
+            comment: Optional rejection comment
+
+        Returns:
+            Resulting timesheet approval state
+
+        Raises:
+            JiraAPIError: If rejection fails
+        """
+        return self._timesheet_approval_action("reject", account_id, from_date, to_date, comment)
+
+    def reopen_timesheet(
+        self,
+        account_id: str,
+        from_date: date,
+        to_date: date,
+        comment: str | None = None,
+    ) -> TempoTimesheetApproval:
+        """Reopen a submitted or approved timesheet period.
+
+        Args:
+            account_id: Jira account ID of the timesheet owner
+            from_date: Period start (inclusive)
+            to_date: Period end (inclusive)
+            comment: Optional comment
+
+        Returns:
+            Resulting timesheet approval state
+
+        Raises:
+            JiraAPIError: If reopening fails
+        """
+        return self._timesheet_approval_action("reopen", account_id, from_date, to_date, comment)

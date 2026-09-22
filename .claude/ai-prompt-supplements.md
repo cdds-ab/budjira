@@ -87,6 +87,12 @@ budjira tempo worklogs --from 2024-10-01 --to 2024-10-31
 
 # List billing accounts
 budjira tempo accounts
+
+# Month end: lock the period against further bookings
+budjira tempo timesheet status --period 2026-08     # state, hours, allowed actions
+budjira tempo timesheet submit --period 2026-08 --comment "All bookings complete"
+budjira tempo timesheet approve --period 2026-08    # approver role (team lead)
+budjira tempo timesheet reopen --period 2026-08     # unlock again if needed
 ```
 
 **When to use:**
@@ -94,6 +100,9 @@ budjira tempo accounts
 - Need to track time against specific Tempo accounts for billing
 - Enterprise time tracking with advanced reporting
 - Tempo is installed in Jira instance
+- Month end: an APPROVED timesheet locks the period against further bookings
+  and edits (submit/approve require the action to be available — approve
+  needs the approver role)
 
 **Note:** Requires separate Tempo API token (different from Jira token)
 
