@@ -1187,6 +1187,52 @@ budjira tempo accounts
 - Status (OPEN/CLOSED)
 - Account ID
 
+### Timesheet Approval (Period Locking)
+
+```bash
+budjira tempo timesheet COMMAND [OPTIONS]
+```
+
+Lock a period against further bookings via Tempo's timesheet-approval
+workflow: an APPROVED timesheet is locked against new bookings and edits in
+that period. Requires a Tempo-enabled connection (the commands error out on
+planning-only connections).
+
+**Commands:**
+- `budjira tempo timesheet status`: Show the approval state (OPEN /
+  IN_REVIEW / APPROVED / REJECTED), required vs. booked hours and the
+  actions the caller may currently perform
+- `budjira tempo timesheet submit`: Submit the period for review (owner)
+- `budjira tempo timesheet approve`: Approve a submitted period — locks it
+  (requires the approver role, e.g. team lead)
+- `budjira tempo timesheet reopen`: Reopen a submitted/approved period,
+  removing the lock
+
+**Options:**
+- `--period YYYY-MM`, `-p`: Whole month (e.g., 2026-08); alternatively
+  `--from DATE --to DATE` (YYYY-MM-DD) for an explicit range
+- `--comment TEXT`, `-c`: Comment on submit/approve
+- `--connection NAME`: Connection override
+
+**Behavior:**
+- Write commands fetch the status first and REFUSE with a clear message when
+  the action is not in the approval's actions map (e.g. `approve` without
+  the approver role) instead of guessing
+- After each write the resulting state is printed, so the lock is visible
+- `--format json` works on all four commands
+
+**Examples:**
+
+```bash
+# Month end: check the state, then submit and approve
+budjira tempo timesheet status --period 2026-08
+budjira tempo timesheet submit --period 2026-08 --comment "All bookings complete"
+budjira tempo timesheet approve --period 2026-08
+
+# Unlock a period again (e.g. a booking was forgotten)
+budjira tempo timesheet reopen --period 2026-08
+```
+
 ## Workflow Profiles (Cross-Instance)
 
 **NEW in v1.16.0** - Automate cross-instance workflows between a planning Jira and a booking Jira (Tempo-enabled).
