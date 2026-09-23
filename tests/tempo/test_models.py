@@ -7,6 +7,7 @@ from budjira.tempo.models import (
     TempoAccount,
     TempoAuthor,
     TempoIssue,
+    TempoTimesheetApprovalStatus,
     TempoWorklog,
     TempoWorklogCreate,
     TempoWorklogUpdate,
@@ -225,3 +226,134 @@ def test_tempo_worklog_update_model_dump():
     assert "issueId" not in dumped
     assert "startDate" not in dumped
     assert "billableSeconds" not in dumped
+
+
+def test_tempo_timesheet_period_valid():
+    """Test TempoTimesheetPeriod parses the API 'from' alias."""
+    from budjira.tempo.models import TempoTimesheetPeriod
+
+    period = TempoTimesheetPeriod(**{"from": "2026-08-01", "to": "2026-08-31"})  # type: ignore[arg-type]
+    assert period.from_ == date(2026, 8, 1)
+    assert period.to == date(2026, 8, 31)
+
+
+def test_tempo_timesheet_period_serializes_alias():
+    """Test TempoTimesheetPeriod serializes back to the API field names."""
+    from budjira.tempo.models import TempoTimesheetPeriod
+
+    period = TempoTimesheetPeriod(**{"from": "2026-08-01", "to": "2026-08-31"})  # type: ignore[arg-type]
+    dumped = period.model_dump(by_alias=True, mode="json")
+    assert dumped == {"from": "2026-08-01", "to": "2026-08-31"}
+
+
+def test_tempo_timesheet_period_missing_to():
+    """Test TempoTimesheetPeriod requires the 'to' field."""
+    from budjira.tempo.models import TempoTimesheetPeriod
+
+    with pytest.raises(ValidationError):
+        TempoTimesheetPeriod(**{"from": "2026-08-01"})  # type: ignore[arg-type]
+
+
+def test_tempo_timesheet_approval_status_valid():
+    """Test TempoTimesheetApprovalStatus with a full API payload."""
+    from budjira.tempo.models import TempoTimesheetApprovalStatus
+
+    status = TempoTimesheetApprovalStatus(
+        key="APPROVED",
+        actor={"self": "https://api.tempo.io/users/1", "accountId": "557058:abc"},
+        comment="Reviewed",
+        updatedAt=datetime(2026, 9, 1, 10, 0),
+    )
+    assert status.key == "APPROVED"
+    assert status.actor is not None
+    assert status.actor["accountId"] == "557058:abc"
+    assert status.comment == "Reviewed"
+
+
+def test_tempo_timesheet_approval_status_minimal():
+    """Test TempoTimesheetApprovalStatus with only the required key."""
+    from budjira.tempo.models import TempoTimesheetApprovalStatus
+
+    status = TempoTimesheetApprovalStatus(key="OPEN")
+    assert status.actor is None
+    assert status.comment is None
+    assert status.updatedAt is None
+
+
+def test_tempo_timesheet_approval_status_missing_key():
+    """Test TempoTimesheetApprovalStatus requires the key."""
+    from budjira.tempo.models import TempoTimesheetApprovalStatus
+
+    with pytest.raises(ValidationError):
+        TempoTimesheetApprovalStatus()  # type: ignore[call-arg]
+
+
+def test_tempo_timesheet_approval_valid_measured_payload():
+    """Test TempoTimesheetApproval parses the measured Tempo Cloud v4 response (#137)."""
+    from budjira.tempo.models import TempoTimesheetApproval
+
+    data = {
+        "period": {"from": "2026-08-01", "to": "2026-08-31"},
+        "status": {"key": "OPEN"},
+        "requiredSeconds": 147200,
+        "timeSpentSeconds": 80000,
+        "actions": {
+            "submit": "https://api.tempo.io/4/timesheet-approvals/user/557058:abc/submit?from=2026-08-01&to=2026-08-31"
+        },
+    }
+    approval = TempoTimesheetApproval(**data)  # type: ignore[arg-type]
+    assert approval.status.key == "OPEN"
+    assert approval.period is not None
+    assert approval.period.from_ == date(2026, 8, 1)
+    assert approval.requiredSeconds == 147200
+    assert approval.timeSpentSeconds == 80000
+    assert approval.allows("submit")
+    assert not approval.allows("approve")
+    assert approval.allowed_actions == ["submit"]
+
+
+def test_tempo_timesheet_approval_defaults():
+    """Test TempoTimesheetApproval defaults for optional fields."""
+    from budjira.tempo.models import TempoTimesheetApproval
+
+    approval = TempoTimesheetApproval(status=TempoTimesheetApprovalStatus(key="IN_REVIEW"))
+    assert approval.period is None
+    assert approval.requiredSeconds == 0
+    assert approval.timeSpentSeconds == 0
+    assert approval.actions == {}
+    assert approval.allowed_actions == []
+    assert not approval.allows("submit")
+
+
+def test_tempo_timesheet_approval_multiple_actions_sorted():
+    """Test allowed_actions returns the sorted action names."""
+    from budjira.tempo.models import TempoTimesheetApproval
+
+    approval = TempoTimesheetApproval(
+        status=TempoTimesheetApprovalStatus(key="IN_REVIEW"),
+        actions={"reopen": "https://example.com/reopen", "approve": "https://example.com/approve"},
+    )
+    assert approval.allowed_actions == ["approve", "reopen"]
+
+
+def test_tempo_timesheet_approval_missing_status():
+    """Test TempoTimesheetApproval requires a status."""
+    from budjira.tempo.models import TempoTimesheetApproval
+
+    with pytest.raises(ValidationError):
+        TempoTimesheetApproval(requiredSeconds=100)  # type: ignore[call-arg]
+
+
+def test_tempo_timesheet_approval_model_dump():
+    """Test TempoTimesheetApproval serializes for JSON output."""
+    from budjira.tempo.models import TempoTimesheetApproval
+
+    approval = TempoTimesheetApproval(
+        status=TempoTimesheetApprovalStatus(key="APPROVED"),
+        requiredSeconds=3600,
+        timeSpentSeconds=3600,
+        actions={},
+    )
+    dumped = approval.model_dump(mode="json")
+    assert dumped["status"]["key"] == "APPROVED"
+    assert dumped["requiredSeconds"] == 3600

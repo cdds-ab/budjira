@@ -88,3 +88,48 @@ class TempoAccountList(BaseModel):
 
     results: list[TempoAccount]
     metadata: dict[str, Any]
+
+
+class TempoTimesheetPeriod(BaseModel):
+    """Period covered by a Tempo timesheet approval."""
+
+    from_: date = Field(alias="from")
+    to: date
+
+
+class TempoTimesheetApprovalStatus(BaseModel):
+    """Workflow status of a Tempo timesheet approval.
+
+    The key is one of OPEN / IN_REVIEW / APPROVED / REJECTED. An APPROVED
+    timesheet is locked against further bookings in that period.
+    """
+
+    key: str
+    actor: dict[str, Any] | None = None
+    comment: str | None = None
+    updatedAt: datetime | None = None
+
+
+class TempoTimesheetApproval(BaseModel):
+    """Tempo timesheet approval for a user and period.
+
+    Response of ``GET /4/timesheet-approvals/user/{accountId}`` and of the
+    approval action endpoints (submit/approve/reject/reopen). The ``actions``
+    map holds the actions the caller is currently allowed to perform, mapped
+    to their API links (e.g. ``submit``).
+    """
+
+    status: TempoTimesheetApprovalStatus
+    period: TempoTimesheetPeriod | None = None
+    requiredSeconds: int = 0
+    timeSpentSeconds: int = 0
+    actions: dict[str, str] = Field(default_factory=dict)
+
+    @property
+    def allowed_actions(self) -> list[str]:
+        """Action names the caller may currently perform, sorted (e.g. ``['submit']``)."""
+        return sorted(self.actions)
+
+    def allows(self, action: str) -> bool:
+        """Check whether the caller may currently perform the given action."""
+        return action in self.actions

@@ -11,10 +11,10 @@
 ## Aktueller Stand
 
 ### Version & Release Status
-- **Current Version**: v1.30.0
-- **Branch**: master
+- **Current Version**: v1.33.0
+- **Branch**: feat/tempo-timesheet (#137: `tempo timesheet status/submit/approve/reopen` — period locking via Tempo timesheet approvals; implemented + tested, not yet released)
 - **Status**: Local-first release workflow live (cz bump owns versioning)
-- **Last Update**: 2026-08-29
+- **Last Update**: 2026-09-22
 
 ### Recent Releases (seit v1.8.1)
 
@@ -298,10 +298,10 @@ budjira/services/
 
 | Metrik | Wert |
 |--------|------|
-| **Total Tests** | 1168 |
+| **Total Tests** | 1366 |
 | **Skipped Tests** | 3 |
-| **Coverage** | 88.4% |
-| **Test Duration** | ~20s |
+| **Coverage** | 89.0% |
+| **Test Duration** | ~28s |
 
 ### Coverage by Module (Top)
 ```
@@ -336,6 +336,7 @@ budjira/tempo/client.py        90%
 - **#73** - Auto-discover Jira project metadata → Released v1.19.0
 
 ### In Progress / Open
+- **#137** - `tempo timesheet status/submit/approve/reopen` (period locking via timesheet-approval workflow) → implementiert auf feat/tempo-timesheet, Release ausstehend
 - **#89** - `issue delete` crash beim Pre-Delete-Fetch (`PropertyHolder has no attribute`) → fix: `_parse_basic_fields` null-safe für partielle Fetches (`fields=["summary"]`), Release 1.21.2 ausstehend
 - **#87** - Sprint support for team-managed projects (board type `simple`) + `--sprint-id` skips board detection → released v1.21.1
 - **#85** - Sub-task creation via `--parent` → released v1.21.0 (blockierte Epic>Story>Sub-task-Buchung)

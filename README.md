@@ -721,7 +721,21 @@ budjira tempo delete-worklog 12345 --force        # Skip confirmation
 
 # List Tempo accounts (for billing)
 budjira tempo accounts
+
+# Timesheet approval (lock a period against further bookings)
+budjira tempo timesheet status  --period 2026-08               # State, hours, allowed actions
+budjira tempo timesheet submit  --period 2026-08 --comment "All bookings complete"
+budjira tempo timesheet approve --period 2026-08               # Approver role (team lead)
+budjira tempo timesheet reopen  --period 2026-08               # Remove the lock again
+budjira tempo timesheet status --from 2026-08-01 --to 2026-08-31  # Explicit range
 ```
+
+The `timesheet` commands use Tempo's timesheet-approval workflow: an APPROVED
+timesheet is locked against further bookings and edits in that period. Write
+commands fetch the status first and refuse with a clear message when the
+action is not currently allowed (e.g. `approve` without the approver role),
+and print the resulting state so the lock is visible. They require a
+Tempo-enabled connection.
 
 **Features:**
 - ✅ Full Tempo Cloud API support
@@ -730,6 +744,7 @@ budjira tempo accounts
 - ✅ Worklog updates (time, date, comment) with automatic issue ID resolution
 - ✅ Worklog deletion
 - ✅ Tempo Accounts listing for billing
+- ✅ Timesheet approval workflow (status, submit, approve, reopen) for period locking
 - ✅ Automatic connection detection
 - ✅ Secure token storage
 - ✅ Cross-instance workflow support (planning + booking Jira with Tempo)

@@ -1,11 +1,19 @@
 """Tests for Tempo CLI commands."""
 
+import json
 from datetime import date, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 from budjira.cli.main import app
-from budjira.tempo.models import TempoAccount, TempoAuthor, TempoIssue, TempoWorklog
+from budjira.tempo.models import (
+    TempoAccount,
+    TempoAuthor,
+    TempoIssue,
+    TempoTimesheetApproval,
+    TempoTimesheetApprovalStatus,
+    TempoWorklog,
+)
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -1665,3 +1673,334 @@ class TestCollectiveBookingPolicy:
         )
         assert result.exit_code == 0, result.stdout
         mock_tempo_client.create_worklog.assert_called_once()
+
+
+# --- Timesheet approval workflow (period locking, #137) ---
+
+
+def _make_approval(status_key: str, actions: dict[str, str], required: int = 147200, spent: int = 80000):
+    """Build a TempoTimesheetApproval for testing."""
+    return TempoTimesheetApproval(
+        status=TempoTimesheetApprovalStatus(key=status_key),
+        requiredSeconds=required,
+        timeSpentSeconds=spent,
+        actions=actions,
+    )
+
+
+def test_timesheet_status_table(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test timesheet status shows period, state, hours and allowed actions."""
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval("OPEN", {"submit": "https://x/submit"})
+
+    result = runner.invoke(app, ["tempo", "timesheet", "status", "--period", "2026-08"])
+
+    assert result.exit_code == 0
+    assert "2026-08-01" in result.stdout
+    assert "2026-08-31" in result.stdout
+    assert "OPEN" in result.stdout
+    assert "40.89h" in result.stdout  # 147200s required
+    assert "22.22h" in result.stdout  # 80000s spent
+    assert "submit" in result.stdout
+
+    # Verify the accountId comes from the Jira myself() call and the month resolves fully
+    mock_tempo_client.get_timesheet_approval.assert_called_once_with(
+        "557058:abc123", date(2026, 8, 1), date(2026, 8, 31)
+    )
+
+
+def test_timesheet_status_leap_year_february(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test --period resolves February in a leap year to the 29th."""
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval("OPEN", {})
+
+    result = runner.invoke(app, ["tempo", "timesheet", "status", "--period", "2024-02"])
+
+    assert result.exit_code == 0
+    mock_tempo_client.get_timesheet_approval.assert_called_once_with(
+        "557058:abc123", date(2024, 2, 1), date(2024, 2, 29)
+    )
+
+
+def test_timesheet_status_from_to_range(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test timesheet status with an explicit --from/--to range."""
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval("IN_REVIEW", {})
+
+    result = runner.invoke(app, ["tempo", "timesheet", "status", "--from", "2026-08-10", "--to", "2026-08-20"])
+
+    assert result.exit_code == 0
+    assert "IN_REVIEW" in result.stdout
+    mock_tempo_client.get_timesheet_approval.assert_called_once_with(
+        "557058:abc123", date(2026, 8, 10), date(2026, 8, 20)
+    )
+
+
+def test_timesheet_status_approved_shows_lock(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test an APPROVED timesheet visibly shows the period is locked."""
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval("APPROVED", {"reopen": "https://x/reopen"})
+
+    result = runner.invoke(app, ["tempo", "timesheet", "status", "--period", "2026-08"])
+
+    assert result.exit_code == 0
+    assert "APPROVED" in result.stdout
+    assert "locked" in result.stdout
+
+
+def test_timesheet_status_no_allowed_actions(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test status output when the caller has no allowed actions."""
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval("IN_REVIEW", {})
+
+    result = runner.invoke(app, ["tempo", "timesheet", "status", "--period", "2026-08"])
+
+    assert result.exit_code == 0
+    assert "(none)" in result.stdout
+
+
+def test_timesheet_status_json(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test timesheet status with global --format json."""
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval("OPEN", {"submit": "https://x/submit"})
+
+    result = runner.invoke(app, ["--format", "json", "tempo", "timesheet", "status", "--period", "2026-08"])
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout)
+    assert output["period"] == {"from": "2026-08-01", "to": "2026-08-31"}
+    assert output["status"] == "OPEN"
+    assert output["required_seconds"] == 147200
+    assert output["required_hours"] == 40.89
+    assert output["time_spent_seconds"] == 80000
+    assert output["time_spent_hours"] == 22.22
+    assert output["allowed_actions"] == ["submit"]
+
+
+def test_timesheet_period_invalid_format(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test --period with a malformed value is rejected."""
+    result = runner.invoke(app, ["tempo", "timesheet", "status", "--period", "2026-8"])
+
+    assert result.exit_code == 1
+    assert "YYYY-MM" in result.stdout
+    mock_tempo_client.get_timesheet_approval.assert_not_called()
+
+
+def test_timesheet_period_invalid_month(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test --period with month 13 is rejected."""
+    result = runner.invoke(app, ["tempo", "timesheet", "status", "--period", "2026-13"])
+
+    assert result.exit_code == 1
+    assert "month" in result.stdout
+    mock_tempo_client.get_timesheet_approval.assert_not_called()
+
+
+def test_timesheet_period_combined_with_from(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test --period cannot be combined with --from/--to."""
+    result = runner.invoke(
+        app,
+        ["tempo", "timesheet", "status", "--period", "2026-08", "--from", "2026-08-01", "--to", "2026-08-31"],
+    )
+
+    assert result.exit_code == 1
+    assert "cannot be combined" in result.stdout
+    mock_tempo_client.get_timesheet_approval.assert_not_called()
+
+
+def test_timesheet_missing_period(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test that a period argument is required."""
+    result = runner.invoke(app, ["tempo", "timesheet", "status"])
+
+    assert result.exit_code == 1
+    assert "Specify a period" in result.stdout
+    mock_tempo_client.get_timesheet_approval.assert_not_called()
+
+
+def test_timesheet_from_without_to(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test that --from without --to is rejected."""
+    result = runner.invoke(app, ["tempo", "timesheet", "status", "--from", "2026-08-01"])
+
+    assert result.exit_code == 1
+    assert "Specify a period" in result.stdout
+
+
+def test_timesheet_from_after_to(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test that --from after --to is rejected."""
+    result = runner.invoke(app, ["tempo", "timesheet", "status", "--from", "2026-08-31", "--to", "2026-08-01"])
+
+    assert result.exit_code == 1
+    assert "must not be after" in result.stdout
+
+
+def test_timesheet_invalid_date(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test that a malformed --from date is rejected."""
+    result = runner.invoke(app, ["tempo", "timesheet", "status", "--from", "2026-08-32", "--to", "2026-09-01"])
+
+    assert result.exit_code == 1
+    assert "Invalid date" in result.stdout
+
+
+def test_timesheet_tempo_disabled(mock_connection, mock_jira_client):
+    """Test timesheet commands error out on a planning-only connection (Tempo disabled)."""
+    mock_connection.tempo_enabled = False
+
+    with patch("budjira.cli.tempo.get_active_connection", return_value=mock_connection):
+        result = runner.invoke(app, ["tempo", "timesheet", "status", "--period", "2026-08"])
+
+    assert result.exit_code == 1
+    assert "Tempo is not enabled" in result.stdout
+
+
+def test_timesheet_submit_success(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test submitting an OPEN timesheet prints the resulting state."""
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval("OPEN", {"submit": "https://x/submit"})
+    mock_tempo_client.submit_timesheet.return_value = _make_approval("IN_REVIEW", {})
+
+    result = runner.invoke(
+        app, ["tempo", "timesheet", "submit", "--period", "2026-08", "--comment", "All bookings complete"]
+    )
+
+    assert result.exit_code == 0
+    assert "Timesheet submitted" in result.stdout
+    assert "IN_REVIEW" in result.stdout
+    mock_tempo_client.submit_timesheet.assert_called_once_with(
+        "557058:abc123", date(2026, 8, 1), date(2026, 8, 31), comment="All bookings complete"
+    )
+
+
+def test_timesheet_submit_refused_when_action_missing(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test submit refuses with an actionable message when not in the actions map."""
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval("APPROVED", {"reopen": "https://x/reopen"})
+
+    result = runner.invoke(app, ["tempo", "timesheet", "submit", "--period", "2026-08"])
+
+    assert result.exit_code == 1
+    assert "Cannot submit" in result.stdout
+    assert "APPROVED" in result.stdout
+    assert "reopen" in result.stdout
+    mock_tempo_client.submit_timesheet.assert_not_called()
+
+
+def test_timesheet_approve_success_locks_period(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test approving a submitted timesheet shows the resulting lock."""
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval(
+        "IN_REVIEW", {"approve": "https://x/approve"}
+    )
+    mock_tempo_client.approve_timesheet.return_value = _make_approval("APPROVED", {"reopen": "https://x/reopen"})
+
+    result = runner.invoke(app, ["tempo", "timesheet", "approve", "--period", "2026-08", "--comment", "Reviewed"])
+
+    assert result.exit_code == 0
+    assert "Timesheet approved" in result.stdout
+    assert "APPROVED" in result.stdout
+    assert "locked" in result.stdout
+    mock_tempo_client.approve_timesheet.assert_called_once_with(
+        "557058:abc123", date(2026, 8, 1), date(2026, 8, 31), comment="Reviewed"
+    )
+
+
+def test_timesheet_approve_refused_without_approver_role(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test approve refuses with the approver-role hint when the action is missing."""
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval("OPEN", {"submit": "https://x/submit"})
+
+    result = runner.invoke(app, ["tempo", "timesheet", "approve", "--period", "2026-08"])
+
+    assert result.exit_code == 1
+    assert "Cannot approve" in result.stdout
+    assert "approver role" in result.stdout
+    mock_tempo_client.approve_timesheet.assert_not_called()
+
+
+def test_timesheet_approve_json(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test approve with --format json outputs the resulting state."""
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval(
+        "IN_REVIEW", {"approve": "https://x/approve"}
+    )
+    mock_tempo_client.approve_timesheet.return_value = _make_approval("APPROVED", {})
+
+    result = runner.invoke(app, ["--format", "json", "tempo", "timesheet", "approve", "--period", "2026-08"])
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout)
+    assert output["action"] == "approve"
+    assert output["status"] == "APPROVED"
+    assert output["allowed_actions"] == []
+
+
+def test_timesheet_reopen_success(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test reopening an APPROVED timesheet removes the lock."""
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval("APPROVED", {"reopen": "https://x/reopen"})
+    mock_tempo_client.reopen_timesheet.return_value = _make_approval("OPEN", {"submit": "https://x/submit"})
+
+    result = runner.invoke(app, ["tempo", "timesheet", "reopen", "--period", "2026-08"])
+
+    assert result.exit_code == 0
+    assert "Timesheet reopened" in result.stdout
+    assert "OPEN" in result.stdout
+    mock_tempo_client.reopen_timesheet.assert_called_once_with(
+        "557058:abc123", date(2026, 8, 1), date(2026, 8, 31), comment=None
+    )
+
+
+def test_timesheet_reopen_refused_when_open(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test reopen refuses on an OPEN timesheet (nothing to reopen)."""
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval("OPEN", {"submit": "https://x/submit"})
+
+    result = runner.invoke(app, ["tempo", "timesheet", "reopen", "--period", "2026-08"])
+
+    assert result.exit_code == 1
+    assert "Cannot reopen" in result.stdout
+    mock_tempo_client.reopen_timesheet.assert_not_called()
+
+
+def test_timesheet_no_token(mock_connection):
+    """Test timesheet commands error out when the Tempo token is missing."""
+    mock_connection.tempo_enabled = True
+
+    with patch("budjira.cli.tempo.get_active_connection", return_value=mock_connection):
+        with patch("budjira.cli.tempo.resolve_tempo_token", return_value=None):
+            result = runner.invoke(app, ["tempo", "timesheet", "status", "--period", "2026-08"])
+
+    assert result.exit_code == 1
+    assert "Tempo token not found" in result.stdout
+
+
+def test_timesheet_status_api_error(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test a Tempo API error surfaces as an actionable error message."""
+    from budjira.utils.errors import JiraAPIError
+
+    mock_tempo_client.get_timesheet_approval.side_effect = JiraAPIError("Tempo API error: User not found")
+
+    result = runner.invoke(app, ["tempo", "timesheet", "status", "--period", "2026-08"])
+
+    assert result.exit_code == 1
+    assert "Tempo API error: User not found" in result.stdout
+
+
+def test_timesheet_status_unexpected_error(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test an unexpected error points at --debug instead of a traceback."""
+    mock_tempo_client.get_timesheet_approval.side_effect = RuntimeError("boom")
+
+    result = runner.invoke(app, ["tempo", "timesheet", "status", "--period", "2026-08"])
+
+    assert result.exit_code == 1
+    assert "Unexpected error" in result.stdout
+    assert "--debug" in result.stdout
+
+
+def test_timesheet_submit_api_error_on_write(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test an API error during the submit write surfaces cleanly."""
+    from budjira.utils.errors import JiraAPIError
+
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval("OPEN", {"submit": "https://x/submit"})
+    mock_tempo_client.submit_timesheet.side_effect = JiraAPIError("Tempo API error: period closed")
+
+    result = runner.invoke(app, ["tempo", "timesheet", "submit", "--period", "2026-08"])
+
+    assert result.exit_code == 1
+    assert "Tempo API error: period closed" in result.stdout
+
+
+def test_timesheet_reopen_unexpected_error(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Test an unexpected error on reopen exits with the generic message."""
+    mock_tempo_client.get_timesheet_approval.return_value = _make_approval("APPROVED", {"reopen": "https://x/reopen"})
+    mock_tempo_client.reopen_timesheet.side_effect = RuntimeError("boom")
+
+    result = runner.invoke(app, ["tempo", "timesheet", "reopen", "--period", "2026-08"])
+
+    assert result.exit_code == 1
+    assert "Unexpected error" in result.stdout

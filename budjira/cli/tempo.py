@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from calendar import monthrange
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -32,10 +33,177 @@ from budjira.utils.time_parser import parse_time_string
 logger = logging.getLogger(__name__)
 console = Console()
 app = typer.Typer(help="Tempo Timesheets integration commands")
+timesheet_app = typer.Typer(help="Timesheet approval workflow (submit, approve, lock a period)")
+app.add_typer(timesheet_app, name="timesheet")
 
 
 # "PLAN-123: ..." at the start of a worklog comment names a planning issue
 _PLANNING_KEY_PREFIX_RE = re.compile(r"^\s*([A-Z][A-Z0-9_]*-\d+)\s*:")
+
+# A timesheet period is given as YYYY-MM
+_PERIOD_RE = re.compile(r"^(\d{4})-(\d{2})$")
+
+# Why a timesheet action may be missing from the approval's actions map
+_TIMESHEET_ACTION_HINTS = {
+    "submit": "Submitting is possible while your timesheet is OPEN.",
+    "approve": "Approving requires the approver role (e.g. team lead) for this user's Tempo team.",
+    "reopen": "Reopening is possible for a submitted or approved timesheet you may manage.",
+}
+
+_TIMESHEET_ACTION_DONE = {
+    "submit": "submitted",
+    "approve": "approved",
+    "reopen": "reopened",
+}
+
+
+def _resolve_period(period: str | None, from_date: str | None, to_date: str | None) -> tuple[date, date]:
+    """Resolve --period YYYY-MM or an explicit --from/--to range into start/end dates.
+
+    Args:
+        period: Period as YYYY-MM (whole month)
+        from_date: Explicit period start (YYYY-MM-DD)
+        to_date: Explicit period end (YYYY-MM-DD)
+
+    Returns:
+        Tuple of (start, end) dates, both inclusive
+
+    Raises:
+        ValidationError: If the arguments are missing, conflicting or malformed
+    """
+    if period and (from_date or to_date):
+        raise ValidationError(
+            "--period cannot be combined with --from/--to. "
+            "Use either --period YYYY-MM (whole month) or an explicit --from/--to range."
+        )
+    if period:
+        match = _PERIOD_RE.match(period)
+        if not match:
+            raise ValidationError(f"Invalid period '{period}'. Use YYYY-MM format (e.g., 2026-08).")
+        year, month = int(match.group(1)), int(match.group(2))
+        if not 1 <= month <= 12:
+            raise ValidationError(f"Invalid period '{period}': month must be between 01 and 12.")
+        return date(year, month, 1), date(year, month, monthrange(year, month)[1])
+    if from_date and to_date:
+        try:
+            start = date.fromisoformat(from_date)
+            end = date.fromisoformat(to_date)
+        except ValueError as e:
+            raise ValidationError(f"Invalid date: {e}. Use YYYY-MM-DD format (e.g., 2026-08-01).") from e
+        if start > end:
+            raise ValidationError(f"--from ({start.isoformat()}) must not be after --to ({end.isoformat()}).")
+        return start, end
+    raise ValidationError(
+        "Specify a period: either --period YYYY-MM (whole month) or both --from and --to (YYYY-MM-DD)."
+    )
+
+
+def _get_timesheet_approval(
+    period: str | None,
+    from_date: str | None,
+    to_date: str | None,
+    connection_name: str | None,
+) -> tuple[date, date, TempoClient, str, TempoTimesheetApproval]:
+    """Resolve the period and fetch the caller's timesheet approval.
+
+    Args:
+        period: Period as YYYY-MM (whole month)
+        from_date: Explicit period start (YYYY-MM-DD)
+        to_date: Explicit period end (YYYY-MM-DD)
+        connection_name: Optional connection name override
+
+    Returns:
+        Tuple of (start, end, tempo client, caller's Jira account ID, approval)
+
+    Raises:
+        ValidationError: If the period arguments are invalid
+        ConnectionError: If Tempo is not enabled for the connection
+        AuthenticationError: If the Tempo token is not configured
+    """
+    start, end = _resolve_period(period, from_date, to_date)
+    connection = get_active_connection(connection_name)
+    # Raises ConnectionError on connections without Tempo (planning-only)
+    tempo_client = get_tempo_client(connection_name)
+    jira_client = JiraClient.from_connection(connection)
+    account_id = jira_client.client.myself()["accountId"]
+    approval = tempo_client.get_timesheet_approval(account_id, start, end)
+    return start, end, tempo_client, account_id, approval
+
+
+def _timesheet_status_dict(approval: TempoTimesheetApproval, start: date, end: date) -> dict[str, Any]:
+    """Build the JSON representation of a timesheet approval status."""
+    return {
+        "period": {"from": start.isoformat(), "to": end.isoformat()},
+        "status": approval.status.key,
+        "required_seconds": approval.requiredSeconds,
+        "required_hours": round(approval.requiredSeconds / 3600, 2),
+        "time_spent_seconds": approval.timeSpentSeconds,
+        "time_spent_hours": round(approval.timeSpentSeconds / 3600, 2),
+        "allowed_actions": approval.allowed_actions,
+    }
+
+
+def _print_timesheet_status(approval: TempoTimesheetApproval, start: date, end: date) -> None:
+    """Print a timesheet approval status as a Rich table view."""
+    status_styles = {
+        "APPROVED": "green",
+        "OPEN": "yellow",
+        "IN_REVIEW": "cyan",
+        "REJECTED": "red",
+    }
+    style = status_styles.get(approval.status.key, "white")
+    console.print(f"[bold]Timesheet approval:[/bold] {start.isoformat()} → {end.isoformat()}")
+    console.print(f"  Status: [{style}]{approval.status.key}[/{style}]")
+    console.print(f"  Required: {approval.requiredSeconds / 3600:.2f}h  Spent: {approval.timeSpentSeconds / 3600:.2f}h")
+    actions = ", ".join(approval.allowed_actions) or "(none)"
+    console.print(f"  Allowed actions: {actions}")
+    if approval.status.key == "APPROVED":
+        console.print("  [green]The period is locked — no further bookings or edits are possible.[/green]")
+
+
+def _run_timesheet_action(
+    ctx: typer.Context,
+    action: str,
+    period: str | None,
+    from_date: str | None,
+    to_date: str | None,
+    comment: str | None,
+    connection_name: str | None,
+) -> None:
+    """Run a timesheet approval action after checking it is currently allowed.
+
+    Fetches the approval status first and refuses when the action is not in
+    the actions map instead of guessing; prints the resulting state after the
+    write so the lock is visible.
+    """
+    output_format = ctx.obj.get("format", "table") if ctx.obj else "table"
+    start, end, tempo_client, account_id, current = _get_timesheet_approval(period, from_date, to_date, connection_name)
+
+    if not current.allows(action):
+        allowed = ", ".join(current.allowed_actions) or "none"
+        raise PermissionError(
+            f"Cannot {action} the timesheet for {start.isoformat()} → {end.isoformat()}: "
+            f"the action is not available (status: {current.status.key}, allowed actions: {allowed}). "
+            f"{_TIMESHEET_ACTION_HINTS[action]}"
+        )
+
+    action_methods = {
+        "submit": tempo_client.submit_timesheet,
+        "approve": tempo_client.approve_timesheet,
+        "reopen": tempo_client.reopen_timesheet,
+    }
+    result = action_methods[action](account_id, start, end, comment=comment)
+    logger.info(f"Timesheet {action} succeeded: {start} → {end}, status {result.status.key}")
+
+    if OutputFormatter.is_json_format(output_format):
+        output = _timesheet_status_dict(result, start, end)
+        output["action"] = action
+        OutputFormatter.output_json(output)
+    else:
+        console.print(
+            f"✅ [green]Timesheet {_TIMESHEET_ACTION_DONE[action]} for {start.isoformat()} → {end.isoformat()}[/green]"
+        )
+        _print_timesheet_status(result, start, end)
 
 
 def _check_workflow_policy(
@@ -878,10 +1046,241 @@ def tempo_list_accounts(
         raise typer.Exit(1)  # noqa: B904
 
 
+# --- Timesheet approval workflow (period locking) ---
+
+
+@timesheet_app.command(name="status")
+def timesheet_status(
+    ctx: typer.Context,
+    period: Annotated[
+        str | None,
+        typer.Option("--period", "-p", help="Period as YYYY-MM (whole month)"),
+    ] = None,
+    from_date: Annotated[
+        str | None,
+        typer.Option("--from", help="Period start (YYYY-MM-DD, requires --to)"),
+    ] = None,
+    to_date: Annotated[
+        str | None,
+        typer.Option("--to", help="Period end (YYYY-MM-DD, requires --from)"),
+    ] = None,
+    connection_name: Annotated[
+        str | None,
+        typer.Option(
+            "--connection",
+            help="Connection to use (overrides default)",
+            envvar="BUDJIRA_CONNECTION",
+        ),
+    ] = None,
+) -> None:
+    """Show the timesheet approval status for a period.
+
+    Displays the approval state (OPEN / IN_REVIEW / APPROVED / REJECTED), the
+    required vs. booked hours and the actions the caller may currently
+    perform. An APPROVED timesheet is locked against further bookings.
+
+    Examples:
+
+        # Status of a whole month
+        budjira tempo timesheet status --period 2026-08
+
+        # Status of an explicit range
+        budjira tempo timesheet status --from 2026-08-01 --to 2026-08-31
+
+        # JSON output for automation
+        budjira --format json tempo timesheet status --period 2026-08
+    """
+    try:
+        output_format = ctx.obj.get("format", "table") if ctx.obj else "table"
+        start, end, _tempo_client, _account_id, approval = _get_timesheet_approval(
+            period, from_date, to_date, connection_name
+        )
+        if OutputFormatter.is_json_format(output_format):
+            OutputFormatter.output_json(_timesheet_status_dict(approval, start, end))
+        else:
+            _print_timesheet_status(approval, start, end)
+
+    except (ConnectionError, AuthenticationError, PermissionError, ValidationError) as e:
+        console.print(f"❌ [red]Error:[/red] {e}")
+        raise typer.Exit(1)  # noqa: B904
+    except BudjiraError as e:
+        console.print(f"❌ [red]Error:[/red] {e}")
+        raise typer.Exit(1)  # noqa: B904
+    except Exception as e:
+        console.print(f"❌ [red]Unexpected error:[/red] {e}")
+        console.print("[yellow]Run with --debug for more details[/yellow]")
+        raise typer.Exit(1)  # noqa: B904
+
+
+@timesheet_app.command(name="submit")
+def timesheet_submit(
+    ctx: typer.Context,
+    period: Annotated[
+        str | None,
+        typer.Option("--period", "-p", help="Period as YYYY-MM (whole month)"),
+    ] = None,
+    from_date: Annotated[
+        str | None,
+        typer.Option("--from", help="Period start (YYYY-MM-DD, requires --to)"),
+    ] = None,
+    to_date: Annotated[
+        str | None,
+        typer.Option("--to", help="Period end (YYYY-MM-DD, requires --from)"),
+    ] = None,
+    comment: Annotated[
+        str | None,
+        typer.Option("--comment", "-c", help="Comment attached to the submission"),
+    ] = None,
+    connection_name: Annotated[
+        str | None,
+        typer.Option(
+            "--connection",
+            help="Connection to use (overrides default)",
+            envvar="BUDJIRA_CONNECTION",
+        ),
+    ] = None,
+) -> None:
+    """Submit your timesheet for a period for review.
+
+    Refuses with a clear message when the period cannot be submitted (the
+    action is not in the approval's actions map) and prints the resulting
+    state after a successful submission.
+
+    Examples:
+
+        # Submit a whole month
+        budjira tempo timesheet submit --period 2026-08
+
+        # Submit with a comment
+        budjira tempo timesheet submit --period 2026-08 --comment "All bookings complete"
+    """
+    try:
+        _run_timesheet_action(ctx, "submit", period, from_date, to_date, comment, connection_name)
+
+    except (ConnectionError, AuthenticationError, PermissionError, ValidationError) as e:
+        console.print(f"❌ [red]Error:[/red] {e}")
+        raise typer.Exit(1)  # noqa: B904
+    except BudjiraError as e:
+        console.print(f"❌ [red]Error:[/red] {e}")
+        raise typer.Exit(1)  # noqa: B904
+    except Exception as e:
+        console.print(f"❌ [red]Unexpected error:[/red] {e}")
+        console.print("[yellow]Run with --debug for more details[/yellow]")
+        raise typer.Exit(1)  # noqa: B904
+
+
+@timesheet_app.command(name="approve")
+def timesheet_approve(
+    ctx: typer.Context,
+    period: Annotated[
+        str | None,
+        typer.Option("--period", "-p", help="Period as YYYY-MM (whole month)"),
+    ] = None,
+    from_date: Annotated[
+        str | None,
+        typer.Option("--from", help="Period start (YYYY-MM-DD, requires --to)"),
+    ] = None,
+    to_date: Annotated[
+        str | None,
+        typer.Option("--to", help="Period end (YYYY-MM-DD, requires --from)"),
+    ] = None,
+    comment: Annotated[
+        str | None,
+        typer.Option("--comment", "-c", help="Comment attached to the approval"),
+    ] = None,
+    connection_name: Annotated[
+        str | None,
+        typer.Option(
+            "--connection",
+            help="Connection to use (overrides default)",
+            envvar="BUDJIRA_CONNECTION",
+        ),
+    ] = None,
+) -> None:
+    """Approve a submitted timesheet period (approver action).
+
+    An approved timesheet is locked against further bookings and edits in
+    that period. Requires the approver role (e.g. team lead) for the user's
+    Tempo team; refuses with a clear message when the token lacks it.
+
+    Examples:
+
+        # Approve a whole month
+        budjira tempo timesheet approve --period 2026-08
+
+        # Approve with a comment
+        budjira tempo timesheet approve --period 2026-08 --comment "Reviewed, all good"
+    """
+    try:
+        _run_timesheet_action(ctx, "approve", period, from_date, to_date, comment, connection_name)
+
+    except (ConnectionError, AuthenticationError, PermissionError, ValidationError) as e:
+        console.print(f"❌ [red]Error:[/red] {e}")
+        raise typer.Exit(1)  # noqa: B904
+    except BudjiraError as e:
+        console.print(f"❌ [red]Error:[/red] {e}")
+        raise typer.Exit(1)  # noqa: B904
+    except Exception as e:
+        console.print(f"❌ [red]Unexpected error:[/red] {e}")
+        console.print("[yellow]Run with --debug for more details[/yellow]")
+        raise typer.Exit(1)  # noqa: B904
+
+
+@timesheet_app.command(name="reopen")
+def timesheet_reopen(
+    ctx: typer.Context,
+    period: Annotated[
+        str | None,
+        typer.Option("--period", "-p", help="Period as YYYY-MM (whole month)"),
+    ] = None,
+    from_date: Annotated[
+        str | None,
+        typer.Option("--from", help="Period start (YYYY-MM-DD, requires --to)"),
+    ] = None,
+    to_date: Annotated[
+        str | None,
+        typer.Option("--to", help="Period end (YYYY-MM-DD, requires --from)"),
+    ] = None,
+    connection_name: Annotated[
+        str | None,
+        typer.Option(
+            "--connection",
+            help="Connection to use (overrides default)",
+            envvar="BUDJIRA_CONNECTION",
+        ),
+    ] = None,
+) -> None:
+    """Reopen a submitted or approved timesheet period.
+
+    Removes the lock so bookings in the period can be edited again. Refuses
+    with a clear message when reopening is not currently allowed and prints
+    the resulting state after a successful reopen.
+
+    Examples:
+
+        # Reopen a whole month
+        budjira tempo timesheet reopen --period 2026-08
+    """
+    try:
+        _run_timesheet_action(ctx, "reopen", period, from_date, to_date, None, connection_name)
+
+    except (ConnectionError, AuthenticationError, PermissionError, ValidationError) as e:
+        console.print(f"❌ [red]Error:[/red] {e}")
+        raise typer.Exit(1)  # noqa: B904
+    except BudjiraError as e:
+        console.print(f"❌ [red]Error:[/red] {e}")
+        raise typer.Exit(1)  # noqa: B904
+    except Exception as e:
+        console.print(f"❌ [red]Unexpected error:[/red] {e}")
+        console.print("[yellow]Run with --debug for more details[/yellow]")
+        raise typer.Exit(1)  # noqa: B904
+
+
 # --- Native Jira worklog fallbacks (connections without Tempo) ---
 
 if TYPE_CHECKING:
     from budjira.models.connection import Connection
+    from budjira.tempo.models import TempoTimesheetApproval
 
 
 def _log_worklog_native(

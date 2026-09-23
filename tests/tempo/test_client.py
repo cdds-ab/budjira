@@ -399,3 +399,198 @@ def test_update_worklog_not_found(mock_request, tempo_client):
 
     with pytest.raises(JiraAPIError, match="Worklog 99999 not found"):
         tempo_client.update_worklog(worklog_id=99999, time_spent_seconds=3600)
+
+
+@pytest.fixture
+def mock_timesheet_approval_response():
+    """Sample Tempo timesheet-approval API response (measured shape, #137)."""
+    return {
+        "period": {"from": "2026-08-01", "to": "2026-08-31"},
+        "status": {"key": "OPEN"},
+        "requiredSeconds": 147200,
+        "timeSpentSeconds": 80000,
+        "actions": {
+            "submit": "https://api.tempo.io/4/timesheet-approvals/user/557058:abc/submit?from=2026-08-01&to=2026-08-31"
+        },
+    }
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_get_timesheet_approval_success(mock_request, tempo_client, mock_timesheet_approval_response):
+    """Test fetching the timesheet approval status builds the right request."""
+    from budjira.tempo.models import TempoTimesheetApproval
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = mock_timesheet_approval_response
+    mock_response.raise_for_status.return_value = None
+    mock_request.return_value = mock_response
+
+    approval = tempo_client.get_timesheet_approval("557058:abc", date(2026, 8, 1), date(2026, 8, 31))
+
+    assert isinstance(approval, TempoTimesheetApproval)
+    assert approval.status.key == "OPEN"
+    assert approval.requiredSeconds == 147200
+    assert approval.allows("submit")
+
+    call_kwargs = mock_request.call_args[1]
+    assert call_kwargs["method"] == "GET"
+    assert "/timesheet-approvals/user/557058:abc" in call_kwargs["url"]
+    assert call_kwargs["params"] == {"from": "2026-08-01", "to": "2026-08-31"}
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_get_timesheet_approval_authentication_error(mock_request, tempo_client):
+    """Test timesheet approval fetch with authentication error."""
+    mock_response = MagicMock()
+    mock_response.status_code = 401
+    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(response=mock_response)
+    mock_request.return_value = mock_response
+
+    with pytest.raises(AuthenticationError, match="Tempo authentication failed"):
+        tempo_client.get_timesheet_approval("557058:abc", date(2026, 8, 1), date(2026, 8, 31))
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_get_timesheet_approval_permission_error(mock_request, tempo_client):
+    """Test timesheet approval fetch with permission error."""
+    mock_response = MagicMock()
+    mock_response.status_code = 403
+    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(response=mock_response)
+    mock_request.return_value = mock_response
+
+    with pytest.raises(PermissionError, match="Access denied"):
+        tempo_client.get_timesheet_approval("557058:abc", date(2026, 8, 1), date(2026, 8, 31))
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_get_timesheet_approval_not_found(mock_request, tempo_client):
+    """Test timesheet approval fetch for an unknown user (404)."""
+    mock_response = MagicMock()
+    mock_response.status_code = 404
+    mock_response.json.return_value = {"message": "User not found"}
+    mock_response.content = b'{"message": "User not found"}'
+    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(response=mock_response)
+    mock_request.return_value = mock_response
+
+    with pytest.raises(JiraAPIError, match="User not found"):
+        tempo_client.get_timesheet_approval("557058:unknown", date(2026, 8, 1), date(2026, 8, 31))
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_submit_timesheet_success(mock_request, tempo_client, mock_timesheet_approval_response):
+    """Test submitting a timesheet sends the comment and parses the result."""
+    submitted = {**mock_timesheet_approval_response, "status": {"key": "IN_REVIEW"}, "actions": {}}
+    mock_response = MagicMock()
+    mock_response.json.return_value = submitted
+    mock_response.raise_for_status.return_value = None
+    mock_request.return_value = mock_response
+
+    approval = tempo_client.submit_timesheet(
+        "557058:abc", date(2026, 8, 1), date(2026, 8, 31), comment="All bookings complete"
+    )
+
+    assert approval.status.key == "IN_REVIEW"
+
+    call_kwargs = mock_request.call_args[1]
+    assert call_kwargs["method"] == "POST"
+    assert "/timesheet-approvals/user/557058:abc/submit" in call_kwargs["url"]
+    assert call_kwargs["params"] == {"from": "2026-08-01", "to": "2026-08-31"}
+    assert call_kwargs["json"] == {"comment": "All bookings complete"}
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_submit_timesheet_without_comment_sends_no_body(mock_request, tempo_client, mock_timesheet_approval_response):
+    """Test submitting without a comment omits the JSON body."""
+    mock_response = MagicMock()
+    mock_response.json.return_value = mock_timesheet_approval_response
+    mock_response.raise_for_status.return_value = None
+    mock_request.return_value = mock_response
+
+    tempo_client.submit_timesheet("557058:abc", date(2026, 8, 1), date(2026, 8, 31))
+
+    assert mock_request.call_args[1]["json"] is None
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_approve_timesheet_success(mock_request, tempo_client, mock_timesheet_approval_response):
+    """Test approving a timesheet (locks the period)."""
+    approved = {**mock_timesheet_approval_response, "status": {"key": "APPROVED"}, "actions": {"reopen": "https://x"}}
+    mock_response = MagicMock()
+    mock_response.json.return_value = approved
+    mock_response.raise_for_status.return_value = None
+    mock_request.return_value = mock_response
+
+    approval = tempo_client.approve_timesheet("557058:abc", date(2026, 8, 1), date(2026, 8, 31), comment="Reviewed")
+
+    assert approval.status.key == "APPROVED"
+    assert approval.allows("reopen")
+
+    call_kwargs = mock_request.call_args[1]
+    assert call_kwargs["method"] == "POST"
+    assert "/timesheet-approvals/user/557058:abc/approve" in call_kwargs["url"]
+    assert call_kwargs["json"] == {"comment": "Reviewed"}
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_approve_timesheet_permission_error(mock_request, tempo_client):
+    """Test approving without the approver role (403)."""
+    mock_response = MagicMock()
+    mock_response.status_code = 403
+    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(response=mock_response)
+    mock_request.return_value = mock_response
+
+    with pytest.raises(PermissionError, match="Access denied"):
+        tempo_client.approve_timesheet("557058:abc", date(2026, 8, 1), date(2026, 8, 31))
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_reject_timesheet_success(mock_request, tempo_client, mock_timesheet_approval_response):
+    """Test rejecting a submitted timesheet with a comment."""
+    rejected = {**mock_timesheet_approval_response, "status": {"key": "REJECTED"}}
+    mock_response = MagicMock()
+    mock_response.json.return_value = rejected
+    mock_response.raise_for_status.return_value = None
+    mock_request.return_value = mock_response
+
+    approval = tempo_client.reject_timesheet("557058:abc", date(2026, 8, 1), date(2026, 8, 31), comment="Hours missing")
+
+    assert approval.status.key == "REJECTED"
+
+    call_kwargs = mock_request.call_args[1]
+    assert call_kwargs["method"] == "POST"
+    assert "/timesheet-approvals/user/557058:abc/reject" in call_kwargs["url"]
+    assert call_kwargs["json"] == {"comment": "Hours missing"}
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_reopen_timesheet_success(mock_request, tempo_client, mock_timesheet_approval_response):
+    """Test reopening a timesheet returns to OPEN."""
+    mock_response = MagicMock()
+    mock_response.json.return_value = mock_timesheet_approval_response
+    mock_response.raise_for_status.return_value = None
+    mock_request.return_value = mock_response
+
+    approval = tempo_client.reopen_timesheet("557058:abc", date(2026, 8, 1), date(2026, 8, 31))
+
+    assert approval.status.key == "OPEN"
+    assert approval.allows("submit")
+
+    call_kwargs = mock_request.call_args[1]
+    assert call_kwargs["method"] == "POST"
+    assert "/timesheet-approvals/user/557058:abc/reopen" in call_kwargs["url"]
+    assert call_kwargs["params"] == {"from": "2026-08-01", "to": "2026-08-31"}
+    assert call_kwargs["json"] is None
+
+
+@patch("budjira.tempo.client.requests.Session.request")
+def test_reopen_timesheet_api_error(mock_request, tempo_client):
+    """Test reopening with a server error (e.g. 400 invalid transition)."""
+    mock_response = MagicMock()
+    mock_response.status_code = 400
+    mock_response.json.return_value = {"message": "Timesheet cannot be reopened"}
+    mock_response.content = b'{"message": "Timesheet cannot be reopened"}'
+    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(response=mock_response)
+    mock_request.return_value = mock_response
+
+    with pytest.raises(JiraAPIError, match="Timesheet cannot be reopened"):
+        tempo_client.reopen_timesheet("557058:abc", date(2026, 8, 1), date(2026, 8, 31))
