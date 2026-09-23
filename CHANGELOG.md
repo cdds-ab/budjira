@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.34.0 (2026-09-23)
+
+### Feat
+
+- **tempo**: add timesheet approval commands for period locking
+
 ## v1.33.0 (2026-09-16)
 
 ### Feat
