@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from budjira.models.issue import Issue
+from budjira.models.sprint import SprintState
 from budjira.services.sprints import SprintService
 from budjira.utils.errors import JiraAPIError, PermissionError
 from jira.exceptions import JIRAError
@@ -59,6 +60,19 @@ def _make_issue(key: str = "TEST-1", summary: str = "Test issue") -> Issue:
         status="To Do",
         project_key=key.split("-")[0],
     )
+
+
+def _paginated_sprints(all_sprints: list[MagicMock]) -> MagicMock:
+    """Emulate python-jira ``sprints()``: without ``maxResults=False`` only the first page (50) comes back."""
+
+    def fake_sprints(board_id: int, maxResults: int | bool = 50, state: str | None = None) -> list[MagicMock]:
+        result = [s for s in all_sprints if state is None or s.state == state]
+        if maxResults is False:
+            return result
+        assert isinstance(maxResults, int)
+        return result[:maxResults]
+
+    return MagicMock(side_effect=fake_sprints)
 
 
 class TestGetBoards:
@@ -146,14 +160,14 @@ class TestGetSprints:
 
         sprints = service.get_sprints(42)
         assert len(sprints) == 3
-        mock_jira_client.sprints.assert_called_once_with(42, state=None)
+        mock_jira_client.sprints.assert_called_once_with(42, maxResults=False, state=None)
 
     def test_filtered_by_state(self, service: SprintService, mock_jira_client: MagicMock) -> None:
         mock_jira_client.sprints.return_value = [_make_jira_sprint(2, "Sprint 2", "active")]
 
         sprints = service.get_sprints(42, state="active")
         assert len(sprints) == 1
-        mock_jira_client.sprints.assert_called_once_with(42, state="active")
+        mock_jira_client.sprints.assert_called_once_with(42, maxResults=False, state="active")
 
     def test_jira_error(self, service: SprintService, mock_jira_client: MagicMock) -> None:
         mock_jira_client.sprints.side_effect = JIRAError(status_code=404, text="Board not found")
@@ -161,6 +175,28 @@ class TestGetSprints:
 
         with pytest.raises(InvalidIssueError):
             service.get_sprints(999)
+
+    def test_fetches_all_pages(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        """All sprints beyond the first page of 50 must be returned (#140)."""
+        all_sprints = [_make_jira_sprint(i, f"Sprint {i}", "closed") for i in range(1, 148)]
+        mock_jira_client.sprints = _paginated_sprints(all_sprints)
+
+        sprints = service.get_sprints(42)
+
+        assert len(sprints) == 147
+        assert sprints[-1].name == "Sprint 147"
+        mock_jira_client.sprints.assert_called_once_with(42, maxResults=False, state=None)
+
+    def test_fetches_all_pages_with_state_filter(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        """The state filter must not reintroduce the first-page truncation (#140)."""
+        all_sprints = [_make_jira_sprint(i, f"Sprint {i}", "closed") for i in range(1, 148)]
+        all_sprints.append(_make_jira_sprint(148, "Sprint 148", "active"))
+        mock_jira_client.sprints = _paginated_sprints(all_sprints)
+
+        sprints = service.get_sprints(42, state="active")
+
+        assert [s.name for s in sprints] == ["Sprint 148"]
+        mock_jira_client.sprints.assert_called_once_with(42, maxResults=False, state="active")
 
 
 class TestGetActiveSprint:
@@ -264,6 +300,17 @@ class TestFindSprintByName:
 
         with pytest.raises(JiraAPIError, match="Multiple sprints match"):
             service.find_sprint_by_name(42, "Sprint 1")
+
+    def test_finds_sprint_beyond_first_page(self, service: SprintService, mock_jira_client: MagicMock) -> None:
+        """A sprint on page 2+ must be found — the reported #140 scenario (147 sprints, active one last)."""
+        all_sprints = [_make_jira_sprint(i, f"Sprint {i}", "closed") for i in range(1, 147)]
+        all_sprints.append(_make_jira_sprint(147, "Sprint 147", "active"))
+        mock_jira_client.sprints = _paginated_sprints(all_sprints)
+
+        sprint = service.find_sprint_by_name(42, "Sprint 147")
+
+        assert sprint.id == 147
+        assert sprint.state == SprintState.ACTIVE
 
 
 class TestGetSprint:
