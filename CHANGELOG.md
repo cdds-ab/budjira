@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.34.1 (2026-09-29)
+
+### Fix
+
+- **sprint**: fetch all sprint pages so move --to finds sprints beyond the first 50
+
 ## v1.34.0 (2026-09-23)
 
 ### Feat
