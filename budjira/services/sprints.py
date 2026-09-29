@@ -89,6 +89,10 @@ class SprintService(BaseJiraService):
     def get_sprints(self, board_id: int, state: str | None = None) -> list[Sprint]:
         """Get sprints for a board.
 
+        Fetches all pages: without ``maxResults=False`` python-jira returns
+        only the first 50 sprints, which hides active sprints on boards with
+        a long sprint history (#140).
+
         Args:
             board_id: Board ID
             state: Optional state filter (active, future, closed)
@@ -101,7 +105,7 @@ class SprintService(BaseJiraService):
         """
         try:
             self._log_operation("Get sprints", board_id=board_id, state=state)
-            jira_sprints = self._client.sprints(board_id, state=state)
+            jira_sprints = self._client.sprints(board_id, maxResults=False, state=state)
             sprints = [Sprint.from_jira_sprint(s) for s in jira_sprints]
             self._logger.info(f"Found {len(sprints)} sprints for board {board_id}")
             return sprints

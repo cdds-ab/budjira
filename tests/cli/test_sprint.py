@@ -167,6 +167,33 @@ def test_sprint_list_empty(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
 
 @patch("budjira.cli.sprint.JiraClient")
 @patch("budjira.cli.sprint.get_active_connection")
+def test_sprint_list_without_state_shows_all_sprints(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
+    """sprint list without --state must render every sprint the service returns (#140).
+
+    The service fetches all pages; the CLI must not truncate them either.
+    """
+    mock_conn = MagicMock()
+    mock_conn.name = "test"
+    mock_conn.project_key = "TEST"
+    mock_conn.board_id = 42
+    mock_get_conn.return_value = mock_conn
+
+    all_sprints = [_make_sprint(i, f"Sprint {i}", SprintState.CLOSED) for i in range(1, 147)]
+    all_sprints.append(_make_sprint(147, "Sprint 147", SprintState.ACTIVE))
+    mock_client = MagicMock()
+    mock_client.sprints.get_sprints.return_value = all_sprints
+    mock_jira_cls.from_connection.return_value = mock_client
+
+    result = runner.invoke(app, ["-q", "sprint", "list"])
+
+    assert result.exit_code == 0
+    assert "Sprint 1" in result.stdout
+    assert "Sprint 147" in result.stdout
+    mock_client.sprints.get_sprints.assert_called_once_with(42, state=None)
+
+
+@patch("budjira.cli.sprint.JiraClient")
+@patch("budjira.cli.sprint.get_active_connection")
 def test_sprint_list_invalid_state(mock_get_conn: Mock, mock_jira_cls: Mock) -> None:
     mock_conn = MagicMock()
     mock_conn.name = "test"
