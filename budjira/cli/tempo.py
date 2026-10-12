@@ -478,6 +478,104 @@ def tempo_log_worklog(
         raise typer.Exit(1)  # noqa: B904
 
 
+def _resolve_project_scope(
+    connection: Connection,
+    projects: list[str] | None,
+    all_projects: bool,
+) -> list[str] | None:
+    """Resolve the effective project scope for worklog listing.
+
+    Returns None for no project scoping (--all-projects), otherwise the list
+    of project keys to keep: the explicit --project values, or the
+    connection's default project.
+    """
+    if all_projects:
+        return None
+    if projects:
+        return sorted({p.upper() for p in projects})
+    return [connection.project_key]
+
+
+def _worklog_project_key(
+    worklog: TempoWorklog,
+    jira_client: JiraClient,
+    issue_key_cache: dict[int, str | None],
+) -> str | None:
+    """Project key of a worklog's issue, backfilling a missing key via Jira."""
+    key = worklog.issue.key
+    if key is None and worklog.issue.id is not None:
+        if worklog.issue.id not in issue_key_cache:
+            try:
+                jira_issue = jira_client.client.issue(str(worklog.issue.id), fields="key")
+                issue_key_cache[worklog.issue.id] = jira_issue.key
+            except Exception:
+                issue_key_cache[worklog.issue.id] = None
+        key = issue_key_cache.get(worklog.issue.id)
+    return key.split("-", 1)[0].upper() if key else None
+
+
+def _fetch_scoped_worklogs(
+    tempo_client: TempoClient,
+    *,
+    from_date: date | None,
+    to_date: date | None,
+    account_id: str | None,
+    project_scope: list[str],
+    max_results: int,
+    jira_client: JiraClient,
+    issue_key_cache: dict[int, str | None],
+) -> tuple[list[TempoWorklog], int]:
+    """Fetch worklogs page by page, keeping only issues in the project scope.
+
+    The Tempo v4 worklog endpoint has no project filter, so scoping happens
+    client-side; pages are pulled until max_results matches are collected or
+    the result set is exhausted. Returns the matched worklogs and the number
+    of entries skipped because their issue's project could not be determined.
+    """
+    matched: list[TempoWorklog] = []
+    skipped_unknown = 0
+    offset = 0
+    page_size = 1000
+    while len(matched) < max_results:
+        page = tempo_client.get_worklogs(
+            from_date=from_date,
+            to_date=to_date,
+            account_id=account_id,
+            limit=page_size,
+            offset=offset,
+        )
+        if not page:
+            break
+        for worklog in page:
+            project_key = _worklog_project_key(worklog, jira_client, issue_key_cache)
+            if project_key is None:
+                skipped_unknown += 1
+            elif project_key in project_scope:
+                matched.append(worklog)
+        if len(page) < page_size:
+            break
+        offset += len(page)
+    return matched[:max_results], skipped_unknown
+
+
+def _worklogs_filter_note(
+    project_scope: list[str] | None,
+    mine: bool,
+    issue_key: str | None,
+) -> str:
+    """Human-readable summary of the effective worklog filters."""
+    if issue_key:
+        parts = [f"issue {issue_key}"]
+    elif project_scope is None:
+        parts = ["all projects"]
+    else:
+        label = "project" if len(project_scope) == 1 else "projects"
+        parts = [f"{label} {', '.join(project_scope)}"]
+    if mine:
+        parts.append("mine")
+    return ", ".join(parts)
+
+
 @app.command(name="worklogs")
 def tempo_list_worklogs(
     ctx: typer.Context,
@@ -509,14 +607,33 @@ def tempo_list_worklogs(
         bool,
         typer.Option("--no-epic", help="Skip epic information (faster, JSON format only)"),
     ] = False,
+    projects: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--project",
+            help="Project key(s) to include; repeatable. Defaults to the connection's project.",
+        ),
+    ] = None,
+    all_projects: Annotated[
+        bool,
+        typer.Option("--all-projects", help="Disable project scoping (behaviour before v1.35)"),
+    ] = False,
+    mine: Annotated[
+        bool,
+        typer.Option("--mine", help="Show only the authenticated user's worklogs"),
+    ] = False,
 ) -> None:
     """List Tempo worklog entries.
 
     Display worklog entries from Tempo Timesheets with optional filters.
+    Results are scoped to the connection's project by default; use --project
+    to name other projects, --all-projects to disable scoping, and --mine to
+    keep only your own entries. An explicit issue key bypasses project
+    scoping.
     On connections without Tempo (Tempo: Disabled), native Jira worklogs are
     listed instead: with an issue key via the issue's worklogs, without one via
     a user-scoped search (worklogAuthor = currentUser(), default range: current
-    month).
+    month). The native path always shows only the current user's worklogs.
 
     Examples:
 
@@ -528,6 +645,9 @@ def tempo_list_worklogs(
 
         # List recent worklogs (last 50)
         budjira tempo worklogs --max 50
+
+        # All projects on the instance, only your own entries
+        budjira tempo worklogs --all-projects --mine
     """
     try:
         connection = get_active_connection(connection_name)
@@ -539,6 +659,13 @@ def tempo_list_worklogs(
         # Get format from context
         output_format = ctx.obj.get("format", "table") if ctx.obj else "table"
 
+        if projects and all_projects:
+            console.print("❌ [red]Error:[/red] --project and --all-projects cannot be used together.")
+            raise typer.Exit(1)
+
+        # An explicit issue key bypasses project scoping: the user named the issue.
+        project_scope = None if issue_key else _resolve_project_scope(connection, projects, all_projects)
+
         # Connections without Tempo read native Jira worklogs instead
         if not connection.tempo_enabled:
             _list_worklogs_native(
@@ -549,6 +676,7 @@ def tempo_list_worklogs(
                 to_date=to_date_obj,
                 max_results=max_results,
                 no_epic=no_epic,
+                project_scope=project_scope,
             )
             return
 
@@ -559,6 +687,7 @@ def tempo_list_worklogs(
         # 1. issue_id conversion when filtering by issue_key
         # 2. JSON epic fetching
         # 3. Table output issue_key backfill (Tempo API often returns null issue.key)
+        # 4. account ID resolution for --mine
         jira_client = JiraClient.from_connection(connection)
 
         # Convert issue_key to issue_id if provided (Tempo API requires numeric ID)
@@ -567,24 +696,53 @@ def tempo_list_worklogs(
             issue = jira_client.client.issue(issue_key)
             issue_id = int(issue.id)
 
-        # Fetch worklogs
-        worklogs = tempo_client.get_worklogs(
-            from_date=from_date_obj,
-            to_date=to_date_obj,
-            issue_id=issue_id,
-            limit=max_results,
-        )
+        # --mine maps to the endpoint's author filter
+        account_id = None
+        if mine:
+            account_id = jira_client.client.myself()["accountId"]
+
+        # Cache for issue_key backfill (Tempo API often returns null issue.key).
+        # Populated during project scoping, reused by both output formats.
+        issue_key_cache: dict[int, str | None] = {}
+
+        # Fetch worklogs, scoped to the project unless disabled or bypassed
+        skipped_unknown_project = 0
+        if project_scope is None:
+            worklogs = tempo_client.get_worklogs(
+                from_date=from_date_obj,
+                to_date=to_date_obj,
+                issue_id=issue_id,
+                account_id=account_id,
+                limit=max_results,
+            )
+        else:
+            worklogs, skipped_unknown_project = _fetch_scoped_worklogs(
+                tempo_client,
+                from_date=from_date_obj,
+                to_date=to_date_obj,
+                account_id=account_id,
+                project_scope=project_scope,
+                max_results=max_results,
+                jira_client=jira_client,
+                issue_key_cache=issue_key_cache,
+            )
+
+        filters_payload = {"projects": project_scope, "mine": mine}
+
+        if not OutputFormatter.is_json_format(output_format) and skipped_unknown_project:
+            console.print(
+                f"[yellow]⚠ {skipped_unknown_project} worklog(s) skipped: "
+                "issue key unknown, project could not be determined[/yellow]"
+            )
 
         if not worklogs:
             if OutputFormatter.is_json_format(output_format):
-                OutputFormatter.output_json({"total": 0, "worklogs": []})
+                OutputFormatter.output_json({"total": 0, "worklogs": [], "filters": filters_payload})
             else:
                 console.print("[yellow]No worklogs found matching the criteria[/yellow]")
             return
 
-        # Cache for issue_key backfill (Tempo API often returns null issue.key)
-        # Used by both JSON and table output
-        issue_key_cache: dict[int, str | None] = {}  # Cache: issue_id -> issue_key
+        filter_note = _worklogs_filter_note(project_scope, mine, issue_key)
 
         if OutputFormatter.is_json_format(output_format):
             # JSON output - fetch epic information if not disabled
@@ -648,12 +806,17 @@ def tempo_list_worklogs(
                 worklog_dicts.append(worklog_dict)
 
             # Output JSON
-            output = {"total": len(worklog_dicts), "worklogs": worklog_dicts}
+            output = {
+                "total": len(worklog_dicts),
+                "worklogs": worklog_dicts,
+                "filters": filters_payload,
+                "skipped_unknown_project": skipped_unknown_project,
+            }
             OutputFormatter.output_json(output)
 
         else:
             # Table output - with issue_key backfill from Jira API
-            table = Table(title=f"Tempo Worklogs ({len(worklogs)} entries)")
+            table = Table(title=f"Tempo Worklogs — {filter_note} ({len(worklogs)} entries)")
             table.add_column("ID", style="cyan")
             table.add_column("Issue", style="magenta")
             table.add_column("Time Spent", style="green")
@@ -1280,7 +1443,7 @@ def timesheet_reopen(
 
 if TYPE_CHECKING:
     from budjira.models.connection import Connection
-    from budjira.tempo.models import TempoTimesheetApproval
+    from budjira.tempo.models import TempoTimesheetApproval, TempoWorklog
 
 
 def _log_worklog_native(
@@ -1314,13 +1477,15 @@ def _list_worklogs_native(
     to_date: date | None,
     max_results: int,
     no_epic: bool,
+    project_scope: list[str] | None = None,
 ) -> None:
     """List native Jira worklogs (fallback for connections without Tempo).
 
     With an issue key, the issue's worklogs are read directly. Without one, a
     user-scoped JQL search (worklogAuthor = currentUser()) finds the issues —
-    the date range defaults to the current month when --from is not given.
-    Only worklogs authored by the current user are shown.
+    the date range defaults to the current month when --from is not given, and
+    the project scope (connection default, --project or --all-projects) is
+    added to the JQL. Only worklogs authored by the current user are shown.
     """
     jira_client = JiraClient.from_connection(connection)
     myself = jira_client.client.myself()
@@ -1334,6 +1499,8 @@ def _list_worklogs_native(
         jql = f"worklogAuthor = currentUser() AND worklogDate >= '{effective_from.isoformat()}'"
         if to_date:
             jql += f" AND worklogDate <= '{to_date.isoformat()}'"
+        if project_scope:
+            jql = f"project in ({', '.join(project_scope)}) AND {jql}"
         logger.debug(f"Native worklog search JQL: {jql}")
 
         issues = jira_client.client.search_issues(jql, fields="key", maxResults=200)
@@ -1398,10 +1565,18 @@ def _list_worklogs_native(
 
             worklog_dicts.append(worklog_dict)
 
-        OutputFormatter.output_json({"total": len(worklog_dicts), "worklogs": worklog_dicts})
+        OutputFormatter.output_json(
+            {
+                "total": len(worklog_dicts),
+                "worklogs": worklog_dicts,
+                "filters": {"projects": project_scope, "mine": True},
+            }
+        )
         return
 
-    table = Table(title=f"Jira Worklogs ({len(records)} entries)")
+    table = Table(
+        title=f"Jira Worklogs — {_worklogs_filter_note(project_scope, True, issue_key)} ({len(records)} entries)"
+    )
     table.add_column("ID", style="cyan")
     table.add_column("Issue", style="magenta")
     table.add_column("Time Spent", style="green")

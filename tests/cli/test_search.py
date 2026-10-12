@@ -375,3 +375,112 @@ class TestSearchCommand:
         assert "…" in result.stdout or "..." in result.stdout
         # Full summary should not appear
         assert long_summary not in result.stdout
+
+
+class TestSearchProjectScope:
+    """Raw JQL is scoped to the connection's project unless it has its own
+    project clause or --all-projects is given (#142)."""
+
+    @patch("budjira.cli.search.JiraClient")
+    @patch("budjira.cli.search.get_active_connection")
+    def test_raw_jql_without_project_gets_scoped(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+        mock_issue: Issue,
+    ) -> None:
+        mock_get_active_connection.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.search_issues.return_value = [mock_issue]
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(app, ["status = 'In Progress'"])
+
+        assert result.exit_code == 0
+        mock_client.search_issues.assert_called_once_with(
+            "project = TEST AND (status = 'In Progress')",
+            max_results=50,
+        )
+
+    @patch("budjira.cli.search.JiraClient")
+    @patch("budjira.cli.search.get_active_connection")
+    def test_raw_jql_with_project_clause_untouched(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+        mock_issue: Issue,
+    ) -> None:
+        mock_get_active_connection.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.search_issues.return_value = [mock_issue]
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(app, ["project in (ABC, DEF) AND status = 'In Progress'"])
+
+        assert result.exit_code == 0
+        mock_client.search_issues.assert_called_once_with(
+            "project in (ABC, DEF) AND status = 'In Progress'",
+            max_results=50,
+        )
+
+    @patch("budjira.cli.search.JiraClient")
+    @patch("budjira.cli.search.get_active_connection")
+    def test_all_projects_sends_raw_jql_unchanged(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+        mock_issue: Issue,
+    ) -> None:
+        mock_get_active_connection.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.search_issues.return_value = [mock_issue]
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(app, ["status = 'In Progress'", "--all-projects"])
+
+        assert result.exit_code == 0
+        mock_client.search_issues.assert_called_once_with(
+            "status = 'In Progress'",
+            max_results=50,
+        )
+
+    @patch("budjira.cli.search.JiraClient")
+    @patch("budjira.cli.search.get_active_connection")
+    def test_all_projects_omits_project_from_built_jql(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+        mock_issue: Issue,
+    ) -> None:
+        mock_get_active_connection.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.search_issues.return_value = [mock_issue]
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(app, ["--status", "In Progress", "--all-projects"])
+
+        assert result.exit_code == 0
+        mock_client.search_issues.assert_called_once_with(
+            "status = 'In Progress'",
+            max_results=50,
+        )
+
+    @patch("budjira.cli.search.JiraClient")
+    @patch("budjira.cli.search.get_active_connection")
+    def test_project_and_all_projects_conflict(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+    ) -> None:
+        mock_get_active_connection.return_value = mock_connection
+
+        result = runner.invoke(app, ["--project", "TEST", "--all-projects"])
+
+        assert result.exit_code == 1
+        assert "cannot be used together" in result.stdout
+        mock_jira_client_class.from_connection.assert_not_called()

@@ -197,6 +197,10 @@ budjira search --project PROJ --type Bug --max 100
 
 # Use specific connection
 budjira search --connection my-connection --status Done
+
+# Raw JQL without a project clause is scoped to the connection's project;
+# --all-projects sends it unchanged
+budjira search "status = 'In Progress'" --all-projects
 ```
 
 ### 4. View Issue Details
@@ -709,6 +713,14 @@ budjira tempo log PROJ-123 2h --started "2025-10-24 14:00" --comment "Developmen
 budjira tempo worklogs PROJ-123                    # For specific issue
 budjira tempo worklogs --from 2025-10-01 --to 2025-10-31  # Date range
 budjira tempo worklogs --max 50                    # Limit results
+budjira tempo worklogs --mine                      # Only your own entries
+budjira tempo worklogs --project OTHER             # Another project (repeatable)
+budjira tempo worklogs --all-projects              # No project scoping
+
+# `tempo worklogs` is scoped to the connection's project by default (several
+# connections may share one Jira/Tempo instance); an explicit issue key
+# bypasses scoping, --all-projects disables it. The table header and the JSON
+# "filters" field show the effective scope.
 
 # Update existing worklog (preserve ID and audit trail)
 budjira tempo update-worklog 12345 --time-spent 3h
