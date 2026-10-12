@@ -550,3 +550,70 @@ class TestSearchProjectScope:
             result = runner.invoke(app, [jql])
             assert result.exit_code == 0
             mock_client.search_issues.assert_called_with(jql, max_results=50)
+
+    @patch("budjira.cli.search.JiraClient")
+    @patch("budjira.cli.search.get_active_connection")
+    def test_quoted_project_field_name_counts_as_clause(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+        mock_issue: Issue,
+    ) -> None:
+        """JQL allows quoted field names: "project" = ABC must not be double-scoped (#142 review r2)."""
+        mock_get_active_connection.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.search_issues.return_value = [mock_issue]
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(app, ['"project" = ABC'])
+
+        assert result.exit_code == 0
+        mock_client.search_issues.assert_called_once_with('"project" = ABC', max_results=50)
+
+    @patch("budjira.cli.search.JiraClient")
+    @patch("budjira.cli.search.get_active_connection")
+    def test_escaped_quote_does_not_end_literal_early(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+        mock_issue: Issue,
+    ) -> None:
+        r"""An escaped quote inside a literal must not expose \"project = X\" (#142 review r2)."""
+        mock_get_active_connection.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.search_issues.return_value = [mock_issue]
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        jql = r'summary ~ "say \"project = X\" now"'
+        result = runner.invoke(app, [jql])
+
+        assert result.exit_code == 0
+        mock_client.search_issues.assert_called_once_with(
+            f"project = TEST AND ({jql})",
+            max_results=50,
+        )
+
+    @patch("budjira.cli.search.JiraClient")
+    @patch("budjira.cli.search.get_active_connection")
+    def test_order_by_only_jql_gets_no_empty_parens(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+        mock_issue: Issue,
+    ) -> None:
+        """A raw JQL of just ORDER BY scopes to `project = X ORDER BY ...`, no empty parens (#142 review r2)."""
+        mock_get_active_connection.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.search_issues.return_value = [mock_issue]
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(app, ["ORDER BY created DESC"])
+
+        assert result.exit_code == 0
+        mock_client.search_issues.assert_called_once_with(
+            "project = TEST ORDER BY created DESC",
+            max_results=50,
+        )

@@ -1097,8 +1097,9 @@ def test_tempo_worklogs_issue_key_with_project_flags_notes_bypass(
 
 def test_tempo_worklogs_empty_json_carries_filter_metadata(mock_tempo_connection, mock_tempo_client, mock_jira_client):
     """Even an empty JSON result reports filters, skip count and truncation (#142 review)."""
-    mock_tempo_client.get_worklogs.return_value = [_unkeyed_worklog(101)]
-    mock_jira_client.from_connection.return_value.client.search_issues.return_value = []
+    undeterminable = _scoped_worklog(101, None)
+    undeterminable.issue.id = None  # no key and no id: project undeterminable
+    mock_tempo_client.get_worklogs.return_value = [undeterminable]
 
     result = runner.invoke(app, ["--format", "json", "tempo", "worklogs"])
 
@@ -1108,6 +1109,52 @@ def test_tempo_worklogs_empty_json_carries_filter_metadata(mock_tempo_connection
     assert output["filters"] == {"projects": ["TEST"], "mine": False, "issue": None}
     assert output["skipped_unknown_project"] == 1
     assert output["scan_truncated"] is False
+
+
+def test_tempo_worklogs_scope_backfill_partial_result_aborts(
+    mock_tempo_connection, mock_tempo_client, mock_jira_client
+):
+    """A short id-in result (page cap / deleted issue) aborts instead of skipping (#142 review r2)."""
+    mock_tempo_client.get_worklogs.return_value = [_unkeyed_worklog(101), _unkeyed_worklog(202)]
+    mock_jira_client.from_connection.return_value.client.search_issues.return_value = [
+        _jira_issue_stub(101, "TEST-101"),
+    ]
+
+    result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 1
+    assert "only 1 of 2" in result.stdout
+    assert "202" in result.stdout  # the unresolved id is named
+
+
+def test_tempo_worklogs_scan_limit_warns(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Hitting the scan limit sets the truncation warning (#142 review r2)."""
+    foreign_page = [_scoped_worklog(1000 + i, f"OTHER-{i}") for i in range(1000)]
+    mock_tempo_client.get_worklogs.side_effect = [foreign_page, foreign_page]
+
+    with patch("budjira.cli.tempo._SCOPE_SCAN_LIMIT", 2000):
+        result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 0
+    assert "Scan stopped" in result.stdout
+    assert mock_tempo_client.get_worklogs.call_count == 2
+
+
+def test_tempo_worklogs_native_scan_limit_flagged(mock_connection):
+    """Native path: a full 200-issue page is reported as possibly incomplete (#142 review r2)."""
+    mock_connection.tempo_enabled = False
+
+    with patch("budjira.cli.tempo.get_active_connection", return_value=mock_connection):
+        with patch("budjira.cli.tempo.JiraClient") as mock_jira_class:
+            mock_jira = mock_jira_class.from_connection.return_value
+            mock_jira.client.myself.return_value = {"accountId": "557058:abc123"}
+            mock_jira.client.search_issues.return_value = [_jira_issue_stub(i, f"TEST-{i}") for i in range(200)]
+            mock_jira.worklogs.list.return_value = []
+
+            result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 0
+    assert "first 200 issues" in result.stdout
 
 
 def test_tempo_update_worklog_success(mock_tempo_connection, mock_tempo_client):

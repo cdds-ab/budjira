@@ -507,12 +507,14 @@ def _backfill_issue_keys(
     jira_client: JiraClient,
     issue_key_cache: dict[int, str | None],
 ) -> None:
-    """Resolve missing issue keys for a page in ONE Jira query.
+    """Resolve missing issue keys for a page in chunked Jira queries.
 
     Tempo often returns issue.key as null; the numeric issue ids are resolved
-    in a single ``id in (...)`` JQL search instead of one GET per issue.
-    A lookup failure aborts the listing: silently skipping unresolvable
-    entries would undercount the scoped total.
+    via ``id in (...)`` JQL searches instead of one GET per issue. Chunks of
+    100 with use_post: a search/jql page is never followed past its token
+    when maxResults is set, and a GET URL cannot take 1000 ids. A lookup
+    failure or a short result aborts the listing: silently skipping
+    unresolvable entries would undercount the scoped total.
     """
     ids = sorted(
         {
@@ -523,17 +525,25 @@ def _backfill_issue_keys(
     )
     if not ids:
         return
-    jql = f"id in ({', '.join(str(i) for i in ids)})"
-    try:
-        issues = jira_client.client.search_issues(jql, fields="key", maxResults=len(ids))
-    except Exception as e:
-        raise JiraAPIError(
-            f"Cannot resolve {len(ids)} issue key(s) for project scoping ({e}). "
-            "The result would be incomplete — re-run, narrow the range, or use --all-projects."
-        ) from e
-    found = {int(issue.id): issue.key for issue in issues}
-    for issue_id in ids:
-        issue_key_cache[issue_id] = found.get(issue_id)
+    for start in range(0, len(ids), 100):
+        chunk = ids[start : start + 100]
+        jql = f"id in ({', '.join(str(i) for i in chunk)})"
+        try:
+            issues = jira_client.client.search_issues(jql, fields="key", maxResults=len(chunk), use_post=True)
+        except Exception as e:
+            raise JiraAPIError(
+                f"Cannot resolve {len(chunk)} issue key(s) for project scoping ({e}). "
+                "The result would be incomplete — re-run, narrow the range, or use --all-projects."
+            ) from e
+        found = {int(issue.id): issue.key for issue in issues}
+        if len(found) < len(chunk):
+            missing = ", ".join(str(i) for i in chunk if i not in found)
+            raise JiraAPIError(
+                f"Jira returned only {len(found)} of {len(chunk)} issue keys needed for project "
+                f"scoping (unresolved ids: {missing}). The result would be incomplete — "
+                "re-run, narrow the range, or use --all-projects."
+            ) from None
+        issue_key_cache.update(found)
 
 
 def _worklog_project_key(
@@ -708,7 +718,7 @@ def tempo_list_worklogs(
             if invalid:
                 console.print(
                     f"❌ [red]Error:[/red] Invalid project key(s): {', '.join(invalid)} "
-                    "(uppercase letters, digits and underscores, max 10 characters)"
+                    "(letters, digits and underscores, case-insensitive, max 10 characters)"
                 )
                 raise typer.Exit(1)
 
@@ -1558,6 +1568,7 @@ def _list_worklogs_native(
     myself = jira_client.client.myself()
     account_id = myself["accountId"]
 
+    scan_truncated = False
     if issue_key:
         worklogs_by_issue = {issue_key: jira_client.worklogs.list(issue_key)}
     else:
@@ -1571,6 +1582,8 @@ def _list_worklogs_native(
         logger.debug(f"Native worklog search JQL: {jql}")
 
         issues = jira_client.client.search_issues(jql, fields="key", maxResults=200)
+        # A full page means there may be more issues than were scanned
+        scan_truncated = len(issues) >= 200
         logger.debug(f"Native worklog search: {len(issues)} issue(s) to scan")
         worklogs_by_issue = {}
         for issue in issues:
@@ -1601,8 +1614,14 @@ def _list_worklogs_native(
     native_meta = {
         "filters": {"projects": project_scope, "mine": True, "issue": issue_key},
         "skipped_unknown_project": 0,
-        "scan_truncated": False,
+        "scan_truncated": scan_truncated,
     }
+
+    if not OutputFormatter.is_json_format(output_format) and scan_truncated:
+        console.print(
+            "[yellow]⚠ Scanned the first 200 issues with your worklogs; "
+            "the range may contain more — narrow it with --from/--to[/yellow]"
+        )
 
     if not records:
         if OutputFormatter.is_json_format(output_format):
