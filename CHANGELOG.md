@@ -1,6 +1,16 @@
 # CHANGELOG
 
 
+## v1.36.0 (2026-10-12)
+
+### Feat
+
+- **cli**: quick status-transition aliases start/done/block/review (#144)
+
+### Fix
+
+- share validator attribution with aliases, scope the error hints (#144)
+
 ## v1.35.0 (2026-10-12)
 
 ### Feat
