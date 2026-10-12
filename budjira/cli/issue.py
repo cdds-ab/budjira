@@ -237,13 +237,13 @@ def update_issue(
     Examples:
 
         # Transition to In Progress and assign to current user
-        budjira update issue PROJ-123 --status "In Progress" --assignee currentUser()
+        budjira issue update PROJ-123 --status "In Progress" --assignee currentUser()
 
         # Update priority and add labels
-        budjira update issue PROJ-123 --priority High --add-label urgent --add-label backend
+        budjira issue update PROJ-123 --priority High --add-label urgent --add-label backend
 
         # Multiple updates at once
-        budjira update issue PROJ-123 \\
+        budjira issue update PROJ-123 \\
             --status Done \\
             --priority Low \\
             --add-label completed
@@ -472,7 +472,7 @@ def show_transitions(
 
         console.print(table)
 
-        console.print(f'\n[dim]Use: budjira update issue {issue_key} --status "<name>"[/dim]')
+        console.print(f'\n[dim]Use: budjira issue update {issue_key} --status "<name>"[/dim]')
 
     except BudjiraError as e:
         console.print(f"[red]Error:[/red] {e}")
