@@ -484,3 +484,69 @@ class TestSearchProjectScope:
         assert result.exit_code == 1
         assert "cannot be used together" in result.stdout
         mock_jira_client_class.from_connection.assert_not_called()
+
+    @patch("budjira.cli.search.JiraClient")
+    @patch("budjira.cli.search.get_active_connection")
+    def test_order_by_stays_outside_the_scoped_parens(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+        mock_issue: Issue,
+    ) -> None:
+        """ORDER BY inside the parenthesised scope is invalid JQL (#142 review)."""
+        mock_get_active_connection.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.search_issues.return_value = [mock_issue]
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(app, ["status = 'In Progress' ORDER BY created DESC"])
+
+        assert result.exit_code == 0
+        mock_client.search_issues.assert_called_once_with(
+            "project = TEST AND (status = 'In Progress') ORDER BY created DESC",
+            max_results=50,
+        )
+
+    @patch("budjira.cli.search.JiraClient")
+    @patch("budjira.cli.search.get_active_connection")
+    def test_quoted_literal_cannot_fake_a_project_clause(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+        mock_issue: Issue,
+    ) -> None:
+        """summary ~ \"project in scope\" has no project clause and must be scoped (#142 review)."""
+        mock_get_active_connection.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.search_issues.return_value = [mock_issue]
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(app, ['summary ~ "project in scope"'])
+
+        assert result.exit_code == 0
+        mock_client.search_issues.assert_called_once_with(
+            'project = TEST AND (summary ~ "project in scope")',
+            max_results=50,
+        )
+
+    @patch("budjira.cli.search.JiraClient")
+    @patch("budjira.cli.search.get_active_connection")
+    def test_project_was_and_changed_count_as_project_clauses(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+        mock_issue: Issue,
+    ) -> None:
+        """History predicates on project must not get a second scope prepended (#142 review)."""
+        mock_get_active_connection.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.search_issues.return_value = [mock_issue]
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        for jql in ["project was ABC", "project was in (ABC, DEF)", "project changed"]:
+            result = runner.invoke(app, [jql])
+            assert result.exit_code == 0
+            mock_client.search_issues.assert_called_with(jql, max_results=50)

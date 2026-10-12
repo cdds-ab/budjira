@@ -12,8 +12,19 @@ from budjira.core.jira_client import JiraClient
 from budjira.utils.connection import get_active_connection
 from budjira.utils.errors import BudjiraError
 
-# A raw JQL already scoping itself: project = X / project != X / project in (...)
-_JQL_PROJECT_CLAUSE_RE = re.compile(r"\bproject\s*(=|!=|(not\s+)?in\b)", re.IGNORECASE)
+# String literals are blanked (length-preserving) before clause detection so
+# their contents (e.g. summary ~ "project in scope") cannot fake a clause
+_JQL_LITERAL_RE = re.compile(r"'[^']*'|\"[^\"]*\"")
+
+# A raw JQL already scoping or historicising itself:
+# project = X / project != X / project in (...) / project was X / project changed
+_JQL_PROJECT_CLAUSE_RE = re.compile(
+    r"\bproject\s*(=|!=|(not\s+)?in\b|was\b(\s+not\b)?(\s+in\b)?|changed\b)",
+    re.IGNORECASE,
+)
+
+# ORDER BY must stay outside the parenthesised scoped query
+_JQL_ORDER_BY_RE = re.compile(r"\border\s+by\b", re.IGNORECASE)
 
 app = typer.Typer(
     name="search",
@@ -128,9 +139,18 @@ def search(
                 )
                 raise typer.Exit(1)
 
-        elif not all_projects and not _JQL_PROJECT_CLAUSE_RE.search(jql):
-            # Raw JQL without a project clause: scope to the connection's project
-            jql = f"project = {active_connection.project_key} AND ({jql})"
+        elif not all_projects:
+            # Raw JQL without a project clause: scope to the connection's
+            # project. Literals are blanked (length-preserving) so quoted
+            # text cannot fake a clause; ORDER BY stays outside the parens.
+            blanked = _JQL_LITERAL_RE.sub(lambda m: " " * len(m.group(0)), jql)
+            if not _JQL_PROJECT_CLAUSE_RE.search(blanked):
+                order_match = _JQL_ORDER_BY_RE.search(blanked)
+                if order_match:
+                    head = jql[: order_match.start()].strip()
+                    jql = f"project = {active_connection.project_key} AND ({head}) {jql[order_match.start() :]}"
+                else:
+                    jql = f"project = {active_connection.project_key} AND ({jql})"
 
         console.print(f"[dim]Searching with JQL:[/dim] [cyan]{jql}[/cyan]\n")
 
