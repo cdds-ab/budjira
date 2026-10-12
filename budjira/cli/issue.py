@@ -178,6 +178,55 @@ def _collect_transition_fields(
     return matched, resolved
 
 
+def _execute_transition(
+    client: JiraClient,
+    issue_key: str,
+    matched: Transition,
+    resolved: dict[str, Any],
+    interactive: bool,
+) -> None:
+    """Execute a resolved transition, attributing validator rejections to fields.
+
+    A rejection by a Jira workflow validator is walked back to the screen
+    field it refers to, so the user learns exactly what to supply; without a
+    TTY (or with interactive=False) the command exits with the requirement
+    instead of prompting. Used by both ``issue update --status`` and the
+    status-transition aliases.
+
+    Raises:
+        typer.Exit: If the transition is rejected
+    """
+    try:
+        client.transitions.transition(issue_key, matched.name, fields=resolved or None)
+    except Exception as transition_error:
+        messages = _validator_messages(transition_error)
+        culprit = attribute_validator_error(messages, matched) if messages else None
+        if culprit is None:
+            if not messages:
+                raise
+            # Forward Jira's own wording rather than naming a field we
+            # could not identify, but show what the screen offers.
+            console.print(f"[red]✗[/red] Transition '{matched.name}' was rejected: {' '.join(messages)}")
+            if matched.fields:
+                console.print("Screen fields on this transition:")
+                console.print(format_field_requirements(matched.fields))
+            raise typer.Exit(1) from transition_error
+
+        detail = f"'{culprit.name}' ({culprit.field_id})"
+        if not (interactive and _can_prompt()):
+            console.print(
+                f"[red]✗[/red] Transition '{matched.name}' was rejected by a workflow validator. "
+                f"The message refers to field {detail}. Supply it with:\n"
+                f"{format_field_requirements([culprit])}"
+            )
+            raise typer.Exit(1) from transition_error
+
+        console.print(f"[yellow]![/yellow] A workflow validator requires field {detail}.")
+        answer = typer.prompt(f"{culprit.name} ({culprit.field_id})")
+        resolved.update(resolve_fields({culprit.field_id: answer}, matched))
+        client.transitions.transition(issue_key, matched.name, fields=resolved)
+
+
 @app.command("update")
 def update_issue(
     issue_key: Annotated[str, typer.Argument(help="Issue key (e.g., PROJ-123)")],
@@ -237,13 +286,13 @@ def update_issue(
     Examples:
 
         # Transition to In Progress and assign to current user
-        budjira update issue PROJ-123 --status "In Progress" --assignee currentUser()
+        budjira issue update PROJ-123 --status "In Progress" --assignee currentUser()
 
         # Update priority and add labels
-        budjira update issue PROJ-123 --priority High --add-label urgent --add-label backend
+        budjira issue update PROJ-123 --priority High --add-label urgent --add-label backend
 
         # Multiple updates at once
-        budjira update issue PROJ-123 \\
+        budjira issue update PROJ-123 \\
             --status Done \\
             --priority Low \\
             --add-label completed
@@ -306,35 +355,7 @@ def update_issue(
                         console.print(format_field_requirements(still_missing))
                     return
 
-                try:
-                    client.transitions.transition(issue_key, matched.name, fields=resolved or None)
-                except Exception as transition_error:
-                    messages = _validator_messages(transition_error)
-                    culprit = attribute_validator_error(messages, matched) if messages else None
-                    if culprit is None:
-                        if not messages:
-                            raise
-                        # Forward Jira's own wording rather than naming a field we
-                        # could not identify, but show what the screen offers.
-                        console.print(f"[red]✗[/red] Transition '{matched.name}' was rejected: {' '.join(messages)}")
-                        if matched.fields:
-                            console.print("Screen fields on this transition:")
-                            console.print(format_field_requirements(matched.fields))
-                        raise typer.Exit(1) from transition_error
-
-                    detail = f"'{culprit.name}' ({culprit.field_id})"
-                    if not (interactive and _can_prompt()):
-                        console.print(
-                            f"[red]✗[/red] Transition '{matched.name}' was rejected by a workflow validator. "
-                            f"The message refers to field {detail}. Supply it with:\n"
-                            f"{format_field_requirements([culprit])}"
-                        )
-                        raise typer.Exit(1) from transition_error
-
-                    console.print(f"[yellow]![/yellow] A workflow validator requires field {detail}.")
-                    answer = typer.prompt(f"{culprit.name} ({culprit.field_id})")
-                    resolved.update(resolve_fields({culprit.field_id: answer}, matched))
-                    client.transitions.transition(issue_key, matched.name, fields=resolved)
+                _execute_transition(client, issue_key, matched, resolved, interactive)
 
                 changes.append(("Status", f"→ {status}"))
             except BudjiraError as e:
@@ -444,7 +465,7 @@ def show_transitions(
 
     Example:
 
-        budjira update transitions PROJ-123
+        budjira issue transitions PROJ-123
     """
     try:
         # Get active connection
@@ -472,7 +493,7 @@ def show_transitions(
 
         console.print(table)
 
-        console.print(f'\n[dim]Use: budjira update issue {issue_key} --status "<name>"[/dim]')
+        console.print(f'\n[dim]Use: budjira issue update {issue_key} --status "<name>"[/dim]')
 
     except BudjiraError as e:
         console.print(f"[red]Error:[/red] {e}")

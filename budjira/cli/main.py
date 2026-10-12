@@ -8,6 +8,7 @@ from rich.console import Console
 from budjira import __version__
 from budjira.cli import (
     ai,
+    aliases,
     attach,
     comment,
     connect,
@@ -69,6 +70,12 @@ app.command(name="attach")(attach.attach_files)
 # Register top-level search command (single command, no group — documented
 # and used as `budjira search "JQL"`, grouping would force `search search`)
 app.command(name="search")(search.search)
+
+# Register top-level status-transition aliases
+app.command(name="start")(aliases.start_issue)
+app.command(name="done")(aliases.done_issue)
+app.command(name="block")(aliases.block_issue)
+app.command(name="review")(aliases.review_issue)
 
 
 def is_quiet_mode() -> bool:

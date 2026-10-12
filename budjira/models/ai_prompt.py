@@ -708,6 +708,12 @@ Update existing issues with status transitions, field changes, and label managem
 # Transition status
 budjira issue update PROJ-123 --status "In Progress"
 
+# Quick aliases for the common transitions (top-level commands)
+budjira start PROJ-123    # → In Progress
+budjira done PROJ-123     # → Done
+budjira block PROJ-123    # → Blocked
+budjira review PROJ-123   # → In Review
+
 # Assign to current user
 budjira issue update PROJ-123 --assignee currentUser()
 

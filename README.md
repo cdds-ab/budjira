@@ -355,6 +355,12 @@ So that [benefit]
 # Transition status
 budjira issue update PROJ-123 --status "In Progress"
 
+# Quick aliases for the common transitions
+budjira start PROJ-123    # → In Progress
+budjira done PROJ-123     # → Done
+budjira block PROJ-123    # → Blocked
+budjira review PROJ-123   # → In Review
+
 # Assign to current user
 budjira issue update PROJ-123 --assignee currentUser()
 
