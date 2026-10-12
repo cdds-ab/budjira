@@ -76,8 +76,45 @@ def test_alias_unavailable_transition_lists_options(mock_client: MagicMock, comm
     assert result.exit_code == 1
     assert "Invalid transition" in result.stdout
     assert "Reopen" in result.stdout
-    assert "issue update" in result.stdout  # hint to the full command
+    # The hint must point at the transitions list, not at the command that
+    # would fail identically
+    assert "issue transitions" in result.stdout
+    assert "issue update" not in result.stdout
     mock_client.transitions.transition.assert_not_called()
+
+
+def test_alias_validator_rejection_names_the_field(mock_client: MagicMock) -> None:
+    """A workflow-validator rejection is attributed to its screen field (#144 review)."""
+    from budjira.utils.errors import JiraAPIError
+    from jira.exceptions import JIRAError
+
+    mock_client.transitions.get_transition_details.return_value = [
+        Transition(
+            id="21",
+            name="Done",
+            to_status="Done",
+            fields=[
+                TransitionField(
+                    field_id="customfield_10001", name="Solution details", required=False, field_type="string"
+                )
+            ],
+        )
+    ]
+    original = JIRAError(status_code=400, text="Provide details about the solution made available.")
+    original.response = MagicMock()
+    original.response.json.return_value = {
+        "errorMessages": ["Provide details about the solution made available."],
+        "errors": {},
+    }
+    wrapped = JiraAPIError("Transition issue failed: Provide details about the solution made available.")
+    wrapped.__cause__ = original
+    mock_client.transitions.transition.side_effect = wrapped
+
+    result = runner.invoke(app, ["-q", "done", "TEST-123"])
+
+    assert result.exit_code == 1
+    assert "customfield_10001" in result.stdout
+    assert "Solution details" in result.stdout
 
 
 def test_alias_required_screen_field_aborts_with_hint(mock_client: MagicMock) -> None:

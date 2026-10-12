@@ -7,7 +7,7 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from budjira.cli.issue import _collect_transition_fields
+from budjira.cli.issue import _collect_transition_fields, _execute_transition
 from budjira.core.jira_client import JiraClient
 from budjira.utils.connection import get_active_connection
 from budjira.utils.errors import BudjiraError
@@ -33,16 +33,17 @@ def _transition_alias(issue_key: str, status: str, connection: str | None = None
         matched, resolved = _collect_transition_fields(
             client, issue_key, status, None, interactive=False, dry_run=False
         )
-        client.transitions.transition(issue_key, matched.name, fields=resolved or None)
+        _execute_transition(client, issue_key, matched, resolved, interactive=False)
 
         console.print(f"\n[green]✓[/green] {issue_key} → [cyan]{matched.to_status or status}[/cyan]")
         console.print(f"[dim]View: {conn.url}/browse/{issue_key}[/dim]")
 
     except BudjiraError as e:
         console.print(f"[red]Error:[/red] {e}")
-        console.print(
-            f'[dim]Transitions with screen fields: budjira issue update {issue_key} --status "{status}"[/dim]'
-        )
+        if "requires field values" in str(e):
+            console.print(f'[dim]Supply fields via: budjira issue update {issue_key} --status "{status}"[/dim]')
+        else:
+            console.print(f"[dim]See available transitions: budjira issue transitions {issue_key}[/dim]")
         raise typer.Exit(1) from e
 
 
