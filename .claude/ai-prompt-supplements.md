@@ -218,7 +218,7 @@ budjira --format json workflow billing --profile ek-to-k   # current month, mach
 
 ### 11. JSON Output for Automation and Reporting
 ```bash
-# Export Tempo worklogs to JSON
+# Export Tempo worklogs to JSON (scoped to the connection's project)
 budjira --format json tempo worklogs --from 2025-10-01 --to 2025-10-31
 
 # Export to file for processing
@@ -233,6 +233,11 @@ budjira -f json tempo worklogs PROJ-123 | jq '.worklogs[] | {issue: .issue_key, 
 # Performance mode (skip epic fetching)
 budjira --format json tempo worklogs --from 2025-10-01 --no-epic
 ```
+
+`tempo worklogs` is scoped to the connection's project by default; the JSON
+`filters` field shows the effective scope (`projects`, `mine`, `issue`), and
+`skipped_unknown_project` counts entries whose project could not be
+determined. Use `--all-projects` for instance-wide exports.
 
 **When to use:**
 - FoU (Forsknings- och utvecklingsavdrag) reporting for Swedish tax compliance

@@ -326,7 +326,7 @@ def test_tempo_worklogs_without_issue_key(mock_tempo_connection, mock_tempo_clie
     )
     mock_tempo_client.get_worklogs.return_value = [worklog_no_key]
 
-    result = runner.invoke(app, ["tempo", "worklogs"])
+    result = runner.invoke(app, ["tempo", "worklogs", "--all-projects"])
 
     assert result.exit_code == 0
     assert "999" in result.stdout  # Worklog ID shown
@@ -370,7 +370,7 @@ def test_tempo_worklogs_table_issue_key_backfill(mock_tempo_connection, mock_tem
     mock_issue.key = "PROJ-456"
     mock_jira_client.from_connection.return_value.client.issue.return_value = mock_issue
 
-    result = runner.invoke(app, ["tempo", "worklogs"])
+    result = runner.invoke(app, ["tempo", "worklogs", "--all-projects"])
 
     assert result.exit_code == 0
 
@@ -697,7 +697,7 @@ def test_tempo_worklogs_json_issue_key_backfill(mock_tempo_connection, mock_temp
     mock_jira_client.from_connection.return_value.get_issue_epic.return_value = ("PRD-1", "budjira Development")
 
     # Run command with JSON format
-    result = runner.invoke(app, ["--format", "json", "tempo", "worklogs"])
+    result = runner.invoke(app, ["--format", "json", "tempo", "worklogs", "--all-projects"])
 
     assert result.exit_code == 0
 
@@ -719,7 +719,7 @@ def test_tempo_worklogs_json_issue_key_backfill(mock_tempo_connection, mock_temp
 
 
 def test_tempo_worklogs_json_issue_key_caching(mock_tempo_connection, mock_tempo_client, mock_jira_client):
-    """Test that issue_key backfill is cached for multiple worklogs with same issue_id (Bug #10)."""
+    """Test that issue_key backfill is one batch query for multiple worklogs with same issue_id (Bug #10, #142)."""
     import json
 
     from budjira.tempo.models import TempoAuthor, TempoIssue, TempoWorklog
@@ -746,10 +746,11 @@ def test_tempo_worklogs_json_issue_key_caching(mock_tempo_connection, mock_tempo
     ]
     mock_tempo_client.get_worklogs.return_value = mock_worklogs
 
-    # Mock Jira API backfill
-    mock_issue = MagicMock()
-    mock_issue.key = "TEST-100"
-    mock_jira_client.from_connection.return_value.client.issue.return_value = mock_issue
+    # Mock the batch backfill (id-in JQL, #142): one query resolves all ids
+    resolved = MagicMock()
+    resolved.id = "12345"
+    resolved.key = "TEST-100"
+    mock_jira_client.from_connection.return_value.client.search_issues.return_value = [resolved]
 
     # Mock epic fetching
     mock_jira_client.from_connection.return_value.get_issue_epic.return_value = ("EPIC-50", "Test Epic")
@@ -759,10 +760,11 @@ def test_tempo_worklogs_json_issue_key_caching(mock_tempo_connection, mock_tempo
 
     assert result.exit_code == 0
 
-    # CRITICAL: Verify issue backfill was called only ONCE (cached)
-    assert mock_jira_client.from_connection.return_value.client.issue.call_count == 1, (
-        "issue_key backfill should be cached to minimize Jira API calls"
-    )
+    # CRITICAL: Verify backfill was ONE batch query, no per-entry issue() calls
+    search = mock_jira_client.from_connection.return_value.client.search_issues
+    search.assert_called_once()
+    assert search.call_args[0][0] == "id in (12345)"
+    mock_jira_client.from_connection.return_value.client.issue.assert_not_called()
 
     # Verify all worklogs have backfilled issue_key
     output = json.loads(result.stdout)
@@ -798,8 +800,8 @@ def test_tempo_worklogs_json_no_issue_id(mock_tempo_connection, mock_tempo_clien
     ]
     mock_tempo_client.get_worklogs.return_value = mock_worklogs
 
-    # Run command
-    result = runner.invoke(app, ["--format", "json", "tempo", "worklogs"])
+    # Run command (--all-projects: both key and id are null, the project is undeterminable)
+    result = runner.invoke(app, ["--format", "json", "tempo", "worklogs", "--all-projects"])
 
     assert result.exit_code == 0
 
@@ -814,6 +816,345 @@ def test_tempo_worklogs_json_no_issue_id(mock_tempo_connection, mock_tempo_clien
     # Epic fields should not be present (requires issue_key)
     assert "epic_key" not in worklog
     assert "epic_name" not in worklog
+
+
+def _scoped_worklog(worklog_id: int, key: str | None, seconds: int = 3600) -> TempoWorklog:
+    """Worklog builder for the project-scope tests (#142)."""
+    return TempoWorklog(
+        self=f"https://api.tempo.io/worklogs/{worklog_id}",
+        tempoWorklogId=worklog_id,
+        issue=TempoIssue(self=f"https://api.tempo.io/issues/{worklog_id}", key=key, id=worklog_id),
+        timeSpentSeconds=seconds,
+        startDate=date(2026, 10, 12),
+        createdAt=datetime(2026, 10, 12, 9, 0),
+        updatedAt=datetime(2026, 10, 12, 9, 0),
+        author=TempoAuthor(
+            self="https://api.tempo.io/users/1",
+            accountId="557058:abc123",
+            displayName="Test User",
+        ),
+    )
+
+
+def test_tempo_worklogs_scopes_to_connection_project_by_default(
+    mock_tempo_connection, mock_tempo_client, mock_jira_client
+):
+    """Default: only worklogs of the connection's project (TEST) are listed (#142)."""
+    mock_tempo_client.get_worklogs.return_value = [
+        _scoped_worklog(1, "TEST-1"),
+        _scoped_worklog(2, "OTHER-9"),
+    ]
+
+    result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 0
+    assert "TEST-1" in result.stdout
+    assert "OTHER-9" not in result.stdout
+    assert "project TEST" in result.stdout
+
+    # Scoped fetch pages through the endpoint (page size 1000), not a single --max fetch
+    call_kwargs = mock_tempo_client.get_worklogs.call_args[1]
+    assert call_kwargs["limit"] == 1000
+    assert call_kwargs["offset"] == 0
+
+
+def test_tempo_worklogs_all_projects_disables_scope(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """--all-projects restores the previous behaviour: every project, one --max fetch (#142)."""
+    mock_tempo_client.get_worklogs.return_value = [
+        _scoped_worklog(1, "TEST-1"),
+        _scoped_worklog(2, "OTHER-9"),
+    ]
+
+    result = runner.invoke(app, ["tempo", "worklogs", "--all-projects"])
+
+    assert result.exit_code == 0
+    assert "TEST-1" in result.stdout
+    assert "OTHER-9" in result.stdout
+    assert "all projects" in result.stdout
+
+    mock_tempo_client.get_worklogs.assert_called_once()
+    call_kwargs = mock_tempo_client.get_worklogs.call_args[1]
+    assert call_kwargs["limit"] == 50  # default --max, single unpaged fetch
+
+
+def test_tempo_worklogs_project_option_selects_other_project(
+    mock_tempo_connection, mock_tempo_client, mock_jira_client
+):
+    """--project scopes to the named project instead of the connection default (#142)."""
+    mock_tempo_client.get_worklogs.return_value = [
+        _scoped_worklog(1, "TEST-1"),
+        _scoped_worklog(2, "OTHER-9"),
+    ]
+
+    result = runner.invoke(app, ["tempo", "worklogs", "--project", "other"])
+
+    assert result.exit_code == 0
+    assert "OTHER-9" in result.stdout
+    assert "TEST-1" not in result.stdout
+    assert "project OTHER" in result.stdout
+
+
+def test_tempo_worklogs_project_and_all_projects_conflict(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """--project and --all-projects are mutually exclusive (#142)."""
+    result = runner.invoke(app, ["tempo", "worklogs", "--project", "TEST", "--all-projects"])
+
+    assert result.exit_code == 1
+    assert "cannot be used together" in result.stdout
+    mock_tempo_client.get_worklogs.assert_not_called()
+
+
+def test_tempo_worklogs_mine_filters_by_account_id(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """--mine maps to the endpoint's accountId author filter (#142)."""
+    mock_tempo_client.get_worklogs.return_value = [_scoped_worklog(1, "TEST-1")]
+
+    result = runner.invoke(app, ["tempo", "worklogs", "--mine"])
+
+    assert result.exit_code == 0
+    call_kwargs = mock_tempo_client.get_worklogs.call_args[1]
+    assert call_kwargs["account_id"] == "557058:abc123"  # from mocked myself()
+    assert "mine" in result.stdout
+
+
+def test_tempo_worklogs_scope_skips_undeterminable_project(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Entries whose project cannot be determined are skipped with a warning (#142)."""
+    unkeyed = _scoped_worklog(99, None)
+    unkeyed.issue.id = None  # no key and no id: backfill impossible
+    mock_tempo_client.get_worklogs.return_value = [_scoped_worklog(1, "TEST-1"), unkeyed]
+
+    result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 0
+    assert "TEST-1" in result.stdout
+    assert "1 worklog(s) skipped" in result.stdout
+
+
+def test_tempo_worklogs_issue_key_bypasses_scope(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """An explicit issue key bypasses project scoping (#142)."""
+    mock_tempo_client.get_worklogs.return_value = [_scoped_worklog(2, "OTHER-9")]
+
+    result = runner.invoke(app, ["tempo", "worklogs", "OTHER-9"])
+
+    assert result.exit_code == 0
+    assert "OTHER-9" in result.stdout
+    assert "issue OTHER-9" in result.stdout
+    call_kwargs = mock_tempo_client.get_worklogs.call_args[1]
+    assert call_kwargs["issue_id"] == 12345  # from the mocked Jira issue lookup
+    assert call_kwargs["limit"] == 50  # single unpaged fetch
+
+
+def test_tempo_worklogs_scope_paginates_until_enough_matches(
+    mock_tempo_connection, mock_tempo_client, mock_jira_client
+):
+    """Scoped fetch pulls further pages until --max matches or exhaustion (#142, same class as #140)."""
+    foreign_page = [_scoped_worklog(1000 + i, f"OTHER-{i}") for i in range(1000)]
+    own_page = [_scoped_worklog(1, "TEST-1"), _scoped_worklog(2, "TEST-2")]
+    mock_tempo_client.get_worklogs.side_effect = [foreign_page, own_page]
+
+    result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 0
+    assert "TEST-1" in result.stdout
+    assert "OTHER-1" not in result.stdout
+    assert mock_tempo_client.get_worklogs.call_count == 2
+    second_call = mock_tempo_client.get_worklogs.call_args_list[1][1]
+    assert second_call["offset"] == 1000
+
+
+def test_tempo_worklogs_native_jql_scoped_to_connection_project(mock_connection):
+    """Native fallback adds the connection's project to the worklogAuthor JQL (#142)."""
+    mock_connection.tempo_enabled = False
+
+    with patch("budjira.cli.tempo.get_active_connection", return_value=mock_connection):
+        with patch("budjira.cli.tempo.JiraClient") as mock_jira_class:
+            mock_jira = mock_jira_class.from_connection.return_value
+            mock_jira.client.myself.return_value = {"accountId": "557058:abc123"}
+            mock_jira.client.search_issues.return_value = []
+
+            result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 0
+    jql = mock_jira.client.search_issues.call_args[0][0]
+    assert jql.startswith("project in (TEST) AND worklogAuthor = currentUser()")
+
+
+def test_tempo_worklogs_native_all_projects_omits_project_clause(mock_connection):
+    """Native fallback with --all-projects sends no project clause (#142)."""
+    mock_connection.tempo_enabled = False
+
+    with patch("budjira.cli.tempo.get_active_connection", return_value=mock_connection):
+        with patch("budjira.cli.tempo.JiraClient") as mock_jira_class:
+            mock_jira = mock_jira_class.from_connection.return_value
+            mock_jira.client.myself.return_value = {"accountId": "557058:abc123"}
+            mock_jira.client.search_issues.return_value = []
+
+            result = runner.invoke(app, ["tempo", "worklogs", "--all-projects"])
+
+    assert result.exit_code == 0
+    jql = mock_jira.client.search_issues.call_args[0][0]
+    assert "project" not in jql
+
+
+def _unkeyed_worklog(worklog_id: int) -> TempoWorklog:
+    """Worklog with null issue key but a numeric id (backfill scenario, #142)."""
+    worklog = _scoped_worklog(worklog_id, None)
+    worklog.issue.id = worklog_id
+    return worklog
+
+
+def _jira_issue_stub(issue_id: int, key: str) -> MagicMock:
+    stub = MagicMock()
+    stub.id = str(issue_id)
+    stub.key = key
+    return stub
+
+
+def test_tempo_worklogs_scope_backfills_keys_in_one_batch(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Missing issue keys are resolved via ONE id-in-JQL query per page, not per entry (#142 review)."""
+    mock_tempo_client.get_worklogs.return_value = [_unkeyed_worklog(101), _unkeyed_worklog(202)]
+    mock_jira_client.from_connection.return_value.client.search_issues.return_value = [
+        _jira_issue_stub(101, "TEST-101"),
+        _jira_issue_stub(202, "OTHER-202"),
+    ]
+
+    result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 0
+    assert "TEST-101" in result.stdout
+    assert "OTHER-202" not in result.stdout
+
+    # One batch query for both ids, no per-entry issue() calls
+    search = mock_jira_client.from_connection.return_value.client.search_issues
+    search.assert_called_once()
+    assert search.call_args[0][0] == "id in (101, 202)"
+    mock_jira_client.from_connection.return_value.client.issue.assert_not_called()
+
+
+def test_tempo_worklogs_scope_backfill_failure_aborts(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """A failed key lookup aborts instead of silently dropping entries (#142 review)."""
+    mock_tempo_client.get_worklogs.return_value = [_unkeyed_worklog(101)]
+    mock_jira_client.from_connection.return_value.client.search_issues.side_effect = RuntimeError("429")
+
+    result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 1
+    assert "Cannot resolve" in result.stdout
+
+
+def test_tempo_worklogs_scope_backfill_cache_shared_with_display(
+    mock_tempo_connection, mock_tempo_client, mock_jira_client
+):
+    """The scoped fetch's backfill cache is reused by the display step (#142 review)."""
+    mock_tempo_client.get_worklogs.return_value = [_unkeyed_worklog(101), _unkeyed_worklog(101)]
+    mock_tempo_client.get_worklogs.return_value[1].tempoWorklogId = 102
+    mock_jira_client.from_connection.return_value.client.search_issues.return_value = [
+        _jira_issue_stub(101, "TEST-101"),
+    ]
+
+    result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 0
+    assert result.stdout.count("TEST-101") >= 2
+    # Exactly one batch query for both entries and nothing refetched for display
+    mock_jira_client.from_connection.return_value.client.search_issues.assert_called_once()
+
+
+def test_tempo_worklogs_max_truncates_within_page(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """--max caps the collected matches even when a page yields more (#142 review)."""
+    mock_tempo_client.get_worklogs.return_value = [
+        _scoped_worklog(1, "TEST-1"),
+        _scoped_worklog(2, "TEST-2"),
+        _scoped_worklog(3, "TEST-3"),
+    ]
+
+    result = runner.invoke(app, ["tempo", "worklogs", "--max", "2"])
+
+    assert result.exit_code == 0
+    assert "(2 entries)" in result.stdout
+    assert "TEST-3" not in result.stdout
+
+
+def test_tempo_worklogs_invalid_project_key_rejected(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """--project values are validated before they reach a JQL string (#142 review)."""
+    result = runner.invoke(app, ["tempo", "worklogs", "--project", "foo bar"])
+
+    assert result.exit_code == 1
+    assert "Invalid project key" in result.stdout
+    mock_tempo_client.get_worklogs.assert_not_called()
+
+
+def test_tempo_worklogs_issue_key_with_project_flags_notes_bypass(
+    mock_tempo_connection, mock_tempo_client, mock_jira_client
+):
+    """Issue key + project flags: scoping is bypassed and the bypass is announced (#142 review)."""
+    mock_tempo_client.get_worklogs.return_value = [_scoped_worklog(2, "OTHER-9")]
+
+    result = runner.invoke(app, ["tempo", "worklogs", "OTHER-9", "--project", "TEST"])
+
+    assert result.exit_code == 0
+    assert "bypassed" in result.stdout
+    assert "OTHER-9" in result.stdout
+
+
+def test_tempo_worklogs_empty_json_carries_filter_metadata(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Even an empty JSON result reports filters, skip count and truncation (#142 review)."""
+    undeterminable = _scoped_worklog(101, None)
+    undeterminable.issue.id = None  # no key and no id: project undeterminable
+    mock_tempo_client.get_worklogs.return_value = [undeterminable]
+
+    result = runner.invoke(app, ["--format", "json", "tempo", "worklogs"])
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout)
+    assert output["total"] == 0
+    assert output["filters"] == {"projects": ["TEST"], "mine": False, "issue": None}
+    assert output["skipped_unknown_project"] == 1
+    assert output["scan_truncated"] is False
+
+
+def test_tempo_worklogs_scope_backfill_partial_result_aborts(
+    mock_tempo_connection, mock_tempo_client, mock_jira_client
+):
+    """A short id-in result (page cap / deleted issue) aborts instead of skipping (#142 review r2)."""
+    mock_tempo_client.get_worklogs.return_value = [_unkeyed_worklog(101), _unkeyed_worklog(202)]
+    mock_jira_client.from_connection.return_value.client.search_issues.return_value = [
+        _jira_issue_stub(101, "TEST-101"),
+    ]
+
+    result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 1
+    assert "only 1 of 2" in result.stdout
+    assert "202" in result.stdout  # the unresolved id is named
+
+
+def test_tempo_worklogs_scan_limit_warns(mock_tempo_connection, mock_tempo_client, mock_jira_client):
+    """Hitting the scan limit sets the truncation warning (#142 review r2)."""
+    foreign_page = [_scoped_worklog(1000 + i, f"OTHER-{i}") for i in range(1000)]
+    mock_tempo_client.get_worklogs.side_effect = [foreign_page, foreign_page]
+
+    with patch("budjira.cli.tempo._SCOPE_SCAN_LIMIT", 2000):
+        result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 0
+    assert "Scan stopped" in result.stdout
+    assert mock_tempo_client.get_worklogs.call_count == 2
+
+
+def test_tempo_worklogs_native_scan_limit_flagged(mock_connection):
+    """Native path: a full 200-issue page is reported as possibly incomplete (#142 review r2)."""
+    mock_connection.tempo_enabled = False
+
+    with patch("budjira.cli.tempo.get_active_connection", return_value=mock_connection):
+        with patch("budjira.cli.tempo.JiraClient") as mock_jira_class:
+            mock_jira = mock_jira_class.from_connection.return_value
+            mock_jira.client.myself.return_value = {"accountId": "557058:abc123"}
+            mock_jira.client.search_issues.return_value = [_jira_issue_stub(i, f"TEST-{i}") for i in range(200)]
+            mock_jira.worklogs.list.return_value = []
+
+            result = runner.invoke(app, ["tempo", "worklogs"])
+
+    assert result.exit_code == 0
+    assert "first 200 issues" in result.stdout
 
 
 def test_tempo_update_worklog_success(mock_tempo_connection, mock_tempo_client):
@@ -1296,7 +1637,7 @@ def test_tempo_worklogs_native_issue_scoped_filters_current_user(mock_connection
             result = runner.invoke(app, ["tempo", "worklogs", "PROJ-123"])
 
     assert result.exit_code == 0
-    assert "Jira Worklogs (1 entries)" in result.stdout
+    assert "Jira Worklogs — issue PROJ-123, mine (1 entries)" in result.stdout
     assert "Mine" in result.stdout
     assert "Theirs" not in result.stdout
     mock_jira.worklogs.list.assert_called_once_with("PROJ-123")

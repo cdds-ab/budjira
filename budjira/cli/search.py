@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -9,6 +11,28 @@ from rich.table import Table
 from budjira.core.jira_client import JiraClient
 from budjira.utils.connection import get_active_connection
 from budjira.utils.errors import BudjiraError
+
+# String literals are blanked (length-preserving) before clause detection so
+# their contents (e.g. summary ~ "project in scope") cannot fake a clause.
+# Backslash escapes are honoured so \" does not end the literal early.
+_JQL_LITERAL_RE = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'')
+
+# A raw JQL already scoping or historicising itself:
+# project = X / project != X / project in (...) / project was X / project changed
+_JQL_PROJECT_CLAUSE_RE = re.compile(
+    r"\bproject\s*(=|!=|(not\s+)?in\b|was\b(\s+not\b)?(\s+in\b)?|changed\b)",
+    re.IGNORECASE,
+)
+
+# Quoted field names survive the blanking of literals, so they need a
+# separate check against the original JQL
+_JQL_QUOTED_PROJECT_RE = re.compile(
+    r"[\"']project[\"']\s*(=|!=|(not\s+)?in\b|was\b|changed\b)",
+    re.IGNORECASE,
+)
+
+# ORDER BY must stay outside the parenthesised scoped query
+_JQL_ORDER_BY_RE = re.compile(r"\border\s+by\b", re.IGNORECASE)
 
 app = typer.Typer(
     name="search",
@@ -62,11 +86,18 @@ def search(
         "-c",
         help="Connection name to use (overrides BUDJIRA_CONNECTION env var)",
     ),
+    all_projects: bool = typer.Option(
+        False,
+        "--all-projects",
+        help="Disable project scoping: raw JQL is sent unchanged, filters get no project clause",
+    ),
 ) -> None:
     """Search for Jira issues using JQL or filters.
 
     You can either provide a raw JQL query string or use the filter options
     (project, status, assignee, type) to build a query automatically.
+    Raw JQL without a project clause is scoped to the connection's project
+    by default; --all-projects disables that.
 
     Examples:
 
@@ -83,13 +114,18 @@ def search(
         # Get active connection (from --connection, env var, or config)
         active_connection = get_active_connection(connection)
 
+        if project and all_projects:
+            console.print("[red]✗[/red] --project and --all-projects cannot be used together", style="red")
+            raise typer.Exit(1)
+
         # Build JQL query if not provided
         if jql is None:
             jql_parts: list[str] = []
 
             # Use provided project or connection default
-            search_project = project or active_connection.project_key
-            jql_parts.append(f"project = {search_project}")
+            if not all_projects:
+                search_project = project or active_connection.project_key
+                jql_parts.append(f"project = {search_project}")
 
             if status:
                 jql_parts.append(f"status = '{status}'")
@@ -110,6 +146,23 @@ def search(
                     "[dim]Provide either a JQL query or use filter options (--status, --assignee, etc.)[/dim]"
                 )
                 raise typer.Exit(1)
+
+        elif not all_projects:
+            # Raw JQL without a project clause: scope to the connection's
+            # project. Literals are blanked (length-preserving) so quoted
+            # text cannot fake a clause; quoted field names are checked on the
+            # original; ORDER BY stays outside the parens.
+            blanked = _JQL_LITERAL_RE.sub(lambda m: " " * len(m.group(0)), jql)
+            if not _JQL_PROJECT_CLAUSE_RE.search(blanked) and not _JQL_QUOTED_PROJECT_RE.search(jql):
+                order_match = _JQL_ORDER_BY_RE.search(blanked)
+                head = (jql[: order_match.start()] if order_match else jql).strip()
+                tail = jql[order_match.start() :] if order_match else ""
+                scoped = (
+                    f"project = {active_connection.project_key} AND ({head})"
+                    if head
+                    else f"project = {active_connection.project_key}"
+                )
+                jql = f"{scoped} {tail}".strip()
 
         console.print(f"[dim]Searching with JQL:[/dim] [cyan]{jql}[/cyan]\n")
 

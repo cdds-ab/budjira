@@ -1,3 +1,6 @@
+╭─ 🦖 budjira v1.34.1 ─ Your CLI Pal for Jira ─╮
+╰──────────────────────────────────────────────╯
+
 # budjira - Jira CLI Tool Usage Guide for AI Assistants
 
 ## Overview
@@ -269,6 +272,10 @@ budjira search "project = MYPROJ AND status = 'In Progress'"
 # Complex query
 budjira search "project = MYPROJ AND assignee = currentUser() AND status != Done ORDER BY updated DESC"
 ```
+
+Raw JQL without a project clause is scoped to the connection's project by
+default (`project = <conn> AND (<query>)`, ORDER BY stays outside);
+`--all-projects` sends the JQL unchanged.
 
 ### Filter-Based Search
 
@@ -1067,10 +1074,19 @@ budjira tempo worklogs [ISSUE-KEY] [OPTIONS]
 
 Display worklog entries from Tempo with filtering options.
 
+Results are scoped to the connection's project by default (several
+connections may share one Jira/Tempo instance). An explicit issue key
+bypasses scoping. The effective filter is shown in the table header and the
+JSON `filters` field; entries whose project cannot be determined are skipped
+and counted (`skipped_unknown_project`).
+
 **Options:**
 - `--from DATE`: Start date filter (YYYY-MM-DD)
 - `--to DATE`: End date filter (YYYY-MM-DD)
 - `--max N`, `-m`: Maximum results (default: 50)
+- `--project KEY`: Scope to another project (repeatable)
+- `--all-projects`: Disable project scoping (previous behaviour)
+- `--mine`: Show only the authenticated user's worklogs
 - `--no-epic`: Skip epic information for faster output (JSON mode only)
 
 **Examples:**
@@ -1082,8 +1098,11 @@ budjira tempo worklogs PROJ-123
 # List worklogs for date range
 budjira tempo worklogs --from 2025-10-01 --to 2025-10-31
 
-# List recent worklogs across all issues
+# List recent worklogs in the connection's project
 budjira tempo worklogs --max 20
+
+# All projects on the instance, only your own entries
+budjira tempo worklogs --all-projects --mine
 
 # JSON output for automation
 budjira --format json tempo worklogs --from 2025-10-01 --to 2025-10-31
