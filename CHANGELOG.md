@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v1.35.0 (2026-10-12)
+
+### Feat
+
+- scope tempo worklogs and search to the connection's project by default (#142)
+
+### Fix
+
+- close review round 2 findings on project scoping (#142)
+- harden project scoping after review (#142)
+
 ## v1.34.1 (2026-09-29)
 
 ### Fix
