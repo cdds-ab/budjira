@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v1.37.0 (2026-10-21)
+
+### Feat
+
+- **issue**: accept priority as numeric ID via --priority-id
+- **issue**: add --dry-run to create issue and issue update
+- **comments**: make the comment dialect configurable per connection
+- **search**: add --limit/-n and --max-results aliases for the result cap
+
 ## v1.36.0 (2026-10-12)
 
 ### Feat
