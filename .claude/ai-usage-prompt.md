@@ -1,6 +1,3 @@
-╭─ 🦖 budjira v1.35.0 ─ Your CLI Pal for Jira ─╮
-╰──────────────────────────────────────────────╯
-
 # budjira - Jira CLI Tool Usage Guide for AI Assistants
 
 ## Overview
@@ -748,13 +745,17 @@ Add comments to Jira issues without logging time (unlike worklogs which combine 
 **Options:**
 - `--editor`, `-e`: Open editor for multi-line comment
 - `--attach FILE`: Attach file(s) to the issue and reference them in the comment (repeatable; images are embedded via `!file!` wiki markup, other files linked via `[^file]`)
-- `--embed FILE`: Embed image file(s) inline in the comment body (repeatable; Jira Cloud only — posts the comment as ADF via REST API v3 so the image renders inside the body)
+- `--embed FILE`: Embed image file(s) inline in the comment body (repeatable; Jira Cloud only — posts the comment as ADF via REST API v3 so the image renders inside the body; no dialect applies)
+- `--dialect {markdown,wiki}`: Dialect the comment is written in (overrides the connection's `comment_dialect` for this call)
 - `--connection NAME`, `-c`: Use specific connection
 
 **Behavior:**
 - If TEXT is omitted, editor opens automatically (unless `--attach`/`--embed` files carry the comment)
 - If TEXT is provided with `--editor`, editor opens with TEXT as initial content
-- Supports markdown formatting
+- The connection's `comment_dialect` decides the treatment: `wiki` (the default)
+  sends the text unchanged — the historical behaviour; `markdown` converts to
+  wiki markup first. Descriptions follow the separate `description_dialect`
+  (default `markdown`) — the two fields are configured independently.
 - Comments are posted immediately without time tracking
 
 **Examples:**
