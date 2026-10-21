@@ -14,6 +14,103 @@ from budjira.utils.errors import InvalidIssueError, JiraAPIError, PermissionErro
 if TYPE_CHECKING:
     from budjira.models.connection import DescriptionDialect
 
+# Marker for the currentUser() account id in dry-run payloads: the id is only
+# resolved (via a read call) when the update is actually applied.
+CURRENT_USER_PLACEHOLDER = "<currentUser()>"
+
+
+def build_create_fields(
+    project_key: str,
+    summary: str,
+    issue_type: str,
+    description: str | None = None,
+    priority: str | None = None,
+    assignee: str | None = None,
+    labels: list[str] | None = None,
+    description_dialect: DescriptionDialect = "markdown",
+    extra_fields: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Assemble the exact ``fields`` payload for issue creation.
+
+    Shared by :meth:`IssueService.create` and the CLI ``--dry-run`` preview so
+    the preview always shows what the real call would send.
+
+    Args:
+        project_key: Project key (e.g., PROJ)
+        summary: Issue summary
+        issue_type: Issue type name
+        description: Issue description (converted according to the dialect)
+        priority: Priority name
+        assignee: Assignee username
+        labels: List of labels
+        description_dialect: Dialect the description is authored in
+        extra_fields: Additional fields (timetracking, parent, custom fields)
+
+    Returns:
+        The ``fields`` dict for the create call
+    """
+    fields: dict[str, Any] = {
+        "project": {"key": project_key},
+        "summary": summary,
+        "issuetype": {"name": issue_type},
+    }
+    if description:
+        fields["description"] = render_description(description, description_dialect)
+    if priority:
+        fields["priority"] = {"name": priority}
+    if assignee:
+        fields["assignee"] = {"name": assignee}
+    if labels:
+        fields["labels"] = labels
+    if extra_fields:
+        fields.update(extra_fields)
+    return fields
+
+
+def build_update_fields(
+    fields: dict[str, Any] | None = None,
+    assignee: str | None = None,
+    priority: str | None = None,
+    summary: str | None = None,
+    description: str | None = None,
+    description_dialect: DescriptionDialect = "markdown",
+    current_user_account_id: str | None = None,
+) -> dict[str, Any]:
+    """Assemble the exact ``fields`` payload for an issue update.
+
+    Shared by :meth:`IssueService.update` and the CLI ``--dry-run`` preview.
+    For ``assignee="currentUser()"`` the account id must be supplied by the
+    caller; without one (a dry run performs no API call) the payload carries
+    :data:`CURRENT_USER_PLACEHOLDER` to show where resolution will happen.
+
+    Args:
+        fields: Raw field updates to start from (not mutated)
+        assignee: Assignee username, "currentUser()", or "" to unassign
+        priority: Priority name
+        summary: New summary
+        description: New description (converted according to the dialect)
+        description_dialect: Dialect the description is authored in
+        current_user_account_id: Resolved account id for "currentUser()"
+
+    Returns:
+        The ``fields`` dict for the update call
+    """
+    update_fields: dict[str, Any] = dict(fields) if fields else {}
+    if assignee is not None:
+        if assignee.lower() == "currentuser()":
+            update_fields["assignee"] = {"accountId": current_user_account_id or CURRENT_USER_PLACEHOLDER}
+        elif assignee == "":
+            update_fields["assignee"] = None
+        else:
+            update_fields["assignee"] = {"name": assignee}
+    if priority is not None:
+        update_fields["priority"] = {"name": priority}
+    if summary is not None:
+        update_fields["summary"] = summary
+    if description is not None:
+        update_fields["description"] = render_description(description, description_dialect)
+    return update_fields
+
 
 class IssueService(BaseJiraService):
     """Service for managing Jira issues (search, get, create, update)."""
@@ -174,23 +271,17 @@ class IssueService(BaseJiraService):
         try:
             self._log_operation("Create issue", project=project_key, type=issue_type, summary=summary)
 
-            fields: dict[str, Any] = {
-                "project": {"key": project_key},
-                "summary": summary,
-                "issuetype": {"name": issue_type},
-            }
-
-            if description:
-                fields["description"] = render_description(description, description_dialect)
-            if priority:
-                fields["priority"] = {"name": priority}
-            if assignee:
-                fields["assignee"] = {"name": assignee}
-            if labels:
-                fields["labels"] = labels
-
-            # Add any extra fields
-            fields.update(extra_fields)
+            fields = build_create_fields(
+                project_key,
+                summary,
+                issue_type,
+                description,
+                priority,
+                assignee,
+                labels,
+                description_dialect,
+                extra_fields,
+            )
 
             jira_issue = self.client.create_issue(fields=fields)
             self._logger.info(f"Created issue: {jira_issue.key}")
@@ -275,32 +366,21 @@ class IssueService(BaseJiraService):
         try:
             self._log_operation("Update issue", issue_key=issue_key)
 
-            update_fields: dict[str, Any] = fields or {}
+            # Resolve currentUser() only when actually used (read call)
+            current_user_account_id: str | None = None
+            if assignee is not None and assignee.lower() == "currentuser()":
+                myself = self.client.myself()
+                current_user_account_id = myself["accountId"]
 
-            # Handle assignee
-            if assignee is not None:
-                if assignee.lower() == "currentuser()":
-                    # Get current user's account ID
-                    myself = self.client.myself()
-                    update_fields["assignee"] = {"accountId": myself["accountId"]}
-                elif assignee == "":
-                    # Unassign
-                    update_fields["assignee"] = None
-                else:
-                    # Assign to specific user
-                    update_fields["assignee"] = {"name": assignee}
-
-            # Handle priority
-            if priority is not None:
-                update_fields["priority"] = {"name": priority}
-
-            # Handle summary
-            if summary is not None:
-                update_fields["summary"] = summary
-
-            # Handle description
-            if description is not None:
-                update_fields["description"] = render_description(description, description_dialect)
+            update_fields = build_update_fields(
+                fields,
+                assignee,
+                priority,
+                summary,
+                description,
+                description_dialect,
+                current_user_account_id,
+            )
 
             if update_fields:
                 self.client.issue(issue_key).update(fields=update_fields)

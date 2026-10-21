@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
+from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
+from rich.syntax import Syntax
 from rich.table import Table
 
 from budjira.config.metadata_cache import MetadataCache
 from budjira.config.settings import get_settings
 from budjira.core.jira_client import JiraClient
 from budjira.models.issue import IssueType, Priority
+from budjira.services.issues import build_create_fields
 from budjira.utils.connection import get_active_connection
 from budjira.utils.description import DescriptionDialectOption, resolve_description_dialect
 from budjira.utils.dor_validator import format_validation_result, validate_description
@@ -21,7 +25,7 @@ from budjira.utils.errors import BudjiraError
 
 if TYPE_CHECKING:
     from budjira.config.settings import Settings
-    from budjira.models.connection import Connection
+    from budjira.models.connection import Connection, DescriptionDialect
     from budjira.models.custom_field import CustomFieldConfig
     from budjira.models.issue import Issue
     from budjira.models.project_metadata import ProjectMetadata
@@ -625,6 +629,55 @@ def _display_created_issue(
     console.print(f"\n[dim]View in Jira: {issue_url}[/dim]")
 
 
+def _display_create_dry_run(
+    project_key: str,
+    issue_type: str,
+    summary: str,
+    description: str | None,
+    dialect: DescriptionDialect,
+    extra_fields: dict[str, Any],
+    priority: str | None,
+    assignee: str | None,
+    labels: list[str],
+    epic: str | None,
+) -> None:
+    """Show the exact create payload without touching the API.
+
+    Args:
+        project_key: Target project key
+        issue_type: Resolved issue type
+        summary: Issue summary
+        description: Raw description as authored (None if not set)
+        dialect: Resolved description dialect
+        extra_fields: Timetracking, parent and custom field payloads
+        priority: Priority if given
+        assignee: Assignee if given
+        labels: Labels if given
+        epic: Epic key the issue would be linked to after creation
+    """
+    fields = build_create_fields(
+        project_key,
+        summary,
+        issue_type,
+        description,
+        priority,
+        assignee,
+        labels,
+        dialect,
+        extra_fields,
+    )
+    console.print(f"\n[cyan]Dry run:[/cyan] would create {issue_type} in project {project_key} — no API call made")
+    console.print("[cyan]fields payload:[/cyan]")
+    console.print(Syntax(json.dumps(fields, indent=2, ensure_ascii=False), "json", word_wrap=True))
+    if description:
+        console.print(
+            f"[cyan]Description after conversion (dialect: {dialect}) — the exact string that would be sent:[/cyan]"
+        )
+        console.print(Panel(fields["description"], expand=False))
+    if epic:
+        console.print(f"[dim]Would then link the new issue to epic {epic}[/dim]")
+
+
 @app.command()
 def issue(
     summary: str | None = typer.Argument(None, help="Issue summary/title"),
@@ -712,6 +765,11 @@ def issue(
         "--custom",
         help="Custom field value as name=value (can be specified multiple times)",
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show the exact fields payload and converted description without creating anything",
+    ),
 ) -> None:
     """Create a new Jira issue.
 
@@ -751,6 +809,9 @@ def issue(
 
         # Multiple custom fields
         budjira create issue "New feature" --type Story --custom env=Production --custom component=API
+
+        # Preview the exact payload (fields + converted description) without creating
+        budjira create issue "Fix login bug" --type Bug --dry-run --no-interactive
     """
     try:
         # Setup
@@ -784,9 +845,9 @@ def issue(
         _validate_parent(parent, issue_type, project_metadata)
         _validate_dor(description, issue_type, skip_dor, settings, interactive)
 
-        # Create issue
-        client = JiraClient.from_connection(active_connection)
-        console.print(f"\n[dim]Creating {issue_type} in project {project_key}...[/dim]")
+        # Resolve the payload pieces before any client exists, so a dry run
+        # never constructs one
+        resolved_dialect = resolve_description_dialect(description_dialect, active_connection)
 
         extra_fields = _prepare_time_tracking(original_estimate, remaining_estimate)
 
@@ -798,6 +859,25 @@ def issue(
             custom_api_fields = _format_custom_fields_for_api(custom_values, custom_field_configs)
             extra_fields.update(custom_api_fields)
 
+        if dry_run:
+            _display_create_dry_run(
+                project_key,
+                issue_type,
+                summary,
+                description,
+                resolved_dialect,
+                extra_fields,
+                priority,
+                assignee,
+                labels,
+                epic,
+            )
+            return
+
+        # Create issue
+        client = JiraClient.from_connection(active_connection)
+        console.print(f"\n[dim]Creating {issue_type} in project {project_key}...[/dim]")
+
         created_issue = client.create_issue(
             project_key=project_key,
             summary=summary,
@@ -806,7 +886,7 @@ def issue(
             priority=priority,
             assignee=assignee,
             labels=labels,
-            description_dialect=resolve_description_dialect(description_dialect, active_connection),
+            description_dialect=resolved_dialect,
             **extra_fields,
         )
 

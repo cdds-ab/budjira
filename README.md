@@ -314,6 +314,22 @@ budjira connect add --name work --url https://work.atlassian.net \
 budjira comment add PROJ-123 "## Notes" --dialect markdown
 ```
 
+**Dry run — verify the exact payload before the irreversible write:**
+
+`--dry-run` on `create issue` and `issue update` prints the resolved `fields`
+payload and the description *after* dialect conversion — the exact string that
+would be sent — and performs no API write. On instances where issues cannot be
+deleted and API-posted comments cannot be edited, this is the way to check the
+customer format first.
+
+```bash
+# Preview creation (fields + converted description), no API call
+budjira create issue "Fix login bug" --type Bug --description "## Notes" --dry-run --no-interactive
+
+# Preview an update the same way
+budjira issue update PROJ-123 --priority High --description "## Notes" --dry-run
+```
+
 **Project metadata:** issue types, priorities and components are discovered from Jira and
 cached locally — they drive validation of `--type`/`--priority` and sub-task detection:
 

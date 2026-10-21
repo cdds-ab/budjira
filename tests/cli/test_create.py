@@ -1822,3 +1822,92 @@ class TestCreateSubtask:
         result = _get_parent_input(interactive=True, parent="TEST-1", issue_type="Subtask", metadata=None)
         assert result == "TEST-1"
         mock_prompt.ask.assert_not_called()
+
+
+class TestCreateDryRun:
+    """Test create issue --dry-run."""
+
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_dry_run_makes_no_api_call(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+    ) -> None:
+        """Dry run prints the exact payload and never constructs a client."""
+        mock_get_active_connection.return_value = mock_connection
+
+        result = runner.invoke(
+            app,
+            [
+                "New bug",
+                "--type",
+                "Bug",
+                "--description",
+                "## Heading",
+                "--priority",
+                "High",
+                "--label",
+                "bug",
+                "--parent",
+                "TEST-1",
+                "--no-interactive",
+                "--dry-run",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Dry run" in result.stdout
+        assert "fields payload" in result.stdout
+        assert '"key": "TEST"' in result.stdout
+        assert '"name": "Bug"' in result.stdout
+        assert '"name": "High"' in result.stdout
+        assert '"key": "TEST-1"' in result.stdout
+        mock_jira_client_class.from_connection.assert_not_called()
+
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_dry_run_shows_converted_description(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+    ) -> None:
+        """Markdown is shown after conversion - the exact string that would be sent."""
+        mock_get_active_connection.return_value = mock_connection
+
+        result = runner.invoke(
+            app,
+            ["T", "--type", "Bug", "--description", "## Heading", "--no-interactive", "--dry-run"],
+        )
+
+        assert result.exit_code == 0
+        assert "h2. Heading" in result.stdout
+        mock_jira_client_class.from_connection.assert_not_called()
+
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_dry_run_wiki_dialect_passes_description_through(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+    ) -> None:
+        """A wiki-dialect connection shows the description unchanged."""
+        mock_get_active_connection.return_value = Connection(
+            name="wiki-connection",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+            description_dialect="wiki",
+        )
+
+        result = runner.invoke(
+            app,
+            ["T", "--type", "Bug", "--description", "# not a heading", "--no-interactive", "--dry-run"],
+        )
+
+        assert result.exit_code == 0
+        assert "# not a heading" in result.stdout
+        assert "h1." not in result.stdout
+        mock_jira_client_class.from_connection.assert_not_called()
