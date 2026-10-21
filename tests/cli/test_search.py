@@ -191,6 +191,35 @@ class TestSearchCommand:
             max_results=100,
         )
 
+    @pytest.mark.parametrize("flag", ["--limit", "-n", "--max-results"])
+    @patch("budjira.cli.search.JiraClient")
+    @patch("budjira.cli.search.get_active_connection")
+    def test_search_with_limit_aliases(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        flag: str,
+        mock_connection: Connection,
+        mock_issue: Issue,
+    ) -> None:
+        """Test search with --limit/-n/--max-results spellings of the result cap."""
+        # Setup mocks
+        mock_get_active_connection.return_value = mock_connection
+
+        mock_client = MagicMock()
+        mock_client.search_issues.return_value = [mock_issue]
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        # Run command
+        result = runner.invoke(app, ["project = TEST", flag, "5"])
+
+        # Verify
+        assert result.exit_code == 0
+        mock_client.search_issues.assert_called_once_with(
+            "project = TEST",
+            max_results=5,
+        )
+
     @patch("budjira.cli.search.JiraClient")
     @patch("budjira.cli.search.get_active_connection")
     def test_search_no_results(

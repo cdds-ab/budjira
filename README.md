@@ -195,6 +195,9 @@ budjira search "project = PROJ AND status = 'In Progress'"
 budjira search --status "In Progress" --assignee currentUser()
 budjira search --project PROJ --type Bug --max 100
 
+# Cap the total number of results (--max, --limit/-n and --max-results are aliases)
+budjira search "project = PROJ ORDER BY created DESC" --limit 5
+
 # Use specific connection
 budjira search --connection my-connection --status Done
 

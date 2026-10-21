@@ -435,8 +435,8 @@ budjira search --assignee currentUser()
 # Multiple filters (combined with AND)
 budjira search --project MYPROJ --type Bug --status Open
 
-# Limit results
-budjira search --status "To Do" --max 50
+# Limit results (total across pages; --max, --limit and --max-results are the same option)
+budjira search --status "To Do" --limit 10
 ```
 
 **Available Filters:**
@@ -444,7 +444,7 @@ budjira search --status "To Do" --max 50
 - `--status STATUS`: Filter by status name
 - `--assignee USER`: Filter by assignee (supports currentUser())
 - `--type TYPE`: Filter by issue type (Bug, Story, Task, etc.)
-- `--max N`: Limit number of results (default: 50)
+- `--max N` / `--limit N` / `--max-results N`: Limit total number of results (default: 50)
 
 ### Search Output
 

@@ -76,7 +76,10 @@ def search(
         50,
         "--max",
         "-m",
-        help="Maximum number of results to return",
+        "--limit",
+        "-n",
+        "--max-results",
+        help="Maximum total number of results to return (across pages)",
         min=1,
         max=1000,
     ),
@@ -202,7 +205,7 @@ def search(
         # Show summary
         console.print(f"\n[dim]Found {len(issues)} issue{'s' if len(issues) != 1 else ''}[/dim]")
         if len(issues) == max_results:
-            console.print(f"[dim]Limited to {max_results} results. Use --max to increase.[/dim]")
+            console.print(f"[dim]Limited to {max_results} results. Use --max/--limit to increase.[/dim]")
 
     except BudjiraError as e:
         console.print(f"[red]✗[/red] {e}", style="red")
