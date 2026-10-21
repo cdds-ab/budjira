@@ -29,6 +29,7 @@ def build_create_fields(
     labels: list[str] | None = None,
     description_dialect: DescriptionDialect = "markdown",
     extra_fields: dict[str, Any] | None = None,
+    priority_id: str | None = None,
 ) -> dict[str, Any]:
     """Assemble the exact ``fields`` payload for issue creation.
 
@@ -40,11 +41,13 @@ def build_create_fields(
         summary: Issue summary
         issue_type: Issue type name
         description: Issue description (converted according to the dialect)
-        priority: Priority name
+        priority: Priority name (sent as {"name": ...})
         assignee: Assignee username
         labels: List of labels
         description_dialect: Dialect the description is authored in
         extra_fields: Additional fields (timetracking, parent, custom fields)
+        priority_id: Priority as numeric ID (sent as {"id": ...}; wins over
+            priority when both are given)
 
     Returns:
         The ``fields`` dict for the create call
@@ -56,7 +59,9 @@ def build_create_fields(
     }
     if description:
         fields["description"] = render_description(description, description_dialect)
-    if priority:
+    if priority_id:
+        fields["priority"] = {"id": priority_id}
+    elif priority:
         fields["priority"] = {"name": priority}
     if assignee:
         fields["assignee"] = {"name": assignee}
@@ -75,6 +80,7 @@ def build_update_fields(
     description: str | None = None,
     description_dialect: DescriptionDialect = "markdown",
     current_user_account_id: str | None = None,
+    priority_id: str | None = None,
 ) -> dict[str, Any]:
     """Assemble the exact ``fields`` payload for an issue update.
 
@@ -86,11 +92,13 @@ def build_update_fields(
     Args:
         fields: Raw field updates to start from (not mutated)
         assignee: Assignee username, "currentUser()", or "" to unassign
-        priority: Priority name
+        priority: Priority name (sent as {"name": ...})
         summary: New summary
         description: New description (converted according to the dialect)
         description_dialect: Dialect the description is authored in
         current_user_account_id: Resolved account id for "currentUser()"
+        priority_id: Priority as numeric ID (sent as {"id": ...}; wins over
+            priority when both are given)
 
     Returns:
         The ``fields`` dict for the update call
@@ -103,7 +111,9 @@ def build_update_fields(
             update_fields["assignee"] = None
         else:
             update_fields["assignee"] = {"name": assignee}
-    if priority is not None:
+    if priority_id is not None:
+        update_fields["priority"] = {"id": priority_id}
+    elif priority is not None:
         update_fields["priority"] = {"name": priority}
     if summary is not None:
         update_fields["summary"] = summary
@@ -242,6 +252,7 @@ class IssueService(BaseJiraService):
         issue_type: str,
         description: str | None = None,
         priority: str | None = None,
+        priority_id: str | None = None,
         assignee: str | None = None,
         labels: list[str] | None = None,
         description_dialect: DescriptionDialect = "markdown",
@@ -254,7 +265,9 @@ class IssueService(BaseJiraService):
             summary: Issue summary
             issue_type: Issue type (Bug, Task, Story, etc.)
             description: Issue description
-            priority: Priority level
+            priority: Priority name (sent as {"name": ...})
+            priority_id: Priority as numeric ID (sent as {"id": ...}, for
+                instances that reject names)
             assignee: Assignee username
             labels: List of labels
             description_dialect: Dialect the description is authored in, resolved by the caller
@@ -281,6 +294,7 @@ class IssueService(BaseJiraService):
                 labels,
                 description_dialect,
                 extra_fields,
+                priority_id=priority_id,
             )
 
             jira_issue = self.client.create_issue(fields=fields)
@@ -292,7 +306,10 @@ class IssueService(BaseJiraService):
             if e.status_code == 403:
                 raise PermissionError(f"Permission denied creating issue in project '{project_key}'.") from e
             elif e.status_code == 400:
-                raise JiraAPIError(f"Invalid issue data: {e.text}. Check issue type, priority, and field names.") from e
+                hint = self._available_priorities_hint(priority or priority_id)
+                raise JiraAPIError(
+                    f"Invalid issue data: {e.text}. Check issue type, priority, and field names.{hint}"
+                ) from e
             else:
                 self._handle_jira_error(e, "Create issue", project=project_key)
                 raise  # Ensure type checker knows this path raises
@@ -344,6 +361,7 @@ class IssueService(BaseJiraService):
         fields: dict[str, Any] | None = None,
         assignee: str | None = None,
         priority: str | None = None,
+        priority_id: str | None = None,
         summary: str | None = None,
         description: str | None = None,
         description_dialect: DescriptionDialect = "markdown",
@@ -354,7 +372,9 @@ class IssueService(BaseJiraService):
             issue_key: Issue key (e.g., PROJ-123)
             fields: Dict of field updates (raw Jira field format)
             assignee: Assignee username or account ID (or "currentUser()")
-            priority: Priority name
+            priority: Priority name (sent as {"name": ...})
+            priority_id: Priority as numeric ID (sent as {"id": ...}, for
+                instances that reject names)
             summary: New summary
             description: New description
             description_dialect: Dialect the description is authored in, resolved by the caller
@@ -380,6 +400,7 @@ class IssueService(BaseJiraService):
                 description,
                 description_dialect,
                 current_user_account_id,
+                priority_id=priority_id,
             )
 
             if update_fields:
@@ -392,8 +413,31 @@ class IssueService(BaseJiraService):
             if e.status_code == 404:
                 raise InvalidIssueError(f"Issue '{issue_key}' not found") from e
             elif e.status_code == 400:
-                raise JiraAPIError(f"Invalid field values: {e.text}") from e
+                hint = self._available_priorities_hint(priority or priority_id)
+                raise JiraAPIError(f"Invalid field values: {e.text}{hint}") from e
             else:
                 self._handle_jira_error(e, "Update issue", issue_key=issue_key)
         except Exception as e:
             raise JiraAPIError(f"Unexpected error updating issue: {e}") from e
+
+    def _available_priorities_hint(self, priority_given: str | None) -> str:
+        """Best-effort list of the instance's priorities after a rejected one.
+
+        A 400 on create/update names no field; when a priority was involved,
+        the values the instance actually offers are the most useful answer.
+        A failing read must never mask the original error.
+
+        Args:
+            priority_given: The priority name or id the caller supplied
+
+        Returns:
+            Sentence listing the available priorities, or empty string
+        """
+        if not priority_given:
+            return ""
+        try:
+            priorities = self.client.priorities()
+        except Exception:
+            return ""
+        names = ", ".join(p.name for p in priorities)
+        return f" Available priorities on this instance: {names}."

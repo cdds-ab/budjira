@@ -247,6 +247,7 @@ def _display_update_dry_run(
     remaining_estimate: str | None,
     log_work: str | None,
     work_comment: str | None,
+    priority_id: str | None = None,
 ) -> None:
     """Show the exact update payload(s) without touching the API.
 
@@ -269,14 +270,16 @@ def _display_update_dry_run(
         remaining_estimate: Remaining estimate option value
         log_work: Work time that would be logged
         work_comment: Worklog comment
+        priority_id: Priority as numeric ID option value
     """
-    if any([assignee is not None, priority, summary, description]):
+    if any([assignee is not None, priority, priority_id, summary, description]):
         update_fields = build_update_fields(
             assignee=assignee,
             priority=priority,
             summary=summary,
             description=description,
             description_dialect=resolve_description_dialect(description_dialect, conn),
+            priority_id=priority_id,
         )
         console.print(f"[cyan]Dry run:[/cyan] would update {issue_key} — no API call made")
         console.print("[cyan]fields payload:[/cyan]")
@@ -336,6 +339,12 @@ def update_issue(
         str | None, typer.Option("--assignee", "-a", help="Assign to user (username or 'currentUser()')")
     ] = None,
     priority: Annotated[str | None, typer.Option("--priority", "-p", help="Set priority")] = None,
+    priority_id: Annotated[
+        str | None,
+        typer.Option(
+            "--priority-id", help='Set priority by numeric ID, sent as {"id": ...} (for instances that reject names)'
+        ),
+    ] = None,
     add_label: Annotated[list[str] | None, typer.Option("--add-label", help="Add label (repeatable)")] = None,
     remove_label: Annotated[list[str] | None, typer.Option("--remove-label", help="Remove label (repeatable)")] = None,
     summary: Annotated[str | None, typer.Option("--summary", help="Update summary")] = None,
@@ -397,6 +406,10 @@ def update_issue(
             console.print("[red]Error: --work-comment requires --log-work[/red]")
             raise typer.Exit(1)
 
+        if priority and priority_id:
+            console.print("[red]Error: --priority and --priority-id cannot be used together[/red]")
+            raise typer.Exit(1)
+
         # Check that at least one update option is provided
         if not any(
             [
@@ -404,6 +417,7 @@ def update_issue(
                 field,
                 assignee is not None,
                 priority,
+                priority_id,
                 add_label,
                 remove_label,
                 summary,
@@ -471,17 +485,19 @@ def update_issue(
                 remaining_estimate=remaining_estimate,
                 log_work=log_work,
                 work_comment=work_comment,
+                priority_id=priority_id,
             )
             return
 
         # Perform field updates
         try:
             # Update basic fields
-            if any([assignee is not None, priority, summary, description]):
+            if any([assignee is not None, priority, priority_id, summary, description]):
                 client.update_issue(
                     issue_key,
                     assignee=assignee,
                     priority=priority,
+                    priority_id=priority_id,
                     summary=summary,
                     description=description,
                     description_dialect=resolve_description_dialect(description_dialect, conn),
@@ -490,6 +506,8 @@ def update_issue(
                     changes.append(("Assignee", f"→ {assignee}"))
                 if priority:
                     changes.append(("Priority", f"→ {priority}"))
+                if priority_id:
+                    changes.append(("Priority", f"→ id {priority_id}"))
                 if summary:
                     changes.append(("Summary", "Updated"))
                 if description:

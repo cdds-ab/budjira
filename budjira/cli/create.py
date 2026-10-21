@@ -640,6 +640,7 @@ def _display_create_dry_run(
     assignee: str | None,
     labels: list[str],
     epic: str | None,
+    priority_id: str | None = None,
 ) -> None:
     """Show the exact create payload without touching the API.
 
@@ -654,6 +655,7 @@ def _display_create_dry_run(
         assignee: Assignee if given
         labels: Labels if given
         epic: Epic key the issue would be linked to after creation
+        priority_id: Priority as numeric ID if given
     """
     fields = build_create_fields(
         project_key,
@@ -665,6 +667,7 @@ def _display_create_dry_run(
         labels,
         dialect,
         extra_fields,
+        priority_id=priority_id,
     )
     console.print(f"\n[cyan]Dry run:[/cyan] would create {issue_type} in project {project_key} — no API call made")
     console.print("[cyan]fields payload:[/cyan]")
@@ -709,6 +712,11 @@ def issue(
         "--priority",
         help="Priority level (uses project metadata if available, otherwise: "
         f"{', '.join([p.value for p in Priority])})",
+    ),
+    priority_id: str = typer.Option(
+        None,
+        "--priority-id",
+        help='Priority as numeric ID, sent as {"id": ...} (for instances that reject priority names)',
     ),
     assignee: str = typer.Option(
         None,
@@ -841,6 +849,9 @@ def issue(
             _check_required_custom_fields(custom_values, custom_field_configs)
 
         # Validate
+        if priority and priority_id:
+            console.print("[red]✗[/red] --priority and --priority-id cannot be used together", style="red")
+            raise typer.Exit(1)
         _validate_required_fields(summary, issue_type)
         _validate_parent(parent, issue_type, project_metadata)
         _validate_dor(description, issue_type, skip_dor, settings, interactive)
@@ -871,6 +882,7 @@ def issue(
                 assignee,
                 labels,
                 epic,
+                priority_id=priority_id,
             )
             return
 
@@ -884,6 +896,7 @@ def issue(
             issue_type=issue_type,
             description=description,
             priority=priority,
+            priority_id=priority_id,
             assignee=assignee,
             labels=labels,
             description_dialect=resolved_dialect,

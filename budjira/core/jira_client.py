@@ -176,6 +176,7 @@ class JiraClient:
         issue_type: str,
         description: str | None = None,
         priority: str | None = None,
+        priority_id: str | None = None,
         assignee: str | None = None,
         labels: list[str] | None = None,
         description_dialect: DescriptionDialect = "markdown",
@@ -191,6 +192,7 @@ class JiraClient:
             issue_type,
             description,
             priority,
+            priority_id,
             assignee,
             labels,
             description_dialect,
@@ -203,6 +205,7 @@ class JiraClient:
         fields: dict[str, Any] | None = None,
         assignee: str | None = None,
         priority: str | None = None,
+        priority_id: str | None = None,
         summary: str | None = None,
         description: str | None = None,
         description_dialect: DescriptionDialect = "markdown",
@@ -211,7 +214,9 @@ class JiraClient:
 
         DEPRECATED: Use client.issues.update() instead.
         """
-        self.issues.update(issue_key, fields, assignee, priority, summary, description, description_dialect)
+        self.issues.update(
+            issue_key, fields, assignee, priority, priority_id, summary, description, description_dialect
+        )
 
     # ==================== Worklog Operations (delegate to WorklogService) ====================
 
