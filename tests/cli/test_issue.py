@@ -722,3 +722,28 @@ def test_dry_run_lists_labels_epic_and_worklog(mock_client: MagicMock) -> None:
     mock_client.link_to_epic.assert_not_called()
     mock_client.update_issue.assert_not_called()
     mock_client.add_worklog.assert_not_called()
+
+
+def test_dry_run_shows_priority_id_payload(mock_client: MagicMock) -> None:
+    """--priority-id appears in the preview as {"id": ...}, still without an API write."""
+    result = runner.invoke(app, ["-q", "issue", "update", "TEST-123", "--priority-id", "3", "--dry-run"])
+
+    assert result.exit_code == 0
+    assert '"id": "3"' in result.stdout
+    mock_client.update_issue.assert_not_called()
+
+
+def test_update_with_priority_id(mock_client: MagicMock) -> None:
+    """--priority-id reaches the service layer."""
+    result = runner.invoke(app, ["-q", "issue", "update", "TEST-123", "--priority-id", "3"])
+
+    assert result.exit_code == 0
+    assert mock_client.update_issue.call_args.kwargs["priority_id"] == "3"
+
+
+def test_update_priority_and_priority_id_conflict(mock_client: MagicMock) -> None:
+    result = runner.invoke(app, ["-q", "issue", "update", "TEST-123", "--priority", "High", "--priority-id", "3"])
+
+    assert result.exit_code == 1
+    assert "cannot be used together" in result.stdout
+    mock_client.update_issue.assert_not_called()

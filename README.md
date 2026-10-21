@@ -255,7 +255,16 @@ budjira create issue "Story 3" --type Story --epic PROJ-100 --no-interactive
 
 # Create a sub-task under a parent issue
 budjira create issue "Implement login form" --type Subtask --parent PROJ-123 --no-interactive
+
+# Priority as numeric ID (instances that reject priority names)
+budjira create issue "Fix bug" --type Bug --priority-id 3 --no-interactive
+budjira issue update PROJ-123 --priority-id 3
 ```
+
+**Priority by name or ID:** `--priority` sends the name (`{"name": ...}`) and stays
+the default. `--priority-id` sends `{"id": ...}` for instances whose priorities
+reject names; the two options are mutually exclusive. When a priority is
+rejected, the error message lists the values the instance actually offers.
 
 **Epic Linking:**
 - Use `--epic PROJ-100` to link issue to epic during creation

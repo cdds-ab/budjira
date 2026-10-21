@@ -232,3 +232,109 @@ class TestBuildUpdateFields:
 
         fields = mock_issue.update.call_args.kwargs["fields"]
         assert fields["assignee"] == {"accountId": "abc123"}
+
+
+class TestPriorityId:
+    """Priority can be sent as {"id": ...} for instances that reject names."""
+
+    def test_create_with_priority_id_sends_id(self) -> None:
+        mock_client = MagicMock()
+        service = IssueService(mock_client)
+
+        with patch("budjira.services.issues.Issue.from_jira_issue", return_value=MagicMock()):
+            service.create("PROJ", "summary", "Task", priority_id="3")
+
+        fields = mock_client.create_issue.call_args.kwargs["fields"]
+        assert fields["priority"] == {"id": "3"}
+
+    def test_create_with_priority_name_sends_name(self) -> None:
+        mock_client = MagicMock()
+        service = IssueService(mock_client)
+
+        with patch("budjira.services.issues.Issue.from_jira_issue", return_value=MagicMock()):
+            service.create("PROJ", "summary", "Task", priority="High")
+
+        fields = mock_client.create_issue.call_args.kwargs["fields"]
+        assert fields["priority"] == {"name": "High"}
+
+    def test_create_with_priority_id_wins_over_name(self) -> None:
+        """The service trusts the caller's explicit id when both are given."""
+        mock_client = MagicMock()
+        service = IssueService(mock_client)
+
+        with patch("budjira.services.issues.Issue.from_jira_issue", return_value=MagicMock()):
+            service.create("PROJ", "summary", "Task", priority="High", priority_id="3")
+
+        fields = mock_client.create_issue.call_args.kwargs["fields"]
+        assert fields["priority"] == {"id": "3"}
+
+    def test_update_with_priority_id_sends_id(self) -> None:
+        mock_client = MagicMock()
+        mock_issue = MagicMock()
+        mock_client.issue.return_value = mock_issue
+        service = IssueService(mock_client)
+
+        service.update("PROJ-1", priority_id="3")
+
+        fields = mock_issue.update.call_args.kwargs["fields"]
+        assert fields["priority"] == {"id": "3"}
+
+
+class TestPriorityErrorHint:
+    """A rejected priority names the values the instance actually offers."""
+
+    @staticmethod
+    def _client_with_priorities() -> MagicMock:
+        mock_client = MagicMock()
+        high = MagicMock()
+        high.name = "High"
+        medium = MagicMock()
+        medium.name = "Medium"
+        mock_client.priorities.return_value = [high, medium]
+        return mock_client
+
+    def test_create_400_with_priority_lists_available_priorities(self) -> None:
+        mock_client = self._client_with_priorities()
+        mock_client.create_issue.side_effect = JIRAError(status_code=400, text="priority not valid")
+        service = IssueService(mock_client)
+
+        with pytest.raises(JiraAPIError, match="Available priorities on this instance: High, Medium"):
+            service.create("PROJ", "summary", "Task", priority="Urgent")
+
+    def test_create_400_with_priority_id_lists_available_priorities(self) -> None:
+        mock_client = self._client_with_priorities()
+        mock_client.create_issue.side_effect = JIRAError(status_code=400, text="priority not valid")
+        service = IssueService(mock_client)
+
+        with pytest.raises(JiraAPIError, match="Available priorities on this instance: High, Medium"):
+            service.create("PROJ", "summary", "Task", priority_id="99")
+
+    def test_create_400_without_priority_has_no_hint(self) -> None:
+        mock_client = self._client_with_priorities()
+        mock_client.create_issue.side_effect = JIRAError(status_code=400, text="bad field")
+        service = IssueService(mock_client)
+
+        with pytest.raises(JiraAPIError, match="bad field") as exc_info:
+            service.create("PROJ", "summary", "Task")
+
+        assert "Available priorities" not in str(exc_info.value)
+        mock_client.priorities.assert_not_called()
+
+    def test_update_400_with_priority_lists_available_priorities(self) -> None:
+        mock_client = self._client_with_priorities()
+        mock_client.issue.return_value.update.side_effect = JIRAError(status_code=400, text="priority not valid")
+        service = IssueService(mock_client)
+
+        with pytest.raises(JiraAPIError, match="Available priorities on this instance: High, Medium"):
+            service.update("PROJ-1", priority="Urgent")
+
+    def test_failing_priorities_read_never_masks_the_original_error(self) -> None:
+        mock_client = MagicMock()
+        mock_client.create_issue.side_effect = JIRAError(status_code=400, text="priority not valid")
+        mock_client.priorities.side_effect = JIRAError(status_code=500, text="down")
+        service = IssueService(mock_client)
+
+        with pytest.raises(JiraAPIError, match="priority not valid") as exc_info:
+            service.create("PROJ", "summary", "Task", priority="Urgent")
+
+        assert "Available priorities" not in str(exc_info.value)

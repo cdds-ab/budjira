@@ -77,6 +77,7 @@ class TestCreateCommand:
             issue_type="Bug",
             description=None,
             priority=None,
+            priority_id=None,
             assignee=None,
             labels=[],
             description_dialect="markdown",
@@ -136,6 +137,7 @@ class TestCreateCommand:
             issue_type="Bug",
             description="Detailed description",
             priority="High",
+            priority_id=None,
             assignee="jdoe",
             labels=["bug", "urgent"],
             description_dialect="markdown",
@@ -1910,4 +1912,66 @@ class TestCreateDryRun:
         assert result.exit_code == 0
         assert "# not a heading" in result.stdout
         assert "h1." not in result.stdout
+        mock_jira_client_class.from_connection.assert_not_called()
+
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_dry_run_shows_priority_id_payload(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+    ) -> None:
+        """--priority-id appears in the preview as {"id": ...}, still without an API call."""
+        mock_get_active_connection.return_value = mock_connection
+
+        result = runner.invoke(
+            app,
+            ["T", "--type", "Bug", "--priority-id", "3", "--no-interactive", "--dry-run"],
+        )
+
+        assert result.exit_code == 0
+        assert '"id": "3"' in result.stdout
+        mock_jira_client_class.from_connection.assert_not_called()
+
+
+class TestCreatePriorityId:
+    """--priority-id sends the priority as {"id": ...}."""
+
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_with_priority_id(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+        mock_created_issue: Issue,
+    ) -> None:
+        mock_get_active_connection.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.create_issue.return_value = mock_created_issue
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(app, ["New bug", "--type", "Bug", "--priority-id", "3", "--no-interactive"])
+
+        assert result.exit_code == 0
+        assert mock_client.create_issue.call_args.kwargs["priority_id"] == "3"
+
+    @patch("budjira.cli.create.JiraClient")
+    @patch("budjira.cli.create.get_active_connection")
+    def test_create_priority_and_priority_id_conflict(
+        self,
+        mock_get_active_connection: Mock,
+        mock_jira_client_class: Mock,
+        mock_connection: Connection,
+    ) -> None:
+        mock_get_active_connection.return_value = mock_connection
+
+        result = runner.invoke(
+            app,
+            ["New bug", "--type", "Bug", "--priority", "High", "--priority-id", "3", "--no-interactive"],
+        )
+
+        assert result.exit_code == 1
+        assert "cannot be used together" in result.stdout
         mock_jira_client_class.from_connection.assert_not_called()

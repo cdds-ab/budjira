@@ -529,6 +529,8 @@ budjira create issue "Issue summary" --no-interactive [OPTIONS]
 - `--description-dialect {markdown,wiki}`: Dialect the description is written in
   (overrides the connection setting for this call)
 - `--priority PRIORITY`: Priority level (Highest, High, Medium, Low, Lowest)
+- `--priority-id ID`: Priority as numeric ID, sent as `{"id": ...}` — for instances
+  that reject priority names (mutually exclusive with `--priority`)
 - `--assignee USER`: Assign to user (username or account ID)
 - `--label TAG`: Add label (can be used multiple times)
 - `--project KEY`: Override default project
@@ -694,6 +696,8 @@ Update existing issues with status transitions, field changes, and label managem
 - `--status STATUS`, `-s`: Transition to new status
 - `--assignee USER`, `-a`: Assign to user (username, accountId, or `currentUser()`)
 - `--priority PRIORITY`, `-p`: Set priority (Highest, High, Medium, Low, Lowest)
+- `--priority-id ID`: Set priority by numeric ID, sent as `{"id": ...}` — for
+  instances that reject priority names (mutually exclusive with `--priority`)
 - `--summary TEXT`: Update summary/title
 - `--description TEXT`: Update description
 - `--description-dialect {markdown,wiki}`: Dialect the description is written in
