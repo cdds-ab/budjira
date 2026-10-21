@@ -1,14 +1,18 @@
 """CLI commands for updating Jira issues."""
 
+import json
 import sys
 from typing import Annotated, Any
 
 import typer
 from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
 from rich.table import Table
 
 from budjira.core.jira_client import JiraClient
 from budjira.models.transition import Transition
+from budjira.services.issues import CURRENT_USER_PLACEHOLDER, build_update_fields
 from budjira.utils.connection import get_active_connection
 from budjira.utils.description import DescriptionDialectOption, resolve_description_dialect
 from budjira.utils.errors import BudjiraError, InvalidIssueError, PermissionError
@@ -227,6 +231,89 @@ def _execute_transition(
         client.transitions.transition(issue_key, matched.name, fields=resolved)
 
 
+def _display_update_dry_run(
+    issue_key: str,
+    conn: Any,
+    *,
+    assignee: str | None,
+    priority: str | None,
+    summary: str | None,
+    description: str | None,
+    description_dialect: DescriptionDialectOption | None,
+    add_label: list[str] | None,
+    remove_label: list[str] | None,
+    epic: str | None,
+    original_estimate: str | None,
+    remaining_estimate: str | None,
+    log_work: str | None,
+    work_comment: str | None,
+) -> None:
+    """Show the exact update payload(s) without touching the API.
+
+    Prints the ``fields`` dict the update call would send (with the
+    description already converted) plus one line per non-fields operation
+    (labels, epic link, worklog).
+
+    Args:
+        issue_key: Issue that would be updated
+        conn: Active connection (resolves the description dialect)
+        assignee: Assignee option value
+        priority: Priority option value
+        summary: Summary option value
+        description: Description option value (raw, as authored)
+        description_dialect: Dialect override option value
+        add_label: Labels that would be added
+        remove_label: Labels that would be removed
+        epic: Epic the issue would be linked to
+        original_estimate: Original estimate option value
+        remaining_estimate: Remaining estimate option value
+        log_work: Work time that would be logged
+        work_comment: Worklog comment
+    """
+    if any([assignee is not None, priority, summary, description]):
+        update_fields = build_update_fields(
+            assignee=assignee,
+            priority=priority,
+            summary=summary,
+            description=description,
+            description_dialect=resolve_description_dialect(description_dialect, conn),
+        )
+        console.print(f"[cyan]Dry run:[/cyan] would update {issue_key} — no API call made")
+        console.print("[cyan]fields payload:[/cyan]")
+        console.print(Syntax(json.dumps(update_fields, indent=2, ensure_ascii=False), "json", word_wrap=True))
+        if assignee is not None and assignee.lower() == "currentuser()":
+            console.print(
+                f"[dim]{CURRENT_USER_PLACEHOLDER} is resolved to an account id via a read call when the update is applied[/dim]"
+            )
+        if description:
+            dialect = resolve_description_dialect(description_dialect, conn)
+            console.print(
+                f"[cyan]Description after conversion (dialect: {dialect}) — the exact string that would be sent:[/cyan]"
+            )
+            console.print(Panel(update_fields["description"], expand=False))
+
+    if add_label:
+        console.print(f"[dim]Would add labels: {', '.join(add_label)}[/dim]")
+    if remove_label:
+        console.print(f"[dim]Would remove labels: {', '.join(remove_label)}[/dim]")
+    if epic:
+        console.print(f"[dim]Would link to epic {epic}[/dim]")
+    if original_estimate or remaining_estimate:
+        timetracking: dict[str, str] = {}
+        if original_estimate:
+            timetracking["originalEstimate"] = original_estimate
+        if remaining_estimate:
+            timetracking["remainingEstimate"] = remaining_estimate
+        console.print("[cyan]timetracking fields payload:[/cyan]")
+        console.print(
+            Syntax(json.dumps({"timetracking": timetracking}, indent=2, ensure_ascii=False), "json", word_wrap=True)
+        )
+    if log_work:
+        console.print(f"[dim]Would log work: {log_work}[/dim]")
+        if work_comment:
+            console.print(f"[dim]  Worklog comment: {work_comment}[/dim]")
+
+
 @app.command("update")
 def update_issue(
     issue_key: Annotated[str, typer.Argument(help="Issue key (e.g., PROJ-123)")],
@@ -236,7 +323,11 @@ def update_issue(
         typer.Option("--field", help="Transition screen field as key=value (repeatable)"),
     ] = None,
     dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Show the transition and its fields without performing it")
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Show what would be sent (transition, fields payload, converted description) without doing it",
+        ),
     ] = False,
     interactive: Annotated[
         bool, typer.Option("--interactive/--no-interactive", "-i/-n", help="Prompt for missing required fields")
@@ -296,6 +387,9 @@ def update_issue(
             --status Done \\
             --priority Low \\
             --add-label completed
+
+        # Preview the exact payload (fields + converted description) without applying
+        budjira issue update PROJ-123 --priority High --description "Text" --dry-run
     """
     try:
         # Validate work_comment requires log_work
@@ -353,14 +447,32 @@ def update_issue(
                     if still_missing:
                         console.print("[yellow]Missing required fields:[/yellow]")
                         console.print(format_field_requirements(still_missing))
-                    return
-
-                _execute_transition(client, issue_key, matched, resolved, interactive)
-
-                changes.append(("Status", f"→ {status}"))
+                else:
+                    _execute_transition(client, issue_key, matched, resolved, interactive)
+                    changes.append(("Status", f"→ {status}"))
             except BudjiraError as e:
                 console.print(f"[red]✗[/red] Status update failed: {e}")
                 raise typer.Exit(1) from e
+
+        # A dry run stops here: preview every remaining update, apply nothing
+        if dry_run:
+            _display_update_dry_run(
+                issue_key,
+                conn,
+                assignee=assignee,
+                priority=priority,
+                summary=summary,
+                description=description,
+                description_dialect=description_dialect,
+                add_label=add_label,
+                remove_label=remove_label,
+                epic=epic,
+                original_estimate=original_estimate,
+                remaining_estimate=remaining_estimate,
+                log_work=log_work,
+                work_comment=work_comment,
+            )
+            return
 
         # Perform field updates
         try:

@@ -643,3 +643,82 @@ def test_validator_failure_is_attributed_through_the_service_error_wrapper(mock_
     assert result.exit_code == 1
     assert "customfield_10001" in result.stdout
     assert "Solution details" in result.stdout
+
+
+def test_dry_run_field_update_performs_no_api_write(mock_client: MagicMock) -> None:
+    """A dry run on field updates shows the payload and never touches the issue."""
+    result = runner.invoke(
+        app,
+        ["-q", "issue", "update", "TEST-123", "--priority", "High", "--description", "## Heading", "--dry-run"],
+    )
+
+    assert result.exit_code == 0
+    assert "fields payload" in result.stdout
+    assert '"name": "High"' in result.stdout
+    mock_client.update_issue.assert_not_called()
+    mock_client.issue.assert_not_called()
+    mock_client.add_labels.assert_not_called()
+    mock_client.remove_labels.assert_not_called()
+    mock_client.link_to_epic.assert_not_called()
+    mock_client.add_worklog.assert_not_called()
+
+
+def test_dry_run_shows_converted_description(mock_client: MagicMock) -> None:
+    """The preview contains the description after conversion - the string that would be sent."""
+    result = runner.invoke(
+        app,
+        ["-q", "issue", "update", "TEST-123", "--description", "## Heading", "--dry-run"],
+    )
+
+    assert result.exit_code == 0
+    assert "h2. Heading" in result.stdout
+    mock_client.update_issue.assert_not_called()
+
+
+def test_dry_run_current_user_is_not_resolved(mock_client: MagicMock) -> None:
+    """currentUser() must not trigger a myself() read in a dry run; the payload marks the spot."""
+    result = runner.invoke(
+        app,
+        ["-q", "issue", "update", "TEST-123", "--assignee", "currentUser()", "--dry-run"],
+    )
+
+    assert result.exit_code == 0
+    assert "currentUser()" in result.stdout
+    mock_client.myself.assert_not_called()
+    mock_client.update_issue.assert_not_called()
+
+
+def test_dry_run_lists_labels_epic_and_worklog(mock_client: MagicMock) -> None:
+    """Non-fields operations appear as planned lines, nothing is applied."""
+    result = runner.invoke(
+        app,
+        [
+            "-q",
+            "issue",
+            "update",
+            "TEST-123",
+            "--add-label",
+            "urgent",
+            "--remove-label",
+            "stale",
+            "--epic",
+            "TEST-100",
+            "--original-estimate",
+            "2h",
+            "--log-work",
+            "30m",
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "urgent" in result.stdout
+    assert "stale" in result.stdout
+    assert "TEST-100" in result.stdout
+    assert "originalEstimate" in result.stdout
+    assert "30m" in result.stdout
+    mock_client.add_labels.assert_not_called()
+    mock_client.remove_labels.assert_not_called()
+    mock_client.link_to_epic.assert_not_called()
+    mock_client.update_issue.assert_not_called()
+    mock_client.add_worklog.assert_not_called()

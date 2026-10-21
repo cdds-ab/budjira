@@ -535,6 +535,9 @@ budjira create issue "Issue summary" --no-interactive [OPTIONS]
 - `--epic KEY`: Link to epic during creation
 - `--parent KEY`: Parent issue key for sub-tasks (required when the type is a sub-task)
 - `--custom NAME=VALUE`: Set custom field (repeatable, requires configuration)
+- `--dry-run`: Print the exact fields payload and the converted description
+  without creating anything (no API call; use this to verify the customer
+  format before the irreversible write)
 
 **Sub-tasks:** Use `--parent PROJ-123` to create a sub-task under a parent issue.
 The sub-task type name varies per instance (often `Subtask`, sometimes `Sub-task`);
@@ -699,7 +702,9 @@ Update existing issues with status transitions, field changes, and label managem
 - `--remove-label TAG`: Remove label (repeatable)
 - `--epic EPIC-KEY`, `-e`: Link issue to epic
 - `--field KEY=VALUE`: Transition screen field, by field id or display name (repeatable, requires `--status`)
-- `--dry-run`: Show the transition and its fields without performing it
+- `--dry-run`: Show what would be sent without doing it — the transition and its
+  screen fields, and for field updates the exact fields payload with the
+  description after conversion (no API write)
 - `--interactive/--no-interactive`, `-i/-n`: Prompt for missing required fields (default: interactive)
 
 **Examples:**
@@ -736,6 +741,9 @@ budjira issue update PROJ-123 \\
   --add-label urgent \\
   --add-label backend \\
   --add-label security
+
+# Preview the exact payload without applying it (no API write)
+budjira issue update PROJ-123 --priority High --description "Text" --dry-run
 ```
 
 ### Transition Screen Fields
