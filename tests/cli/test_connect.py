@@ -1814,3 +1814,89 @@ class TestConnectMigrateExistingEntry:
             assert stored is not None
             assert stored.api_token_ref == "pass:acme/jira-token"
             assert not credential_store.has_credentials(stored)
+
+
+class TestConnectAddCommentDialect:
+    """The comment dialect can be set when creating a connection."""
+
+    def test_add_stores_comment_dialect(self, tmp_path: Path) -> None:
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+            patch("budjira.cli.connect._auto_sync_metadata"),
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+
+            result = runner.invoke(
+                app,
+                [
+                    "connect",
+                    "add",
+                    "--name",
+                    "MarkdownComments",
+                    "--url",
+                    "https://test.atlassian.net",
+                    "--email",
+                    "test@example.com",
+                    "--project",
+                    "TEST",
+                    "--comment-dialect",
+                    "markdown",
+                ],
+                input="store\ntoken\n",
+            )
+
+            assert result.exit_code == 0
+            stored = settings.load_connections().find_by_name("MarkdownComments")
+            assert stored is not None
+            assert stored.comment_dialect == "markdown"
+
+    def test_add_without_option_defaults_comment_dialect_to_wiki(self, tmp_path: Path) -> None:
+        with (
+            patch("budjira.config.settings.xdg_config_home", return_value=tmp_path / "config"),
+            patch("budjira.config.settings.xdg_data_home", return_value=tmp_path / "data"),
+            patch("budjira.config.credentials.get_settings") as mock_cred_get_settings,
+            patch("budjira.cli.connect._auto_sync_metadata"),
+        ):
+            import budjira.config.credentials
+            import budjira.config.settings
+
+            budjira.config.settings._settings = None
+            budjira.config.credentials._credential_store = None
+
+            from budjira.config import get_settings
+
+            settings = get_settings()
+            mock_cred_get_settings.return_value = settings
+
+            result = runner.invoke(
+                app,
+                [
+                    "connect",
+                    "add",
+                    "--name",
+                    "DefaultComments",
+                    "--url",
+                    "https://test.atlassian.net",
+                    "--email",
+                    "test@example.com",
+                    "--project",
+                    "TEST",
+                ],
+                input="store\ntoken\n",
+            )
+
+            assert result.exit_code == 0
+            stored = settings.load_connections().find_by_name("DefaultComments")
+            assert stored is not None
+            assert stored.comment_dialect == "wiki"

@@ -105,6 +105,17 @@ class TestConnection:
 
         assert conn.description_dialect == "markdown"
 
+    def test_comment_dialect_defaults_to_wiki(self) -> None:
+        """A connection without the key keeps the historical raw-comment behaviour."""
+        conn = Connection(
+            name="Test",
+            url="https://test.atlassian.net",
+            email="test@example.com",
+            project_key="TEST",
+        )
+
+        assert conn.comment_dialect == "wiki"
+
     def test_description_dialect_can_be_wiki(self) -> None:
         """Instances with a wiki-markup house format declare it on the connection."""
         conn = Connection(

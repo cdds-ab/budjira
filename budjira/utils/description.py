@@ -8,9 +8,16 @@ and a wiki ordered-list marker at the same time, and the heading rule wins.
 
 The dialect therefore belongs to the instance, not to the converter. This
 module holds the two decisions in one place each: which dialect applies
-(:func:`resolve_description_dialect`) and what that means for the payload
-(:func:`render_description`). The service layer only passes the resolved
-dialect through - it never decides whether to convert.
+(:func:`resolve_description_dialect` for descriptions,
+:func:`resolve_comment_dialect` for comments) and what that means for the
+payload (:func:`render_description`). The service layer only passes the
+resolved dialect through - it never decides whether to convert.
+
+Descriptions and comments have independent connection settings on purpose:
+descriptions historically went through the converter (default ``markdown``),
+comments were posted raw (default ``wiki``). An instance whose authors write
+one dialect for both can now express that; an instance that differs per field
+keeps the asymmetry configurable rather than reversed.
 """
 
 from __future__ import annotations
@@ -54,6 +61,28 @@ def resolve_description_dialect(
         # The enum mirrors DescriptionDialect member for member; a test guards the drift.
         return override.value
     return connection.description_dialect
+
+
+def resolve_comment_dialect(
+    override: DescriptionDialectOption | None,
+    connection: Connection,
+) -> DescriptionDialect:
+    """Resolve the dialect for a single comment write.
+
+    Same priority as :func:`resolve_description_dialect` (CLI override, then
+    connection setting), but the connection default is ``wiki`` - the
+    historical raw behaviour for comments.
+
+    Args:
+        override: Value of a ``--dialect`` option on a comment command, if given.
+        connection: The connection the write goes to.
+
+    Returns:
+        The dialect to hand to the service layer.
+    """
+    if override is not None:
+        return override.value
+    return connection.comment_dialect
 
 
 def render_description(text: str, dialect: DescriptionDialect) -> str:

@@ -291,6 +291,26 @@ budjira issue update PROJ-123 --description-dialect markdown --description "## N
 The option wins over the connection setting, which wins over the default. Existing
 configurations keep working unchanged: a connection without the key is `markdown`.
 
+**Comment dialect:**
+
+Comments historically went out raw, so their connection setting
+`comment_dialect` defaults to `wiki` (sent unchanged). Set it to `markdown` on
+an instance where authors write Markdown in comments as well, and one written
+dialect then serves both fields — descriptions follow `description_dialect`
+(default `markdown`), comments follow `comment_dialect` (default `wiki`); the
+two are independent so an instance that differs per field stays representable.
+`comment add`/`comment update` accept `--dialect` to deviate for a single call
+(the `--embed` path posts ADF via REST v3 verbatim; no dialect applies there).
+
+```bash
+# An instance whose comments are authored in Markdown
+budjira connect add --name work --url https://work.atlassian.net \
+  --email user@work.com --project PROJ --comment-dialect markdown
+
+# Deviate for a single comment
+budjira comment add PROJ-123 "## Notes" --dialect markdown
+```
+
 **Project metadata:** issue types, priorities and components are discovered from Jira and
 cached locally — they drive validation of `--type`/`--priority` and sub-task detection:
 

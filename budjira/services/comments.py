@@ -7,21 +7,26 @@ from typing import TYPE_CHECKING, Any
 from jira.exceptions import JIRAError
 
 from budjira.services.base import BaseJiraService
+from budjira.utils.description import render_description
 from budjira.utils.errors import InvalidIssueError, JiraAPIError, PermissionError
 
 if TYPE_CHECKING:
     from jira.resources import Comment
 
+    from budjira.models.connection import DescriptionDialect
+
 
 class CommentService(BaseJiraService):
     """Service for managing Jira issue comments."""
 
-    def add(self, issue_key: str, body: str) -> dict[str, Any]:
+    def add(self, issue_key: str, body: str, dialect: DescriptionDialect = "wiki") -> dict[str, Any]:
         """Add a comment to an issue.
 
         Args:
             issue_key: Issue key (e.g., PROJ-123)
-            body: Comment text (can be markdown or plain text)
+            body: Comment text, authored in the given dialect
+            dialect: ``wiki`` sends the text unchanged (the historical
+                behaviour), ``markdown`` converts to wiki markup first
 
         Returns:
             Dictionary with comment details (id, author, body, created)
@@ -33,7 +38,7 @@ class CommentService(BaseJiraService):
         """
         try:
             self._log_operation("Add comment", issue_key=issue_key)
-            comment = self.client.add_comment(issue_key, body)
+            comment = self.client.add_comment(issue_key, render_description(body, dialect))
 
             # Return comment details
             return {
@@ -177,13 +182,18 @@ class CommentService(BaseJiraService):
         except Exception as e:
             raise JiraAPIError(f"Unexpected error fetching comment '{comment_id}' on '{issue_key}': {e}") from e
 
-    def update(self, issue_key: str, comment_id: str, body: str) -> dict[str, Any]:
+    def update(
+        self, issue_key: str, comment_id: str, body: str, dialect: DescriptionDialect = "wiki"
+    ) -> dict[str, Any]:
         """Replace the body of an existing comment.
 
         Args:
             issue_key: Issue key (e.g., PROJ-123)
             comment_id: Comment ID
-            body: New comment text (replaces the existing body)
+            body: New comment text (replaces the existing body), authored in
+                the given dialect
+            dialect: ``wiki`` sends the text unchanged (the historical
+                behaviour), ``markdown`` converts to wiki markup first
 
         Returns:
             Dictionary with updated comment details (id, author, body, created, updated)
@@ -196,7 +206,7 @@ class CommentService(BaseJiraService):
         try:
             self._log_operation("Update comment", issue_key=issue_key, comment_id=comment_id)
             comment = self.client.comment(issue_key, comment_id)
-            comment.update(body=body)
+            comment.update(body=render_description(body, dialect))
             return self._to_dict(comment)
         except JIRAError as e:
             if e.status_code == 404:
