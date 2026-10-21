@@ -40,7 +40,7 @@ class TestCommentAddCommand:
         """Test adding comment successfully."""
         mock_get_conn.return_value = mock_connection
         mock_client = MagicMock()
-        mock_client.add_comment.return_value = {
+        mock_client.comments.add.return_value = {
             "id": "12345",
             "author": "John Doe",
             "body": "Test comment",
@@ -58,7 +58,7 @@ class TestCommentAddCommand:
         assert "Comment ID: 12345" in result.stdout
         assert "Author: John Doe" in result.stdout
 
-        mock_client.add_comment.assert_called_once_with("TEST-123", "Test comment")
+        mock_client.comments.add.assert_called_once_with("TEST-123", "Test comment", dialect="wiki")
 
     @patch("budjira.cli.comment.JiraClient")
     @patch("budjira.cli.comment.get_active_connection")
@@ -72,7 +72,7 @@ class TestCommentAddCommand:
         mock_get_conn.return_value = mock_connection
         mock_client = MagicMock()
         multiline_text = "Line 1\nLine 2\nLine 3"
-        mock_client.add_comment.return_value = {
+        mock_client.comments.add.return_value = {
             "id": "12346",
             "author": "Jane Smith",
             "body": multiline_text,
@@ -87,7 +87,7 @@ class TestCommentAddCommand:
 
         assert result.exit_code == 0
         assert "Comment added to TEST-456" in result.stdout
-        mock_client.add_comment.assert_called_once_with("TEST-456", multiline_text)
+        mock_client.comments.add.assert_called_once_with("TEST-456", multiline_text, dialect="wiki")
 
     @patch("budjira.cli.comment.open_editor")
     @patch("budjira.cli.comment.JiraClient")
@@ -104,7 +104,7 @@ class TestCommentAddCommand:
         mock_client = MagicMock()
         editor_text = "Comment from editor\nWith multiple lines"
         mock_open_editor.return_value = editor_text
-        mock_client.add_comment.return_value = {
+        mock_client.comments.add.return_value = {
             "id": "12347",
             "author": "Bob Builder",
             "body": editor_text,
@@ -122,7 +122,7 @@ class TestCommentAddCommand:
 
         # Editor should be opened with initial text
         mock_open_editor.assert_called_once_with("Initial text", file_extension=".md")
-        mock_client.add_comment.assert_called_once_with("TEST-789", editor_text)
+        mock_client.comments.add.assert_called_once_with("TEST-789", editor_text, dialect="wiki")
 
     @patch("budjira.cli.comment.open_editor")
     @patch("budjira.cli.comment.JiraClient")
@@ -139,7 +139,7 @@ class TestCommentAddCommand:
         mock_client = MagicMock()
         editor_text = "Comment from editor"
         mock_open_editor.return_value = editor_text
-        mock_client.add_comment.return_value = {
+        mock_client.comments.add.return_value = {
             "id": "12348",
             "author": "Alice",
             "body": editor_text,
@@ -157,7 +157,7 @@ class TestCommentAddCommand:
 
         # Editor should be opened with empty content
         mock_open_editor.assert_called_once_with("", file_extension=".md")
-        mock_client.add_comment.assert_called_once_with("TEST-100", editor_text)
+        mock_client.comments.add.assert_called_once_with("TEST-100", editor_text, dialect="wiki")
 
     @patch("budjira.cli.comment.open_editor")
     @patch("budjira.cli.comment.get_active_connection")
@@ -191,7 +191,7 @@ class TestCommentAddCommand:
         """Test adding comment with --connection flag."""
         mock_get_conn.return_value = mock_connection
         mock_client = MagicMock()
-        mock_client.add_comment.return_value = {
+        mock_client.comments.add.return_value = {
             "id": "12349",
             "author": "Charlie",
             "body": "Test",
@@ -218,7 +218,7 @@ class TestCommentAddCommand:
         """Test adding comment to non-existent issue."""
         mock_get_conn.return_value = mock_connection
         mock_client = MagicMock()
-        mock_client.add_comment.side_effect = InvalidIssueError("Issue 'TEST-999' not found")
+        mock_client.comments.add.side_effect = InvalidIssueError("Issue 'TEST-999' not found")
         mock_jira_client_class.from_connection.return_value = mock_client
 
         result = runner.invoke(
@@ -241,7 +241,7 @@ class TestCommentAddCommand:
         """Test adding comment without permission."""
         mock_get_conn.return_value = mock_connection
         mock_client = MagicMock()
-        mock_client.add_comment.side_effect = PermissionError("You don't have permission to comment")
+        mock_client.comments.add.side_effect = PermissionError("You don't have permission to comment")
         mock_jira_client_class.from_connection.return_value = mock_client
 
         result = runner.invoke(
@@ -265,7 +265,7 @@ class TestCommentAddCommand:
         mock_get_conn.return_value = mock_connection
         mock_client = MagicMock()
         long_comment = "a" * 150  # Long comment to test truncation
-        mock_client.add_comment.return_value = {
+        mock_client.comments.add.return_value = {
             "id": "12350",
             "author": "Dave",
             "body": long_comment,
@@ -506,7 +506,7 @@ class TestCommentUpdateCommand:
 
         assert result.exit_code == 0
         assert "Comment 10234 on TEST-123 updated" in result.stdout
-        mock_client.comments.update.assert_called_once_with("TEST-123", "10234", "Corrected text")
+        mock_client.comments.update.assert_called_once_with("TEST-123", "10234", "Corrected text", dialect="wiki")
         # No editor round-trip when text is given
         mock_client.comments.get.assert_not_called()
 
@@ -533,7 +533,7 @@ class TestCommentUpdateCommand:
         assert result.exit_code == 0
         mock_client.comments.get.assert_called_once_with("TEST-123", "10234")
         mock_open_editor.assert_called_once_with("Current body", file_extension=".md")
-        mock_client.comments.update.assert_called_once_with("TEST-123", "10234", "Tightened body")
+        mock_client.comments.update.assert_called_once_with("TEST-123", "10234", "Tightened body", dialect="wiki")
 
     @patch("budjira.cli.comment.open_editor")
     @patch("budjira.cli.comment.JiraClient")
@@ -557,7 +557,7 @@ class TestCommentUpdateCommand:
         assert result.exit_code == 0
         mock_open_editor.assert_called_once_with("Draft text", file_extension=".md")
         mock_client.comments.get.assert_not_called()
-        mock_client.comments.update.assert_called_once_with("TEST-123", "10234", "Edited text")
+        mock_client.comments.update.assert_called_once_with("TEST-123", "10234", "Edited text", dialect="wiki")
 
     @patch("budjira.cli.comment.open_editor")
     @patch("budjira.cli.comment.JiraClient")
@@ -813,7 +813,7 @@ class TestCommentAddAttachments:
             "mime_type": "image/png",
             "content": f"https://test.atlassian.net/attachments/content/{attachment_id}",
         }
-        mock_client.add_comment.return_value = {
+        mock_client.comments.add.return_value = {
             "id": "20001",
             "author": "John Doe",
             "created": "2026-08-20T10:00:00.000+0000",
@@ -838,7 +838,7 @@ class TestCommentAddAttachments:
         assert result.exit_code == 0
         assert "Attached: chart.png" in result.stdout
         mock_client.attachments.add.assert_called_once_with("TEST-123", sample_file)
-        mock_client.add_comment.assert_called_once_with("TEST-123", "See the chart\n!chart.png!")
+        mock_client.comments.add.assert_called_once_with("TEST-123", "See the chart\n!chart.png!", dialect="wiki")
         mock_client.comments.add_adf.assert_not_called()
 
     @patch("budjira.cli.comment.JiraClient")
@@ -855,7 +855,7 @@ class TestCommentAddAttachments:
 
         assert result.exit_code == 0
         mock_editor.assert_not_called()
-        mock_client.add_comment.assert_called_once_with("TEST-123", "!chart.png!")
+        mock_client.comments.add.assert_called_once_with("TEST-123", "!chart.png!", dialect="wiki")
 
     @patch("budjira.cli.comment.JiraClient")
     @patch("budjira.cli.comment.get_active_connection")
@@ -869,7 +869,7 @@ class TestCommentAddAttachments:
         assert result.exit_code == 0
         assert "Embedded: chart.png" in result.stdout
         mock_client.attachments.add.assert_called_once_with("TEST-123", sample_file)
-        mock_client.add_comment.assert_not_called()
+        mock_client.comments.add.assert_not_called()
         mock_client.comments.add_adf.assert_called_once()
         issue_key, doc = mock_client.comments.add_adf.call_args.args
         assert issue_key == "TEST-123"
@@ -899,7 +899,7 @@ class TestCommentAddAttachments:
 
         assert result.exit_code == 0
         assert mock_client.attachments.add.call_count == 2
-        mock_client.add_comment.assert_not_called()
+        mock_client.comments.add.assert_not_called()
         doc = mock_client.comments.add_adf.call_args.args[1]
         texts = [
             node["content"][0]["text"] for node in doc["content"] if node["type"] == "paragraph" and node.get("content")
@@ -918,4 +918,82 @@ class TestCommentAddAttachments:
 
         assert result.exit_code == 1
         assert "File is empty" in result.stdout
-        mock_client.add_comment.assert_not_called()
+        mock_client.comments.add.assert_not_called()
+
+
+class TestCommentDialect:
+    """The connection's comment_dialect decides; --dialect deviates for one call."""
+
+    @patch("budjira.cli.comment.JiraClient")
+    @patch("budjira.cli.comment.get_active_connection")
+    def test_add_uses_connection_comment_dialect(self, mock_get_conn, mock_jira_client_class):
+        conn = Connection(
+            name="md-conn",
+            url="https://test.atlassian.net",  # type: ignore[arg-type]
+            email="test@example.com",
+            project_key="TEST",
+            comment_dialect="markdown",
+        )
+        mock_get_conn.return_value = conn
+        mock_client = MagicMock()
+        mock_client.comments.add.return_value = {"id": "1", "author": "A", "body": "x", "created": None}
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(app, ["comment", "add", "TEST-123", "## Notes"])
+
+        assert result.exit_code == 0
+        mock_client.comments.add.assert_called_once_with("TEST-123", "## Notes", dialect="markdown")
+
+    @patch("budjira.cli.comment.JiraClient")
+    @patch("budjira.cli.comment.get_active_connection")
+    def test_add_dialect_option_overrides_connection(self, mock_get_conn, mock_jira_client_class, mock_connection):
+        """--dialect markdown wins over the connection's wiki default."""
+        mock_get_conn.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.comments.add.return_value = {"id": "1", "author": "A", "body": "x", "created": None}
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(app, ["comment", "add", "TEST-123", "## Notes", "--dialect", "markdown"])
+
+        assert result.exit_code == 0
+        mock_client.comments.add.assert_called_once_with("TEST-123", "## Notes", dialect="markdown")
+
+    @patch("budjira.cli.comment.JiraClient")
+    @patch("budjira.cli.comment.get_active_connection")
+    def test_update_uses_connection_comment_dialect(self, mock_get_conn, mock_jira_client_class):
+        conn = Connection(
+            name="md-conn",
+            url="https://test.atlassian.net",  # type: ignore[arg-type]
+            email="test@example.com",
+            project_key="TEST",
+            comment_dialect="markdown",
+        )
+        mock_get_conn.return_value = conn
+        mock_client = MagicMock()
+        mock_client.comments.update.return_value = {"id": "1", "author": "A", "body": "x", "updated": None}
+        mock_jira_client_class.from_connection.return_value = mock_client
+
+        result = runner.invoke(app, ["comment", "update", "TEST-123", "10234", "## Notes"])
+
+        assert result.exit_code == 0
+        mock_client.comments.update.assert_called_once_with("TEST-123", "10234", "## Notes", dialect="markdown")
+
+    @patch("budjira.cli.comment.JiraClient")
+    @patch("budjira.cli.comment.get_active_connection")
+    def test_embed_path_applies_no_dialect(self, mock_get_conn, mock_jira_client_class, mock_connection, tmp_path):
+        """--embed posts ADF verbatim; the dialect must not leak into it."""
+        mock_get_conn.return_value = mock_connection
+        mock_client = MagicMock()
+        mock_client.attachments.add.return_value = {"id": "7", "filename": "chart.png"}
+        mock_client.comments.add_adf.return_value = {"id": "1", "author": "A", "created": None}
+        mock_jira_client_class.from_connection.return_value = mock_client
+        image = tmp_path / "chart.png"
+        image.write_bytes(b"\x89PNG")
+
+        result = runner.invoke(
+            app, ["comment", "add", "TEST-123", "Before/after:", "--embed", str(image), "--dialect", "markdown"]
+        )
+
+        assert result.exit_code == 0
+        mock_client.comments.add_adf.assert_called_once()
+        mock_client.comments.add.assert_not_called()

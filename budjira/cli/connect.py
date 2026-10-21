@@ -74,6 +74,11 @@ def add_connection(
         "--description-dialect",
         help="Dialect descriptions on this instance are written in (default: markdown)",
     ),
+    comment_dialect: DescriptionDialectOption = typer.Option(
+        None,
+        "--comment-dialect",
+        help="Dialect comments on this instance are written in (default: wiki - sent unchanged)",
+    ),
     api_token_ref: str = typer.Option(
         None,
         "--api-token-ref",
@@ -101,6 +106,11 @@ def add_connection(
     Pick "wiki" for an instance whose house format is already expressed in wiki
     markup, e.g. panel macros and "#" ordered lists; descriptions are then sent
     unchanged. Individual calls can deviate with --description-dialect.
+
+    Comment dialect: comments were historically posted raw, so the default is
+    "wiki" (sent unchanged). Set --comment-dialect markdown for an instance
+    where authors write Markdown in comments as well. Individual calls can
+    deviate with 'comment add/update --dialect'.
 
     Examples:
         # Interactive mode
@@ -210,6 +220,8 @@ def add_connection(
         }
         if description_dialect is not None:
             changed_values["description_dialect"] = description_dialect.value
+        if comment_dialect is not None:
+            changed_values["comment_dialect"] = comment_dialect.value
         if api_token_ref is not None:
             changed_values["api_token_ref"] = api_token_ref
         elif store_token:
@@ -242,6 +254,7 @@ def add_connection(
         console.print(f"  Email:        {connection.email}")
         console.print(f"  Project:      {connection.project_key}")
         console.print(f"  Descriptions: {connection.description_dialect}")
+        console.print(f"  Comments:     {connection.comment_dialect}")
         console.print(f"  API token:    {describe_api_token_source(connection)}")
 
         # Auto-sync project metadata
@@ -344,6 +357,7 @@ def show_connection(
     console.print(f"[bold]Email:[/bold]        {connection.email}")
     console.print(f"[bold]Project Key:[/bold]  {connection.project_key}")
     console.print(f"[bold]Descriptions:[/bold] {connection.description_dialect}")
+    console.print(f"[bold]Comments:[/bold]     {connection.comment_dialect}")
     console.print(f"[bold]Cache:[/bold]        {'Enabled' if connection.cache_enabled else 'Disabled'}")
 
     # Token source (references shown verbatim, never the resolved value)

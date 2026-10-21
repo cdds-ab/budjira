@@ -67,6 +67,13 @@ class Connection(BaseModel):
             "upload, 'wiki' sends the text unchanged"
         ),
     )
+    comment_dialect: DescriptionDialect = Field(
+        default="wiki",
+        description=(
+            "Dialect comments are authored in: 'wiki' sends the text unchanged (the historical "
+            "default), 'markdown' converts to Jira wiki markup on upload"
+        ),
+    )
     custom_fields: dict[str, CustomFieldConfig] = Field(
         default_factory=dict,
         description="Custom field configurations mapped by friendly name",

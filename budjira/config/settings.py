@@ -200,6 +200,7 @@ class Settings:
             "cache_ttl_hours": conn.cache_ttl_hours,
             "tempo_enabled": conn.tempo_enabled,
             "description_dialect": conn.description_dialect,
+            "comment_dialect": conn.comment_dialect,
         }
 
         # Add board_id if set

@@ -12,6 +12,7 @@ from rich.table import Table
 
 from budjira.core.jira_client import JiraClient
 from budjira.utils.connection import get_active_connection
+from budjira.utils.description import DescriptionDialectOption, resolve_comment_dialect
 from budjira.utils.editor import open_editor
 from budjira.utils.errors import BudjiraError
 from budjira.utils.formatter import OutputFormatter
@@ -101,6 +102,11 @@ def add_comment(
         "-c",
         help="Connection name to use (overrides default)",
     ),
+    dialect: DescriptionDialectOption | None = typer.Option(
+        None,
+        "--dialect",
+        help="Dialect the comment is written in (overrides the connection's comment_dialect for this call)",
+    ),
 ) -> None:
     """Add a comment to a Jira issue.
 
@@ -108,6 +114,12 @@ def add_comment(
     uploaded along with the comment: '--attach' references them from the
     comment text, '--embed' renders images inline in the comment body
     (Jira Cloud only).
+
+    Comment dialect: the connection's comment_dialect decides whether the
+    text is converted ('markdown') or sent unchanged ('wiki', the default -
+    the historical raw behaviour). '--dialect' deviates for a single call.
+    The '--embed' path posts ADF (REST API v3) verbatim; no dialect applies
+    there.
 
     Examples:
         # Quick single-line comment
@@ -121,6 +133,9 @@ def add_comment(
 
         # Comment with an image embedded inline (Jira Cloud)
         budjira comment add PROJ-123 "Before/after:" --embed chart.png
+
+        # A markdown comment on a wiki-dialect connection
+        budjira comment add PROJ-123 "## Notes" --dialect markdown
     """
     try:
         # Resolve connection
@@ -157,11 +172,15 @@ def add_comment(
         elif attach:
             attached = [jira_client.attachments.add(issue_key, path) for path in attach]
             comment_text = _append_attachment_refs(comment_text, attached)
-            result = jira_client.add_comment(issue_key, comment_text)
+            result = jira_client.comments.add(
+                issue_key, comment_text, dialect=resolve_comment_dialect(dialect, connection)
+            )
             for attachment in attached:
                 console.print(f"  [dim]Attached:[/dim] {attachment['filename']}")
         else:
-            result = jira_client.add_comment(issue_key, comment_text)
+            result = jira_client.comments.add(
+                issue_key, comment_text, dialect=resolve_comment_dialect(dialect, connection)
+            )
 
         # Display success message
         console.print(f"\n[green]✓[/green] Comment added to {issue_key}")
@@ -319,12 +338,21 @@ def update_comment(
         "-c",
         help="Connection name to use (overrides default)",
     ),
+    dialect: DescriptionDialectOption | None = typer.Option(
+        None,
+        "--dialect",
+        help="Dialect the new comment text is written in (overrides the connection's comment_dialect for this call)",
+    ),
 ) -> None:
     """Replace the body of an existing comment.
 
     Without TEXT the editor opens prefilled with the current comment body,
     so you can adjust the wording in place. This is the reliable way to fix
     a comment — Jira often forbids deleting comments even for their author.
+
+    The connection's comment_dialect decides whether the new text is
+    converted ('markdown') or sent unchanged ('wiki', the default);
+    '--dialect' deviates for a single call.
 
     Examples:
         # Replace body directly
@@ -352,7 +380,9 @@ def update_comment(
             comment_text = text
 
         # Update comment
-        result = jira_client.comments.update(issue_key, comment_id, comment_text)
+        result = jira_client.comments.update(
+            issue_key, comment_id, comment_text, dialect=resolve_comment_dialect(dialect, connection)
+        )
 
         # Display success message
         console.print(f"\n[green]✓[/green] Comment {result['id']} on {issue_key} updated")

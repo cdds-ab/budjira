@@ -8,6 +8,7 @@ from budjira.utils.description import (
     DESCRIPTION_DIALECTS,
     DescriptionDialectOption,
     render_description,
+    resolve_comment_dialect,
     resolve_description_dialect,
 )
 
@@ -56,3 +57,29 @@ class TestResolveDescriptionDialect:
 def test_cli_choices_match_the_model_dialects() -> None:
     """The CLI must not offer a dialect the model rejects, or hide one it accepts."""
     assert {option.value for option in DescriptionDialectOption} == set(DESCRIPTION_DIALECTS)
+
+
+def _comment_connection(dialect: str = "wiki") -> Connection:
+    return Connection(
+        name="Test",
+        url="https://test.atlassian.net",
+        email="test@example.com",
+        project_key="TEST",
+        comment_dialect=dialect,
+    )
+
+
+class TestResolveCommentDialect:
+    """Same priority as descriptions, but the historical default is wiki (raw)."""
+
+    def test_default_connection_resolves_to_wiki(self) -> None:
+        assert resolve_comment_dialect(None, _connection()) == "wiki"
+
+    def test_connection_setting_is_used_without_override(self) -> None:
+        assert resolve_comment_dialect(None, _comment_connection("markdown")) == "markdown"
+
+    def test_override_beats_connection_setting(self) -> None:
+        assert resolve_comment_dialect(DescriptionDialectOption.WIKI, _comment_connection("markdown")) == "wiki"
+
+    def test_override_can_force_markdown_on_a_wiki_connection(self) -> None:
+        assert resolve_comment_dialect(DescriptionDialectOption.MARKDOWN, _comment_connection()) == "markdown"

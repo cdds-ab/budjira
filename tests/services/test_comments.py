@@ -386,3 +386,42 @@ class TestAddAdfComment:
         service = CommentService(mock_client)
         with pytest.raises(JiraAPIError, match="Unexpected error adding ADF comment"):
             service.add_adf("PROJ-123", self._doc())
+
+
+class TestCommentDialect:
+    """The connection's comment dialect decides conversion; default is raw (wiki)."""
+
+    def test_add_default_sends_body_unchanged(self) -> None:
+        """Without a dialect the historical raw behaviour is preserved."""
+        mock_client = MagicMock()
+        service = CommentService(mock_client)
+
+        service.add("PROJ-1", "## Heading")
+
+        mock_client.add_comment.assert_called_once_with("PROJ-1", "## Heading")
+
+    def test_add_markdown_converts_to_wiki(self) -> None:
+        mock_client = MagicMock()
+        service = CommentService(mock_client)
+
+        service.add("PROJ-1", "## Heading", dialect="markdown")
+
+        mock_client.add_comment.assert_called_once_with("PROJ-1", "h2. Heading")
+
+    def test_update_default_sends_body_unchanged(self) -> None:
+        mock_client = MagicMock()
+        comment = mock_client.comment.return_value
+        service = CommentService(mock_client)
+
+        service.update("PROJ-1", "42", "## Heading")
+
+        comment.update.assert_called_once_with(body="## Heading")
+
+    def test_update_markdown_converts_to_wiki(self) -> None:
+        mock_client = MagicMock()
+        comment = mock_client.comment.return_value
+        service = CommentService(mock_client)
+
+        service.update("PROJ-1", "42", "## Heading", dialect="markdown")
+
+        comment.update.assert_called_once_with(body="h2. Heading")
