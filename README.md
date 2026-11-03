@@ -349,6 +349,17 @@ budjira project clear         # drop the cache
 budjira project sync --force  # refresh despite a valid cache
 ```
 
+**Projects of an instance:** list them, or create a company-managed project that shares an
+existing project's issue type, screen and workflow schemes — with a Kanban board on top
+(needs the *Administer Jira* global permission):
+
+```bash
+budjira project list                                                  # key, name, id, style, lead
+budjira project create APX --name "Apodeixis" --like CDDSINT --dry-run  # payloads only
+budjira project create APX --name "Apodeixis" --like CDDSINT            # project + filter + board
+budjira project create OPS --name "Operations" --like CDDSINT --board none
+```
+
 ### 6. Definition of Ready (DoR) Templates
 
 budjira supports customizable templates for different issue types to ensure consistent quality.

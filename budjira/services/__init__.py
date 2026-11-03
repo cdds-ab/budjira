@@ -8,6 +8,7 @@ from budjira.services.issues import IssueService
 from budjira.services.labels import LabelService
 from budjira.services.links import LinkService
 from budjira.services.metadata import MetadataService
+from budjira.services.projects import ProjectService
 from budjira.services.sprints import SprintService
 from budjira.services.transitions import TransitionService
 from budjira.services.worklogs import WorklogService
@@ -21,6 +22,7 @@ __all__ = [
     "LabelService",
     "LinkService",
     "MetadataService",
+    "ProjectService",
     "SprintService",
     "TransitionService",
     "WorklogService",
