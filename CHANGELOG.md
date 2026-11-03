@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.38.1 (2026-11-03)
+
+### Fix
+
+- **client**: detect rejected credentials instead of reporting empty results
+
 ## v1.38.0 (2026-11-03)
 
 ### Feat
