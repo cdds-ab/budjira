@@ -107,6 +107,65 @@ class TestJiraClientInit:
             JiraClient(connection, "test-token")
 
 
+class TestJiraClientCredentialCheck:
+    """Jira Cloud answers many reads anonymously when Basic auth fails (#153).
+
+    search/jql returns 200 with no issues, issues return 404, project search
+    returns an empty list - only /myself rejects the token. The client must
+    therefore verify the credentials itself instead of trusting the answers.
+    """
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_verifies_credentials_via_myself(self, mock_jira_class: Mock, connection: Connection) -> None:
+        mock_jira_instance = MagicMock()
+        mock_jira_class.return_value = mock_jira_instance
+
+        JiraClient(connection, "test-token")
+
+        mock_jira_instance.myself.assert_called_once_with()
+
+    @patch("budjira.core.jira_client.describe_api_token_source", return_value="pass:acme/jira-token")
+    @patch("budjira.core.jira_client.JIRA")
+    def test_rejected_token_raises_authentication_error(
+        self, mock_jira_class: Mock, _mock_source: Mock, connection: Connection
+    ) -> None:
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.myself.side_effect = JIRAError(
+            status_code=401, text="Client must be authenticated to access this resource."
+        )
+        mock_jira_class.return_value = mock_jira_instance
+
+        with pytest.raises(AuthenticationError) as excinfo:
+            JiraClient(connection, "stale-token")
+
+        message = str(excinfo.value)
+        assert "test-connection" in message
+        assert "pass:acme/jira-token" in message
+        assert "test@example.com" in message
+        assert "stale-token" not in message
+
+    @patch("budjira.core.jira_client.describe_api_token_source", return_value="env BUDJIRA_API_TOKEN")
+    @patch("budjira.core.jira_client.JIRA")
+    def test_forbidden_myself_raises_permission_error(
+        self, mock_jira_class: Mock, _mock_source: Mock, connection: Connection
+    ) -> None:
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.myself.side_effect = JIRAError(status_code=403, text="Forbidden")
+        mock_jira_class.return_value = mock_jira_instance
+
+        with pytest.raises(PermissionError, match="test-connection"):
+            JiraClient(connection, "test-token")
+
+    @patch("budjira.core.jira_client.JIRA")
+    def test_other_myself_failure_raises_api_error(self, mock_jira_class: Mock, connection: Connection) -> None:
+        mock_jira_instance = MagicMock()
+        mock_jira_instance.myself.side_effect = JIRAError(status_code=503, text="Service Unavailable")
+        mock_jira_class.return_value = mock_jira_instance
+
+        with pytest.raises(JiraAPIError, match="Service Unavailable"):
+            JiraClient(connection, "test-token")
+
+
 class TestJiraClientProperties:
     """Test JiraClient properties."""
 

@@ -646,3 +646,61 @@ class TestSearchProjectScope:
             "project = TEST ORDER BY created DESC",
             max_results=50,
         )
+
+
+class TestSearchRejectedCredentials:
+    """#153: Jira Cloud answers search anonymously (200, no issues) when the token is rejected.
+
+    Only the real JiraClient is used here (JIRA itself is mocked), so the test
+    proves the credential check reaches the search command.
+    """
+
+    @patch("budjira.core.jira_client.describe_api_token_source", return_value="pass:acme/jira-token")
+    @patch("budjira.core.jira_client.resolve_api_token", return_value="stale-token")
+    @patch("budjira.core.jira_client.JIRA")
+    @patch("budjira.cli.search.get_active_connection")
+    def test_rejected_token_is_an_error_not_an_empty_result(
+        self,
+        mock_get_conn: Mock,
+        mock_jira_class: Mock,
+        _mock_token: Mock,
+        _mock_source: Mock,
+        mock_connection: Connection,
+    ) -> None:
+        from jira.exceptions import JIRAError
+
+        mock_get_conn.return_value = mock_connection
+        jira = MagicMock()
+        jira.search_issues.return_value = []  # what Jira Cloud returns anonymously
+        jira.enhanced_search_issues.return_value = []
+        jira.myself.side_effect = JIRAError(status_code=401, text="Client must be authenticated")
+        mock_jira_class.return_value = jira
+
+        result = runner.invoke(app, ["project = TEST"])
+
+        assert result.exit_code == 1
+        assert "No issues found" not in result.stdout
+        assert "rejected the API token" in result.stdout
+        assert "pass:acme/jira-token" in result.stdout
+
+    @patch("budjira.core.jira_client.resolve_api_token", return_value="good-token")
+    @patch("budjira.core.jira_client.JIRA")
+    @patch("budjira.cli.search.get_active_connection")
+    def test_accepted_token_with_no_match_still_reports_no_issues(
+        self,
+        mock_get_conn: Mock,
+        mock_jira_class: Mock,
+        _mock_token: Mock,
+        mock_connection: Connection,
+    ) -> None:
+        mock_get_conn.return_value = mock_connection
+        jira = MagicMock()
+        jira.search_issues.return_value = []
+        jira.enhanced_search_issues.return_value = []
+        jira.myself.return_value = {"accountId": "acc-1"}
+        mock_jira_class.return_value = jira
+
+        result = runner.invoke(app, ["project = TEST"])
+
+        assert result.exit_code == 0, result.stdout
+        assert "No issues found" in result.stdout

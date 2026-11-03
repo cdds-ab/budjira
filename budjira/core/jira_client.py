@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from jira import JIRA
 from jira.exceptions import JIRAError
 
-from budjira.config.secrets import resolve_api_token
+from budjira.config.secrets import describe_api_token_source, resolve_api_token
 from budjira.services import (
     AttachmentService,
     CommentService,
@@ -94,6 +94,8 @@ class JiraClient:
         except Exception as e:
             raise JiraAPIError(f"Unexpected error connecting to Jira: {e}") from e
 
+        self._verify_credentials(self._client)
+
         # Initialize all domain services
         self.issues = IssueService(self._client)
         self.worklogs = WorklogService(self._client)
@@ -106,6 +108,39 @@ class JiraClient:
         self.links = LinkService(self._client)
         self.sprints = SprintService(self._client)
         self.projects = ProjectService(self._client)
+
+    def _verify_credentials(self, client: JIRA) -> None:
+        """Make sure Jira accepted the credentials, not just answered.
+
+        Jira Cloud treats failed Basic auth as an anonymous request on most read
+        endpoints: serverInfo and search/jql return 200 (search with no issues),
+        issues return 404, project search returns an empty list. Only endpoints
+        that require a user, such as /myself, return 401. Without this check an
+        expired or revoked token looks like an empty project (#153).
+
+        Raises:
+            AuthenticationError: Credentials rejected (401)
+            PermissionError: Account may not use the API (403)
+            JiraAPIError: Any other failure
+        """
+        connection = self.connection
+        try:
+            client.myself()
+        except JIRAError as e:
+            if e.status_code == 401:
+                raise AuthenticationError(
+                    f"Jira rejected the API token for connection '{connection.name}' "
+                    f"(user {connection.email}, token from {describe_api_token_source(connection)}). "
+                    "The token may be expired or revoked, or belong to another account. "
+                    "Create a new one at https://id.atlassian.com/manage-profile/security/api-tokens "
+                    "and check with 'budjira connect test'."
+                ) from e
+            if e.status_code == 403:
+                raise PermissionError(
+                    f"Jira accepted no API access for connection '{connection.name}' "
+                    f"(user {connection.email}, HTTP 403): {e.text}"
+                ) from e
+            raise JiraAPIError(f"Failed to verify credentials for connection '{connection.name}': {e.text}") from e
 
     @classmethod
     def from_connection(cls, connection: Connection) -> JiraClient:
