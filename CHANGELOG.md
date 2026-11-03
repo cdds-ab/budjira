@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## v1.38.0 (2026-11-03)
+
+### Feat
+
+- **project**: list projects and create a project like another
+
 ## v1.37.0 (2026-10-21)
 
 ### Feat
