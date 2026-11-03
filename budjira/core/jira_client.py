@@ -21,6 +21,7 @@ from budjira.services import (
     LabelService,
     LinkService,
     MetadataService,
+    ProjectService,
     SprintService,
     TransitionService,
     WorklogService,
@@ -53,6 +54,7 @@ class JiraClient:
     - CommentService: Comments
     - AttachmentService: File attachments
     - MetadataService: Projects, issue types, priorities, users
+    - ProjectService: Project listing and creation (create --like)
     """
 
     def __init__(self, connection: Connection, api_token: str) -> None:
@@ -103,6 +105,7 @@ class JiraClient:
         self.metadata = MetadataService(self._client)
         self.links = LinkService(self._client)
         self.sprints = SprintService(self._client)
+        self.projects = ProjectService(self._client)
 
     @classmethod
     def from_connection(cls, connection: Connection) -> JiraClient:
