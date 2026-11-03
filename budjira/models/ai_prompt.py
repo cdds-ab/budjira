@@ -615,7 +615,37 @@ budjira project clear
 
 **Used by:** issue creation (validating `--type`/`--priority`, sub-task detection) and the
 connection-specific AI prompt. The cache lives in `~/.config/budjira/cache/` and expires
-automatically; `sync --force` refreshes it on demand.""",
+automatically; `sync --force` refreshes it on demand.
+
+### Listing and creating projects
+
+**Available since v1.38.0**
+
+```bash
+# All projects the token can see: key, name, id, company-/team-managed, lead
+budjira project list
+budjira --format json project list
+
+# Preview: reads the reference project, prints the payloads, creates nothing
+budjira project create APX --name "Apodeixis" --like CDDSINT --dry-run
+
+# Create a company-managed project sharing CDDSINT's issue type, screen and
+# workflow schemes, plus a Kanban board on "project = APX ORDER BY Rank ASC"
+budjira project create APX --name "Apodeixis" --like CDDSINT
+
+# Other board type, or none
+budjira project create OPS --name "Operations" --like CDDSINT --board scrum
+budjira project create OPS --name "Operations" --like CDDSINT --board none
+```
+
+**Notes:**
+- Use `project list` to check whether a key exists — `search "project = KEY"` returns
+  "No issues found" for an empty project and a missing one alike.
+- `--like` needs a **company-managed** reference; team-managed projects have no schemes.
+- You become the project lead; issues start unassigned. The permission scheme stays at
+  the default (Jira Free does not allow changing it).
+- Needs the Jira global permission **Administer Jira**. If the board step fails, the
+  project already exists — the error says so; do not re-run `create`.""",
             order=6.5,
             enabled=True,
         ),
