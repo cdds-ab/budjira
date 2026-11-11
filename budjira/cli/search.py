@@ -11,6 +11,7 @@ from rich.table import Table
 from budjira.core.jira_client import JiraClient
 from budjira.utils.connection import get_active_connection
 from budjira.utils.errors import BudjiraError
+from budjira.utils.injection import print_injection_warning, scan_fields
 
 # String literals are blanked (length-preserving) before clause detection so
 # their contents (e.g. summary ~ "project in scope") cannot fake a clause.
@@ -176,6 +177,10 @@ def search(
         if not issues:
             console.print("[yellow]⚠[/yellow] No issues found", style="yellow")
             return
+
+        # Summaries are ticket text too: warn before the table shows them
+        findings = scan_fields((f"{issue.key} summary", issue.summary) for issue in issues)
+        print_injection_warning(console, findings, "search results")
 
         # Display results in table
         table = Table(

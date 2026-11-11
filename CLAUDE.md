@@ -105,6 +105,7 @@ budjira/
 │   ├── editor.py     # Multi-line markdown editor
 │   ├── errors.py     # Custom exceptions
 │   ├── formatter.py  # Output formatting (JSON, table) ✨ NEW v1.7.0
+│   ├── injection.py  # Prompt-injection detection for ticket text (show, search, comment)
 │   ├── time_parser.py      # Time string parsing (1h, 30m, 2h30m)
 │   └── version.py    # Version checking via GitHub Releases
 └── __main__.py       # Entry point for `python -m budjira`
@@ -237,6 +238,20 @@ All existing issues (manual cleanup completed 2025-10-28):
 - ✅ Issue #15: Replaced customer references
 
 **Result**: Public repository is safe for sensitive project work with automated monitoring.
+
+### Prompt-Injection Detection (Ticket Content)
+
+Ticket text is attacker-reachable input and budjira output is read by AI agents.
+`budjira/utils/injection.py` scans summary, description and comments for known
+injection shapes; `show`, `search`, `comment list` and `comment show` print a
+warning panel ahead of the content (JSON mode: `injection_warnings` array).
+
+**Rules when touching this:**
+- **Warn, never alter**: content is shown unchanged, exit codes do not change
+- **Warning first**: the panel must precede the ticket text it refers to
+- **No markup from ticket text**: build the panel from `rich.text.Text`, never f-string markup
+- **New command that prints ticket text** → call `scan_fields()` + `print_injection_warning()`
+- **New pattern** → add a detecting case *and* a benign near-miss to `tests/utils/test_injection.py`
 
 ## Development Guidelines
 

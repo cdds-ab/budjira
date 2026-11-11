@@ -1143,6 +1143,29 @@ budjira maintains high code quality standards:
 - Security scanning via Bandit in CI/CD pipeline
 - Regular dependency updates via Dependabot
 
+### Prompt-Injection Detection in Ticket Content
+Ticket text is written by whoever can reach your Jira project, and budjira output is often read by
+AI agents. `budjira show`, `budjira search`, `budjira comment list` and `budjira comment show` therefore
+scan summaries, descriptions and comments for common prompt-injection shapes and print a warning panel
+**before** the content:
+
+| Category | Example |
+|----------|---------|
+| `instruction-override` | "Ignore all previous instructions and ..." (English and German) |
+| `role-spoofing` | `<system>` / `</system-reminder>` tags, `[INST]`, "System prompt: ..." |
+| `agent-addressing` | "If you are an AI assistant ...", "Hey Claude, ..." |
+| `concealment` | "Do not tell the user", "without asking the user" |
+| `data-exfiltration` | "Send the API token to ...", "reveal your system prompt" |
+| `command-execution` | `curl ... \| sh`, `base64 -d \| bash` |
+| `hidden-text` | Invisible Unicode tag characters, bidi overrides, zero-width runs |
+
+With `--format json`, `comment list` and `comment show` report the same findings in an
+`injection_warnings` array instead of a panel, so stdout stays valid JSON.
+
+The check is a heuristic and purely advisory: content is never altered or withheld, the exit code does
+not change, and the absence of a warning does not prove a ticket is safe. The generated AI usage prompt
+(`budjira ai usage-prompt`) tells agents to treat all ticket content as data regardless.
+
 ### For Contributors
 **Automatic Issue Data Sanitization** (GitHub Action):
 - All issues are automatically scanned for sensitive data (emails, customer names, URLs)

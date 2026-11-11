@@ -16,6 +16,7 @@ from budjira.utils.description import DescriptionDialectOption, resolve_comment_
 from budjira.utils.editor import open_editor
 from budjira.utils.errors import BudjiraError
 from budjira.utils.formatter import OutputFormatter
+from budjira.utils.injection import print_injection_warning, scan_fields, scan_text
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -236,11 +237,18 @@ def list_comments(
         jira_client = JiraClient.from_connection(connection)
         comments = jira_client.comments.list(issue_key)
 
+        # Full bodies are scanned although the table only previews the first
+        # line: the warning should arrive before someone opens the comment.
+        findings = scan_fields(
+            (f"comment {comment['id']} by {comment['author']}", comment.get("body")) for comment in comments
+        )
+
         if OutputFormatter.is_json_format(output_format):
             OutputFormatter.output_json(
                 {
                     "issue": issue_key,
                     "total": len(comments),
+                    "injection_warnings": [finding.to_dict() for finding in findings],
                     "comments": comments,
                 }
             )
@@ -249,6 +257,8 @@ def list_comments(
         if not comments:
             console.print(f"[yellow]No comments found on {issue_key}[/yellow]")
             return
+
+        print_injection_warning(console, findings, f"comments on {issue_key}")
 
         table = Table(title=f"Comments on {issue_key}", show_header=True)
         table.add_column("ID", style="dim")
@@ -303,11 +313,13 @@ def show_comment(
         connection = get_active_connection(connection_name)
         jira_client = JiraClient.from_connection(connection)
         comment = jira_client.comments.get(issue_key, comment_id)
+        findings = scan_text(comment.get("body"), "body")
 
         if OutputFormatter.is_json_format(output_format):
-            OutputFormatter.output_json(comment)
+            OutputFormatter.output_json({**comment, "injection_warnings": [finding.to_dict() for finding in findings]})
             return
 
+        print_injection_warning(console, findings, f"comment {comment['id']} on {issue_key}")
         console.print(f"[bold]Comment {comment['id']} on {issue_key}[/bold]")
         console.print(f"  [dim]Author:[/dim] {comment['author']}")
         if comment.get("created"):

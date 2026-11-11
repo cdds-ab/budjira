@@ -20,6 +20,7 @@ from budjira.utils.errors import (
     InvalidIssueError,
     PermissionError,
 )
+from budjira.utils.injection import print_injection_warning, scan_fields
 
 console = Console()
 
@@ -84,8 +85,23 @@ def show_issue(
         # Fetch issue details
         issue = jira_client.get_issue_details(issue_key)
 
-        # Print header
         console.print()
+
+        # Warn before any ticket text is printed, so a reader (human or AI
+        # agent) sees the warning ahead of the content it refers to.
+        findings = scan_fields(
+            [
+                ("summary", issue.summary),
+                ("description", issue.description),
+                *(
+                    (f"comment #{number} by {comment.author}", comment.body)
+                    for number, comment in enumerate(issue.comments, start=1)
+                ),
+            ]
+        )
+        print_injection_warning(console, findings, issue.key)
+
+        # Print header
         header = Text()
         header.append(issue.key, style="bold cyan")
         header.append(" - ", style="dim")

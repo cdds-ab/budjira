@@ -476,6 +476,7 @@ budjira/
 | Worklog Update | v1.26.0 | `budjira worklog update ISSUE WORKLOG_ID` (Tempo + nativ, Ownership-Check) |
 | Attachments + Inline Images | v1.26.0 | `budjira attach`, `budjira comment add --attach/--embed` |
 | Workflow Billing | v1.27.0 | `budjira workflow billing --profile X --month YYYY-MM` (+ `--validate`, `--format json`) |
+| Prompt-Injection Detection | unreleased | Warnpanel in `budjira show`, `search`, `comment list/show` (`utils/injection.py`; JSON: `injection_warnings`) |
 | Self-Update | v0.4.0 | `budjira update` |
 
 ---
