@@ -95,12 +95,12 @@ budjira show ISSUE-KEY --comments   # Include comments
 - JSON mode for scripting/automation
 
 **Business Impact:**
-- Eliminates **#1 user pain point**: "Can create issues with DoR templates but can't read them back"
+- Eliminates the workflow gap between creating issues and reading them back
 - Closes workflow loop: Create → View → Update
 - Enables full CLI workflow without browser
 
-**User Quote (Issue #12):**
-> "Currently, I can create issues with rich DoR templates but have no CLI way to read them back."
+**Example Scenario:**
+A user who creates issues with rich DoR templates should be able to read the complete result through the CLI as well.
 
 **ROI:** 10/10 (häufigster Use Case nach Search - 95% of developers need)
 
@@ -182,27 +182,27 @@ budjira comments PROJ-123                      # Show comments
 **Effort:** 12 hours
 
 ```bash
-# Automatic detection based on issue key
-budjira show AS-13
-# → Detects "AS" project key → uses aixacct connection automatically
+# Synthetic example: automatic detection based on issue key
+budjira show DEMO-13
+# → Detects "DEMO" project key → uses acme-corp connection automatically
 
-budjira show PRD-4
-# → Detects "PRD" project key → uses prd connection automatically
+budjira show OPS-4
+# → Detects "OPS" project key → uses operations connection automatically
 ```
 
 **Implementation:**
 - Extend Connection model with `project_keys` field:
 ```toml
-# ~/.config/budjira/connections.toml
-[connections.aixacct]
-name = "aixacct"
-jira_url = "https://cdds.atlassian.net"
-project_keys = ["AS", "AIXACCT"]  # Map these keys to this connection
+# Synthetic example: ~/.config/budjira/connections.toml
+[connections.acme-corp]
+name = "acme-corp"
+jira_url = "https://company.atlassian.net"
+project_keys = ["DEMO", "EXAMPLE"]  # Map these keys to this connection
 
-[connections.prd]
-name = "prd"
-jira_url = "https://cdds.atlassian.net"
-project_keys = ["PRD", "PROD"]
+[connections.operations]
+name = "operations"
+jira_url = "https://company.atlassian.net"
+project_keys = ["OPS", "SUPPORT"]
 ```
 
 - Add `resolve_connection_from_issue_key()` helper in `utils/connection.py`
@@ -214,11 +214,11 @@ project_keys = ["PRD", "PROD"]
 
 **Business Impact:**
 - Eliminates silent failures and wrong-connection errors
-- Natural UX: "AS-13" automatically uses correct connection
+- Natural UX: "DEMO-13" automatically uses correct connection
 - Multi-project workflows become seamless
 
-**User Quote (Issue #12):**
-> "AS-3 is an aixacct issue (project key 'AS'), but budjira used the wrong connection."
+**Example Scenario:**
+An issue key from a mapped project should select its configured connection instead of falling back to another default.
 
 **ROI:** 9/10 (critical for multi-project users)
 
@@ -293,8 +293,8 @@ budjira tempo summary --export pdf           # PDF invoice (future)
 **Effort:** 4 hours
 
 ```bash
-budjira epic show AS-3 --details      # Show full story descriptions
-budjira epic show AS-3 --verbose      # Include acceptance criteria
+budjira epic show DEMO-3 --details      # Show full story descriptions
+budjira epic show DEMO-3 --verbose      # Include acceptance criteria
 ```
 
 **Current Behavior:**
@@ -318,8 +318,8 @@ budjira epic show AS-3 --verbose      # Include acceptance criteria
 - PMs can review epic scope without opening 10+ browser tabs
 - Quick assessment of epic completion
 
-**User Quote (Issue #12):**
-> "When viewing an epic, I often want to see the details of each story, not just titles."
+**Example Scenario:**
+A user reviewing an epic should be able to inspect complete story details rather than only their titles.
 
 **ROI:** 7/10 (critical for PMs, nice-to-have for developers)
 
@@ -403,13 +403,14 @@ budjira                          # Start interactive mode
 **Effort:** 8 hours
 
 ```bash
-budjira context set --connection aixacct --project AS
+# Synthetic example
+budjira context set --connection acme-corp --project DEMO
 # → Saves to .budjira-context in current directory
 
 budjira context show
 # Current Context:
-# - Connection: aixacct
-# - Project: AS
+# - Connection: acme-corp
+# - Project: DEMO
 
 budjira context clear
 # → Removes context file
@@ -430,22 +431,23 @@ budjira context clear
 - JSON file storage: `{cwd}/.budjira-context`
 ```json
 {
-  "connection": "aixacct",
-  "project": "AS",
-  "set_at": "2026-07-15T10:30:00Z"
+  "connection": "acme-corp",
+  "project": "DEMO",
+  "set_at": "2026-01-15T10:30:00Z"
 }
 ```
 - Auto-load context on command execution
 
 **Use Case:**
 ```bash
-cd ~/projects/aixacct-migration
-budjira context set --connection aixacct
+# Synthetic example
+cd ~/projects/example-migration
+budjira context set --connection acme-corp
 
-# Now all commands default to aixacct
-budjira show AS-13        # Uses aixacct automatically
-budjira create            # Creates in aixacct/AS
-budjira tempo log AS-13 2h  # Logs to aixacct
+# Now all commands default to acme-corp
+budjira show DEMO-13        # Uses acme-corp automatically
+budjira create              # Creates in acme-corp/DEMO
+budjira tempo log DEMO-13 2h  # Logs to acme-corp
 ```
 
 **Business Impact:**
@@ -669,8 +671,8 @@ This roadmap incorporates user feedback and feature requests from:
 - **3 existing features** validated by real-world user feedback
 - **Phase 0 created** to address most critical gap immediately
 
-**User Quote:**
-> "budjira is already a game-changer! These improvements would make it perfect for daily PM work."
+**Expected Outcome:**
+The proposed improvements should make the CLI more useful for daily project-management work.
 
 ---
 
