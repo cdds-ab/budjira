@@ -233,7 +233,7 @@ When sensitive data is detected:
 **Testing & Validation:**
 All existing issues (manual cleanup completed 2025-10-28):
 - ✅ Issue #4: Anonymized email, Jira URL, connection names
-- ✅ Issue #12: Replaced customer `aixacct` → `acme-corp`
+- ✅ Issue #12: Replaced customer-specific examples with synthetic data
 - ✅ Issue #15: Replaced customer references
 
 **Result**: Public repository is safe for sensitive project work with automated monitoring.
